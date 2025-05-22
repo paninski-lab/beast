@@ -1,0 +1,36 @@
+# model configuration
+model:
+  seed: 0
+  checkpoint: null  # load weights from checkpoint
+  model_class: resnet_autoencoder
+  model_params:
+    backbone: resnet18
+    hidden_size: 12
+    image_size: 224  # usually 224
+    patch_size: 32   # default is 16, we use large patch size
+    num_channels: 3  # 3 for RGB
+
+# training configuration
+training:
+  seed: 0
+  imgaug: default
+  train_batch_size: 512
+  val_batch_size: 1024
+  test_batch_size: 128
+  num_epochs: 800
+  num_workers: 8              # Number of CPU workers for the DataLoader
+  num_gpus: 1
+  log_every_n_steps: 10       # frequency to log training metrics
+  check_val_every_n_epoch: 5  # frequency to log validation metrics
+
+# optimizer configuration
+optimizer:
+  type: Adam
+  gradient_accumulation_steps: 1
+  lr: 5.e-5
+  wd: 0.05
+  eps: 1.e-8
+  warmup_pct: 0.15  # cosine/linear
+  gamma: 0.95       # step
+  div_factor: 10    # cosine
+  scheduler: cosine # step/cosine/linear
