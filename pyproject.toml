@@ -29,12 +29,14 @@ classifiers = [
 
 dependencies = [
     "imgaug",
+    "jaxtyping",
     "lightning",
-    "numpy (>=2.0.0)",
+    "numpy (<2.0.0)",
     "opencv-python-headless",
     "pillow",
     "scikit-learn",
     "tqdm",
+    "torchvision",
     "typeguard",
     "nvidia-dali-cuda110",
 ]

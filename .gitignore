@@ -177,4 +177,5 @@ cython_debug/
 .idea
 
 # cached test data
-tests/data/
+tests/testing_data/
+runs/

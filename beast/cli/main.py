@@ -3,22 +3,22 @@
 import sys
 from argparse import ArgumentParser
 
-from beast.cli.commands import COMMANDS
 from beast.cli import formatting
+from beast.cli.commands import COMMANDS
 
 
 def build_parser() -> ArgumentParser:
     """Build the main argument parser with all subcommands."""
 
     parser = formatting.ArgumentParser(
-        prog="beast",
-        description="Tools for video frame extraction and neural network pretraining.",
+        prog='beast',
+        description='Tools for video frame extraction and neural network pretraining.',
     )
 
     subparsers = parser.add_subparsers(
-        dest="command",
+        dest='command',
         required=True,
-        help="Command to run",
+        help='Command to run',
         parser_class=formatting.SubArgumentParser,
     )
 
@@ -49,5 +49,5 @@ def main():
     command_handler(args)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

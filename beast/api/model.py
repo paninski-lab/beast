@@ -1,9 +1,9 @@
 import os
-import yaml
+from typing import Any, Dict, List, Optional, Union
 
-from typing import Dict, Any, Optional, List, Union
 import pytorch_lightning as pl
 import torch
+import yaml
 
 from beast.models.base import BaseLightningModel
 from beast.models.resnets import ResnetAutoencoder
@@ -39,7 +39,7 @@ class Model:
         """
         config_path = os.path.join(model_dir, "config.yaml")
         with open(config_path) as f:
-            config = yaml.load(f)
+            config = yaml.safe_load(f)
 
         model_type = config.get("model_type", "").lower()
         if model_type not in cls.MODEL_REGISTRY:

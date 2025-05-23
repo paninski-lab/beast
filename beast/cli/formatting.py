@@ -23,9 +23,9 @@ class ArgumentParser(argparse.ArgumentParser):
 
     def error(self, message):
         """Print error message with colorized output."""
-        red = "\033[91m"
-        reset = "\033[0m"
-        sys.stderr.write(f"{red}Error: {message}{reset}\n\n")
+        red = '\033[91m'
+        reset = '\033[0m'
+        sys.stderr.write(f'{red}Error: {message}{reset}\n\n')
         self.print_help(file=sys.stderr)
         sys.exit(2)
 
@@ -53,18 +53,18 @@ class HelpFormatter(argparse.HelpFormatter):
                 break_on_hyphens=False
             )
             if not p_lines:
-                p_lines = [""]
+                p_lines = ['']
             lines.extend(p_lines)
 
         return lines
 
     def _fill_text(self, text, width, indent):
         """Improved text filling with indentation."""
-        return "\n".join(
+        return '\n'.join(
             indent + line for line in self._split_lines(text, width - len(indent))
         )
 
     def _format_action(self, action):
         """Add spacing between arguments for readability."""
         result = super()._format_action(action)
-        return result + "\n"
+        return result + '\n'

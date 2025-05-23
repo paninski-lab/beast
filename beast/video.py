@@ -1,12 +1,12 @@
-from pathlib import Path
-from typing import Tuple
 import logging
 import shutil
 import subprocess
+from pathlib import Path
+from typing import Tuple
 
-from tqdm import tqdm
 import cv2
 import numpy as np
+from tqdm import tqdm
 
 _logger = logging.getLogger('BEAST.VIDEO')
 
@@ -39,7 +39,7 @@ def reencode_video(input_file: str | Path, output_file: str | Path) -> None:
     input_file = Path(input_file)
     output_file = Path(output_file)
     # check input file exists
-    assert input_file.is_file(), "input video does not exist."
+    assert input_file.is_file(), 'input video does not exist.'
     # check directory for saving outputs exists
     output_file.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg_cmd = (
@@ -72,7 +72,7 @@ def copy_and_reformat_video_file(video_file: str | Path, dst_dir: str | Path, re
 
     # check 1: does file exist?
     if not src.is_file():
-        _logger.info(f"{src} does not exist! skipping")
+        _logger.info(f'{src} does not exist! skipping')
         return None
 
     # check 2: is file in the correct format for DALI?
@@ -80,7 +80,7 @@ def copy_and_reformat_video_file(video_file: str | Path, dst_dir: str | Path, re
 
     # reencode/rename
     if not video_file_correct_codec:
-        _logger.info(f"re-encoding {src} to be compatable with DALI video reader")
+        _logger.info(f're-encoding {src} to be compatable with DALI video reader')
         reencode_video(src, dst)
         # remove old video
         if remove_old:
@@ -147,12 +147,12 @@ def get_frames_from_idxs(video_file: str | Path, idxs: np.ndarray) -> np.ndarray
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 if fr == 0:
                     height, width, _ = frame_rgb.shape
-                    frames = np.zeros((n_frames, 3, height, width), dtype="uint8")
+                    frames = np.zeros((n_frames, 3, height, width), dtype='uint8')
                 frames[fr] = frame_rgb.transpose(2, 0, 1)
             else:
                 _logger.debug(
-                    "warning! reached end of video; returning blank frames for remainder of "
-                    + "requested indices"
+                    'warning! reached end of video; returning blank frames for remainder of '
+                    'requested indices'
                 )
                 break
     finally:
@@ -220,7 +220,7 @@ def read_nth_frames(
     cap = cv2.VideoCapture(video_file)
 
     if not cap.isOpened():
-        _logger.error(f"Error opening video file {video_file}")
+        _logger.error(f'Error opening video file {video_file}')
 
     frames = []
     frame_counter = 0

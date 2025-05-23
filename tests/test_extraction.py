@@ -1,7 +1,7 @@
 from pathlib import Path
-import pytest
 
 import numpy as np
+import pytest
 
 
 def test_extract_frames(video_file, tmpdir):

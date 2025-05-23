@@ -2,38 +2,44 @@
 
 from pathlib import Path
 
+from typeguard import typechecked
 
-def valid_file(path_str):
+
+@typechecked
+def valid_file(path_str: str | Path) -> Path:
     """Validate that a path exists and is a file."""
     path = Path(path_str)
     if not path.exists():
-        raise ValueError(f"File does not exist: {path}")
+        raise IOError(f'File does not exist: {path}')
     if not path.is_file():
-        raise ValueError(f"Not a file: {path}")
+        raise IOError(f'Not a file: {path}')
     return path
 
 
-def valid_dir(path_str):
+@typechecked
+def valid_dir(path_str: str | Path) -> Path:
     """Validate that a path exists and is a directory."""
     path = Path(path_str)
     if not path.exists():
-        raise ValueError(f"Directory does not exist: {path}")
+        raise IOError(f'Directory does not exist: {path}')
     if not path.is_dir():
-        raise ValueError(f"Not a directory: {path}")
+        raise IOError(f'Not a directory: {path}')
     return path
 
 
-def config_file(path_str):
+@typechecked
+def config_file(path_str: str | Path) -> Path:
     """Validate a config file path."""
     path = valid_file(path_str)
     ext = path.suffix.lower()
-    if ext not in (".yaml", ".yml", ".json"):
-        raise ValueError(f"Config file must be YAML or JSON: {path}")
+    if ext not in ('.yaml', '.yml'):
+        raise ValueError(f'Config file must be YAML: {path}')
     return path
 
 
-def output_dir(path_str):
-    """Create output directory if it doesn't exist."""
+@typechecked
+def output_dir(path_str: str | Path) -> Path:
+    """Create output directory if it does not exist."""
     path = Path(path_str)
     path.mkdir(parents=True, exist_ok=True)
     return path
