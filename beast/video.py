@@ -7,10 +7,12 @@ from typing import Tuple
 import cv2
 import numpy as np
 from tqdm import tqdm
+from typeguard import typechecked
 
 _logger = logging.getLogger('BEAST.VIDEO')
 
 
+@typechecked
 def check_codec_format(input_file: str | Path) -> bool:
     """Run FFprobe command to check if video codec and pixel format match DALI requirements."""
     ffmpeg_cmd = f'ffmpeg -i {str(input_file)}'
@@ -27,6 +29,7 @@ def check_codec_format(input_file: str | Path) -> bool:
     return is_codec
 
 
+@typechecked
 def reencode_video(input_file: str | Path, output_file: str | Path) -> None:
     """Reencode video into H.264 format using ffmpeg from a subprocess.
 
@@ -50,6 +53,7 @@ def reencode_video(input_file: str | Path, output_file: str | Path) -> None:
     subprocess.run(ffmpeg_cmd, shell=True)
 
 
+@typechecked
 def copy_and_reformat_video_file(video_file: str | Path, dst_dir: str | Path, remove_old: bool = False) -> Path | None:
     """Copy a single video and reencode to be DALI compatible if necessary.
 
@@ -97,6 +101,7 @@ def copy_and_reformat_video_file(video_file: str | Path, dst_dir: str | Path, re
     return dst
 
 
+@typechecked
 def copy_and_reformat_video_directory(src_dir: str | Path, dst_dir: str | Path, remove_old: bool = False) -> None:
     """Copy a directory of videos and reencode to be DALI compatible if necessary.
 
@@ -122,6 +127,7 @@ def copy_and_reformat_video_directory(src_dir: str | Path, dst_dir: str | Path, 
             copy_and_reformat_video_file(src, dst_dir, remove_old)
 
 
+@typechecked
 def get_frames_from_idxs(video_file: str | Path, idxs: np.ndarray) -> np.ndarray:
     """Load frames from specific indices into memory.
 
@@ -160,6 +166,7 @@ def get_frames_from_idxs(video_file: str | Path, idxs: np.ndarray) -> np.ndarray
     return frames
 
 
+@typechecked
 def compute_video_motion_energy(
     video_file: str | Path,
     resize_dims: int = 32,
@@ -199,6 +206,7 @@ def compute_video_motion_energy(
         return me
 
 
+@typechecked
 def read_nth_frames(
     video_file: str | Path,
     n: int = 1,

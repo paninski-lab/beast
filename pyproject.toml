@@ -37,7 +37,7 @@ dependencies = [
     "scikit-learn",
     "tqdm",
     "torchvision",
-    "typeguard",
+    "typeguard (==2.13.3)",
     "nvidia-dali-cuda110",
 ]
 

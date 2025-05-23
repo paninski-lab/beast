@@ -2,7 +2,7 @@
 model:
   seed: 0
   checkpoint: null  # load weights from checkpoint
-  model_class: resnet_autoencoder
+  model_class: resnet
   model_params:
     backbone: resnet18
     hidden_size: 12
@@ -26,7 +26,7 @@ training:
 # optimizer configuration
 optimizer:
   type: Adam
-  gradient_accumulation_steps: 1
+  accumulate_grad_batches: 1
   lr: 5.e-5
   wd: 0.05
   scheduler: cosine # step/cosine/linear

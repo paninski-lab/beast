@@ -64,9 +64,6 @@ def handle(args):
 
     args.output.mkdir(parents=True, exist_ok=True)
 
-    print(f'Training model with config: {args.config}')
-    print(f'Output directory: {args.output}')
-
     # Load config
     from beast.io import load_config
     config = load_config(args.config)
@@ -90,6 +87,6 @@ def handle(args):
     #     train_kwargs['resume_from_checkpoint'] = args.resume
 
     # Run training
-    model.train(config, output_dir=args.output)
+    model.train(output_dir=args.output)
 
     print(f'Training complete. Model saved to {args.output}')

@@ -1,8 +1,10 @@
 from pathlib import Path
 
 import yaml
+from typeguard import typechecked
 
 
+@typechecked
 def load_config(path: str | Path) -> dict:
     """Load yaml configuration file to a nested dictionary structure.
 
@@ -25,6 +27,7 @@ def load_config(path: str | Path) -> dict:
     return config
 
 
+@typechecked
 def apply_config_overrides(config: dict, overrides: dict | list) -> dict:
     """Apply configuration overrides to a nested dictionary structure.
 

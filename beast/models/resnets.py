@@ -8,11 +8,14 @@ from typing import Literal
 
 import torch
 import torch.nn as nn
+from jaxtyping import Float
+from typeguard import typechecked
 
 from beast.models.base import BaseLightningModel
 
 
-def get_configs(arch='resnet18'):
+@typechecked
+def get_configs(arch='resnet18') -> tuple:
     # True or False means wether to use BottleNeck
 
     if arch == 'resnet18':
@@ -29,6 +32,7 @@ def get_configs(arch='resnet18'):
         raise ValueError(f'{arch} is an invalid entry in model.model_params.backbone')
 
 
+@typechecked
 class ResnetAutoencoder(BaseLightningModel):
     """Vision Transformer implementation."""
 
@@ -40,13 +44,19 @@ class ResnetAutoencoder(BaseLightningModel):
         self.encoder = ResNetEncoder(configs=resnet_config, bottleneck=bottleneck)
         self.decoder = ResNetDecoder(configs=resnet_config[::-1], bottleneck=bottleneck)
 
-    def forward(self, x: torch.tensor) -> tuple:
+    def forward(
+        self,
+        x: Float[torch.Tensor, 'batch channels img_height img_width'],
+    ) -> tuple[
+        Float[torch.Tensor, 'batch channels img_height img_width'],
+        Float[torch.Tensor, 'batch features feat_height feat_width'],
+    ]:
         z = self.encoder(x)
         xhat = self.decoder(z)
         return xhat, z
 
     def get_model_outputs(self, batch_dict: dict) -> dict:
-        xhat, z = self.forward(batch_dict['images'])
+        xhat, z = self.forward(batch_dict['image'])
         results_dict = {
             'reconstructions': xhat,
             'latents': z,

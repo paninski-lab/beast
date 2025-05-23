@@ -1,9 +1,11 @@
-from typing import Literal
+from typing import Iterator, Literal
 
 import pytorch_lightning as pl
 import torch
+from typeguard import typechecked
 
 
+@typechecked
 class BaseLightningModel(pl.LightningModule):
     """Base Lightning Module that specific model architectures will inherit from."""
 
@@ -34,7 +36,7 @@ class BaseLightningModel(pl.LightningModule):
             raise NotImplementedError(f'{scheduler} scheduler is not yet implemented')
         return scheduler
 
-    def get_parameters(self):
+    def get_parameters(self) -> Iterator:
         params = filter(lambda p: p.requires_grad, self.parameters())
         return params
 
@@ -97,16 +99,16 @@ class BaseLightningModel(pl.LightningModule):
 
         return loss
 
-    def training_step(self, batch_dict, batch_idx):
+    def training_step(self, batch_dict: dict, batch_idx: int) -> dict:
         """Base training step, a wrapper around the `evaluate_batch` method."""
         loss = self.evaluate_batch(batch_dict, 'train')
         return {'loss': loss}
 
-    def validation_step(self, batch_dict, batch_idx):
+    def validation_step(self, batch_dict: dict, batch_idx: int) -> None:
         """Base validation step, a wrapper around the `evaluate_batch` method."""
         self.evaluate_batch(batch_dict, 'val')
 
-    def test_step(self, batch_dict, batch_idx):
+    def test_step(self, batch_dict: dict, batch_idx: int) -> None:
         """Base test step, a wrapper around the `evaluate_batch` method."""
         self.evaluate_batch(batch_dict, 'test')
 

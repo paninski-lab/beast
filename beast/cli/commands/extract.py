@@ -57,11 +57,6 @@ def handle(args):
     # Create output directory if it doesn't exist
     args.output.mkdir(parents=True, exist_ok=True)
 
-    print(f'Extracting frames from: {args.input}')
-    print(f'Saving to: {args.output}')
-    print(f'Method: {args.method}')
-    print(f'Frames per video: {args.frames_per_video}')
-
     # Import the actual implementation
     from beast.extraction import extract_frames
 

@@ -11,6 +11,7 @@ def test_base_datamodule(base_datamodule):
     test_size = base_datamodule.test_batch_size
 
     # check train batch properties
+    np.random.seed(0)  # fix randomness of imgaug_pipeline
     train_dataloader = base_datamodule.train_dataloader()
     assert isinstance(train_dataloader.sampler, RandomSampler)
     batch = next(iter(train_dataloader))

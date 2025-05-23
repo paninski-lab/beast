@@ -10,6 +10,7 @@ import torch
 from torch.utils.data import DataLoader, Subset, random_split
 
 
+@typechecked
 class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""
 

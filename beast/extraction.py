@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
+from typeguard import typechecked
 
 from beast.video import (
     compute_video_motion_energy,
@@ -15,6 +16,7 @@ from beast.video import (
 _logger = logging.getLogger('BEAST.EXTRACTION')
 
 
+@typechecked
 def extract_frames(
     input_path: Path | str,
     output_dir: Path | str,
@@ -22,6 +24,11 @@ def extract_frames(
     method: str = 'pca_kmeans',
     num_workers: int = 8,
 ) -> dict:
+
+    _logger.info(f'Extracting frames from: {input_path}')
+    _logger.info(f'Saving to: {output_dir}')
+    _logger.info(f'Method: {method}')
+    _logger.info(f'Frames per video: {frames_per_video}')
 
     video_files = list(input_path.glob('*.mp4')) + list(input_path.glob('*.avi'))
     total_videos = 0
@@ -51,6 +58,8 @@ def extract_frames(
         'total_videos': total_videos,
     }
 
+
+@typechecked
 def _run_kmeans(data: np.ndarray, n_clusters: int, seed: int = 0) -> tuple:
     np.random.seed(seed)
     kmeans_obj = KMeans(n_clusters, n_init='auto')
@@ -60,6 +69,7 @@ def _run_kmeans(data: np.ndarray, n_clusters: int, seed: int = 0) -> tuple:
     return cluster_labels, cluster_centers
 
 
+@typechecked
 def select_frame_idxs_kmeans(
     video_file: str | Path,
     resize_dims: int = 64,
@@ -127,6 +137,7 @@ def select_frame_idxs_kmeans(
     return idxs_prototypes
 
 
+@typechecked
 def export_frames(
     video_file: str | Path,
     output_dir: str | Path,

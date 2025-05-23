@@ -61,7 +61,7 @@ training:
 # optimizer configuration
 optimizer:
   type: Adam
-  gradient_accumulation_steps: 1
+  accumulate_grad_batches: 1
   lr: 5.e-5
   wd: 0.05
   warmup_pct: 0.15 # cosine/linear

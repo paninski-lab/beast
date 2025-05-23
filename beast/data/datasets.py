@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from PIL import Image
 from torchvision import transforms
+from typeguard import typechecked
 
 from beast.data.types import ExampleDict
 
@@ -14,6 +15,7 @@ _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
+@typechecked
 class BaseDataset(torch.utils.data.Dataset):
     """Base dataset that contains images."""
 
@@ -27,10 +29,15 @@ class BaseDataset(torch.utils.data.Dataset):
 
         """
         self.data_dir = Path(data_dir)
+        if not self.data_dir.is_dir():
+            raise ValueError(f'{self.data_dir} is not a directory')
+
         self.imgaug_pipeline = imgaug_pipeline
 
         # collect ALL png files in data_dir
-        self.image_list = list(data_dir.rglob('*.png'))
+        self.image_list = list(self.data_dir.rglob('*.png'))
+        if len(self.image_list) == 0:
+            raise ValueError(f'{self.data_dir} does not contain image data in png format')
 
         # send image to tensor, resize to canonical dimensions, and normalize
         pytorch_transform_list = [
