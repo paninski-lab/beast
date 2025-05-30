@@ -2,13 +2,14 @@ import contextlib
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import lightning.pytorch as pl
 import torch
 import yaml
 from typeguard import typechecked
 
+from beast.inference import predict_images
 from beast.models.base import BaseLightningModel
 from beast.models.resnets import ResnetAutoencoder
 from beast.models.vits import VisionTransformer
@@ -41,10 +42,16 @@ class Model:
         # Add more models as needed
     }
 
-    def __init__(self, model: BaseLightningModel, config: Dict[str, Any]):
+    def __init__(
+        self,
+        model: BaseLightningModel,
+        config: dict[str, Any],
+        model_dir: str | Path | None = None
+    ) -> None:
         """Initialize with model and config."""
         self.model = model
         self.config = config
+        self.model_dir = Path(model_dir) if model_dir is not None else None
 
     @classmethod
     def from_dir(cls, model_dir: str | Path):
@@ -59,11 +66,14 @@ class Model:
         Initialized model wrapper
 
         """
-        config_path = os.path.join(model_dir, 'config.yaml')
+
+        model_dir = Path(model_dir)
+
+        config_path = model_dir / 'config.yaml'
         with open(config_path) as f:
             config = yaml.safe_load(f)
 
-        model_type = config.get('model_type', '').lower()
+        model_type = config['model'].get('model_class', '').lower()
         if model_type not in cls.MODEL_REGISTRY:
             raise ValueError(f'Unknown model type: {model_type}')
 
@@ -71,12 +81,15 @@ class Model:
         model_class = cls.MODEL_REGISTRY[model_type]
         model = model_class(config)
 
-        # Load weights
-        checkpoint_path = os.path.join(model_dir, 'model.ckpt')
+        _logger.info(f'Loaded a {model_class} model')
+
+        # Load best weights
+        checkpoint_path = list(model_dir.rglob('*best.ckpt'))[0]
         state_dict = torch.load(checkpoint_path, map_location='cpu')
         model.load_state_dict(state_dict['state_dict'])
+        _logger.info(f'Loaded model weights from {checkpoint_path}')
 
-        return cls(model, config)
+        return cls(model, config, model_dir)
 
     @classmethod
     def from_config(cls, config_path: str | Path | dict):
@@ -107,7 +120,7 @@ class Model:
 
         _logger.info(f'Initialized a {model_class} model')
 
-        return cls(model, config)
+        return cls(model, config, model_dir=None)
 
     def train(self, output_dir: str | Path = 'runs/default'):
         """Train the model using PyTorch Lightning.
@@ -117,8 +130,41 @@ class Model:
         output_dir: Directory to save checkpoints
 
         """
-        with chdir(output_dir):
-            self.model = train(self.config, self.model, output_dir=output_dir)
+        self.model_dir = Path(output_dir)
+        with chdir(self.model_dir):
+            self.model = train(self.config, self.model, output_dir=self.model_dir)
+
+    def predict_images(
+        self,
+        image_dir: str | Path,
+        batch_size: int = 32,
+        save_latents: bool = True,
+        save_reconstructions: bool = True,
+    ) -> dict[str, Any]:
+        """Run inference on a video.
+
+        Parameters
+        ----------
+        image_dir: absolute path to possibly nested image directories
+        batch_size: batch size for inference
+        save_latents: save latents for each image as a numpy file
+        save_reconstructions: save reconstructed images
+
+        Returns
+        -------
+        Predictions and latents
+
+        """
+        image_dir = Path(image_dir)
+        outputs = predict_images(
+            model=self.model,
+            output_dir=self.model_dir / 'image_preds' / image_dir.stem,
+            source_dir=image_dir,
+            batch_size=batch_size,
+            save_latents=save_latents,
+            save_reconstructions=save_reconstructions,
+        )
+        return outputs
 
     # def predict_video(
     #     self,
@@ -160,21 +206,3 @@ class Model:
     #         results['features'] = extracted_features
     #
     #     return results
-
-    # def save(self, output_dir: str) -> None:
-    #     """Save model and config.
-    #
-    #     Parameters
-    #     ----------
-    #     output_dir: Directory to save model
-    #
-    #     """
-    #     os.makedirs(output_dir, exist_ok=True)
-    #
-    #     # Save config
-    #     with open(os.path.join(output_dir, 'config.yaml'), 'w') as f:
-    #         yaml.dump(self.config, f, indent=2)
-    #
-    #     # Save model weights
-    #     checkpoint_path = os.path.join(output_dir, 'model.ckpt')
-    #     torch.save({'state_dict': self.model.state_dict()}, checkpoint_path)

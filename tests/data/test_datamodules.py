@@ -1,6 +1,5 @@
-import pytest
-
 import numpy as np
+import pytest
 from torch.utils.data import RandomSampler
 
 

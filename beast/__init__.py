@@ -1,8 +1,8 @@
 # Hacky way to get version from pypackage.toml.
 # Adapted from: https://github.com/python-poetry/poetry/issues/273#issuecomment-1877789967
-from typing import Any
 import importlib.metadata
 from pathlib import Path
+from typing import Any
 
 __package_version = "unknown"
 
@@ -26,8 +26,9 @@ def __get_package_version() -> str:
         # Fall back on getting it from a local pyproject.toml.
         # This works in a development environment where the
         # package has not been installed from a distribution.
-        import toml
         import warnings
+
+        import toml
 
         warnings.warn('beast not pip-installed, getting version from pyproject.toml.')
 

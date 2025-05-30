@@ -5,9 +5,8 @@ model:
   model_class: resnet
   model_params:
     backbone: resnet18
-    hidden_size: 12
+    hidden_size: 12  # null is a fully convolutional model, integer value forces bottleneck
     image_size: 224  # usually 224
-    patch_size: 32   # default is 16, we use large patch size
     num_channels: 3  # 3 for RGB
 
 # training configuration

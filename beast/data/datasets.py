@@ -71,4 +71,5 @@ class BaseDataset(torch.utils.data.Dataset):
             image=transformed_images,  # shape (3, img_height, img_width)
             video=img_path.parts[-2],
             idx=idx,
+            image_path=str(img_path),
         )

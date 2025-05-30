@@ -1,18 +1,18 @@
 import logging
 import os
 import random
-import yaml
 from pathlib import Path
 
-import numpy as np
 import lightning.pytorch as pl
+import numpy as np
 import torch
+import yaml
 from typeguard import typechecked
 
 import beast
 from beast.data.augmentations import imgaug_pipeline
-from beast.data.datasets import BaseDataset
 from beast.data.datamodules import BaseDataModule
+from beast.data.datasets import BaseDataset
 
 _logger = logging.getLogger('BEAST.TRAIN')
 

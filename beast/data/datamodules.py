@@ -2,12 +2,12 @@
 
 import copy
 import os
-from typeguard import typechecked
 
 import lightning.pytorch as pl
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Subset, random_split
+from typeguard import typechecked
 
 
 @typechecked

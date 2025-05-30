@@ -9,3 +9,4 @@ class ExampleDict(TypedDict):
     image: Float[Tensor, 'channels image_height image_width']
     video: str
     idx: int
+    image_path: str

@@ -55,25 +55,40 @@ class ResnetAutoencoder(BaseLightningModel):
         xhat = self.decoder(z)
         return xhat, z
 
-    def get_model_outputs(self, batch_dict: dict) -> dict:
-        xhat, z = self.forward(batch_dict['image'])
+    def get_model_outputs(self, batch_dict: dict, return_images: bool = True) -> dict:
+        x = batch_dict['image']
+        xhat, z = self.forward(x)
         results_dict = {
             'reconstructions': xhat,
             'latents': z,
         }
+        if return_images:
+            results_dict['images'] = x
         return results_dict
 
     def compute_loss(
         self,
         stage: str,
-        reconstructions: torch.tensor,
+        images: Float[torch.Tensor, 'batch channels img_height img_width'],
+        reconstructions: Float[torch.Tensor, 'batch channels img_height img_width'],
         latents: torch.tensor,
         **kwargs,
     ) -> tuple[torch.tensor, list[dict]]:
-        pass
+        mse_loss = nn.functional.mse_loss(images, reconstructions, reduction='mean')
+        # add all losses here for logging
+        log_list = [
+            {'name': f'{stage}_mse', 'value': mse_loss}
+        ]
+        return mse_loss, log_list
 
-    def predict_step(self, batch_dict: dict, batch_idx: int) -> torch.tensor:
-        pass
+    def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
+        results_dict = self.get_model_outputs(batch_dict, return_images=False)
+        results_dict['metadata'] = {
+            'video': batch_dict['video'],
+            'idx': batch_dict['idx'],
+            'image_paths': batch_dict['image_path'],
+        }
+        return results_dict
 
 
 class ResNetEncoder(nn.Module):

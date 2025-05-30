@@ -3,7 +3,7 @@ import copy
 import torch
 
 
-def test_resnet_autoencoder(config_ae):
+def test_resnet_autoencoder_forward(config_ae):
 
     from beast.models.resnets import ResnetAutoencoder
 
@@ -34,3 +34,11 @@ def test_resnet_autoencoder(config_ae):
     model = ResnetAutoencoder(config)
     reconstructions, latents = model(input)
     assert reconstructions.shape == input.shape
+
+
+def test_resnet_autoencoder_integration(config_ae, run_model_test):
+
+    config = copy.deepcopy(config_ae)
+    config['model']['model_params']['backbone'] = 'resnet18'
+
+    run_model_test(config=config)
