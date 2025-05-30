@@ -5,7 +5,7 @@ import yaml
 from pathlib import Path
 
 import numpy as np
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from typeguard import typechecked
 

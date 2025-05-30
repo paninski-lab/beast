@@ -14,7 +14,7 @@ model:
 training:
   seed: 0
   imgaug: default
-  train_batch_size: 512
+  train_batch_size: 512      # per GPU
   val_batch_size: 1024
   test_batch_size: 128
   num_epochs: 800
@@ -29,10 +29,11 @@ optimizer:
   accumulate_grad_batches: 1
   lr: 5.e-5
   wd: 0.05
-  scheduler: cosine # step/cosine/linear
-  warmup_pct: 0.15  # cosine/linear
-  div_factor: 10    # cosine
-  gamma: 0.5        # step
-  steps:
+  scheduler: cosine  # {step, cosine, linear}
+  warmup_pct: 0.15   # for cosine/linear
+  div_factor: 10     # for cosine
+  total_steps: 1000  # make this dynamic later
+  gamma: 0.5         # for step
+  steps:             # for step
     - 200
     - 400

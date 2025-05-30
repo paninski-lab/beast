@@ -1,6 +1,6 @@
 from typing import Iterator, Literal
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 from typeguard import typechecked
 
@@ -15,7 +15,7 @@ class BaseLightningModel(pl.LightningModule):
         super().__init__()
 
         if self.local_rank == 0:
-            print(f'\n Initializing a {self._get_name()} instance.')
+            print(f'\nInitializing a {self._get_name()} instance.')
 
         self.config = config
         self.seed = config['model']['seed']
@@ -29,9 +29,27 @@ class BaseLightningModel(pl.LightningModule):
         if scheduler == 'step':
             # define a scheduler that reduces the base learning rate at predefined steps
             from torch.optim.lr_scheduler import MultiStepLR
-            milestones = self.config['optimizer']['steps']
-            gamma = self.config['optimizer']['gamma']
-            scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+            scheduler = MultiStepLR(
+                optimizer=optimizer,
+                milestones=self.config['optimizer']['steps'],
+                gamma=self.config['optimizer']['gamma'],
+            )
+        elif scheduler == 'cosine':
+            from torch.optim.lr_scheduler import OneCycleLR
+            # compute max learning rate
+            global_batch_size = (
+                self.config['training']['train_batch_size'] * self.config['training']['num_gpus']
+            )
+            max_lr = self.config['optimizer']['lr'] * global_batch_size / 256
+            scheduler = OneCycleLR(
+                optimizer=optimizer,
+                max_lr=max_lr,
+                total_steps=self.config['optimizer']['total_steps'],
+                pct_start=self.config['optimizer']['warmup_pct'],
+                anneal_strategy='cos',
+                div_factor=self.config['optimizer']['div_factor'],
+                final_div_factor=self.config['optimizer'].get('final_div_factor', 1),
+            )
         else:
             raise NotImplementedError(f'{scheduler} scheduler is not yet implemented')
         return scheduler

@@ -37,11 +37,9 @@ class BaseDataModule(pl.LightningDataModule):
             train_probability: fraction of full dataset used for training
             val_probability: fraction of full dataset used for validation
             test_probability: fraction of full dataset used for testing
-            train_frames: if integer, select this number of training frames
-                from the initially selected train frames (defined by
-                `train_probability`); if float, must be between 0 and 1
-                (exclusive) and defines the fraction of the initially selected
-                train frames
+            train_frames: if integer, select this number of training frames from the initially
+                selected train frames (defined by `train_probability`); if float, must be between
+                0 and 1 (exclusive) and defines the fraction of the initially selected train frames
             seed: control data splits
 
         """
@@ -66,9 +64,9 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_dataset = None  # populated by self.setup()
         self.test_dataset = None  # populated by self.setup()
         self.seed = seed
-        self._setup()
+        self.setup()
 
-    def _setup(self) -> None:
+    def setup(self, stage: str = None) -> None:
 
         datalen = self.dataset.__len__()
         print(f'Number of images in the full dataset (train+val+test): {datalen}')

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 import torch
 import yaml
 from typeguard import typechecked
@@ -93,7 +93,7 @@ class Model:
         """
         if not isinstance(config_path, dict):
             with open(config_path) as f:
-                config = yaml.load(f)
+                config = yaml.safe_load(f)
         else:
             config = config_path
 

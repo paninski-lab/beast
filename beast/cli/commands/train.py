@@ -60,7 +60,7 @@ def handle(args):
     # Determine output directory
     if not args.output:
         now = datetime.datetime.now()
-        args.output = Path('runs') / now.strftime('%Y-%m-%d') / now.strftime('%H-%M-%S')
+        args.output = Path('runs').resolve() / now.strftime('%Y-%m-%d') / now.strftime('%H-%M-%S')
 
     args.output.mkdir(parents=True, exist_ok=True)
 

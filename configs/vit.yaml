@@ -47,7 +47,7 @@ model:
 training:
   seed: 0
   imgaug: default
-  train_batch_size: 512
+  train_batch_size: 512    # per GPU
   val_batch_size: 1024
   test_batch_size: 128
   num_epochs: 800
