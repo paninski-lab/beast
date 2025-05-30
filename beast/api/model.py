@@ -1,5 +1,4 @@
 import contextlib
-import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -13,8 +12,6 @@ from beast.models.base import BaseLightningModel
 from beast.models.resnets import ResnetAutoencoder
 from beast.models.vits import VisionTransformer
 from beast.train import train
-
-_logger = logging.getLogger('BEAST.API.MODEL')
 
 
 # TODO: Replace with contextlib.chdir in python 3.11.
@@ -80,13 +77,13 @@ class Model:
         model_class = cls.MODEL_REGISTRY[model_type]
         model = model_class(config)
 
-        _logger.info(f'Loaded a {model_class} model')
+        print(f'Loaded a {model_class} model')
 
         # Load best weights
         checkpoint_path = list(model_dir.rglob('*best.ckpt'))[0]
         state_dict = torch.load(checkpoint_path, map_location='cpu')
         model.load_state_dict(state_dict['state_dict'])
-        _logger.info(f'Loaded model weights from {checkpoint_path}')
+        print(f'Loaded model weights from {checkpoint_path}')
 
         return cls(model, config, model_dir)
 
@@ -117,7 +114,7 @@ class Model:
         model_class = cls.MODEL_REGISTRY[model_type]
         model = model_class(config)
 
-        _logger.info(f'Initialized a {model_class} model')
+        print(f'Initialized a {model_class} model')
 
         return cls(model, config, model_dir=None)
 
@@ -146,6 +143,7 @@ class Model:
         Parameters
         ----------
         image_dir: absolute path to possibly nested image directories
+        output_dir: absolute path to directory where results are saved
         batch_size: batch size for inference
         save_latents: save latents for each image as a numpy file
         save_reconstructions: save reconstructed images

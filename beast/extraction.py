@@ -1,5 +1,4 @@
 
-import logging
 from pathlib import Path
 
 import cv2
@@ -13,8 +12,6 @@ from beast.video import (
     get_frames_from_idxs,
 )
 
-_logger = logging.getLogger('BEAST.EXTRACTION')
-
 
 @typechecked
 def extract_frames(
@@ -24,11 +21,90 @@ def extract_frames(
     method: str = 'pca_kmeans',
     num_workers: int = 8,
 ) -> dict:
+    """Extract representative frames from videos using intelligent sampling methods.
 
-    _logger.info(f'Extracting frames from: {input_path}')
-    _logger.info(f'Saving to: {output_dir}')
-    _logger.info(f'Method: {method}')
-    _logger.info(f'Frames per video: {frames_per_video}')
+    Processes all video files in a directory and extracts a subset of frames using
+    advanced selection algorithms to capture diverse visual content. Each video's
+    frames are saved to a separate subdirectory named after the video file.
+
+    Parameters
+    ----------
+    input_path: directory containing video files (.mp4 and .avi formats supported)
+    output_dir: directory where extracted frames will be saved; creates subdirectories
+        for each video named after the video filename (without extension)
+    frames_per_video: maximum number of frames to extract from each video
+    method: frame selection method; currently supported:
+      - 'pca_kmeans': Uses PCA dimensionality reduction followed by k-means clustering to select
+        diverse, representative frames
+    num_workers: number of parallel workers for processing (currently unused but reserved
+      for future parallel processing implementation)
+
+    Returns
+    -------
+    Summary statistics containing:
+        - 'total_frames': Total number of frames extracted across all videos
+        - 'total_videos': Number of videos processed
+
+    Raises
+    ------
+    NotImplementedError
+        If an unsupported frame selection method is specified
+
+    Examples
+    --------
+    Extract frames from all videos in a directory:
+
+    >>> results = extract_frames(
+    ...     input_path="./videos",
+    ...     output_dir="./extracted_frames",
+    ...     frames_per_video=300,
+    ...     method='pca_kmeans'
+    ... )
+    >>> print(f"Extracted {results['total_frames']} frames from {results['total_videos']} videos")
+
+    Process fewer frames per video:
+
+    >>> results = extract_frames(
+    ...     input_path=Path("./raw_videos"),
+    ...     output_dir=Path("./training_data"),
+    ...     frames_per_video=100
+    ... )
+
+    Directory Structure
+    -------------------
+    Input directory:
+        input_path/
+        ├── video1.mp4
+        ├── video2.avi
+        └── video3.mp4
+
+    Output directory:
+        output_dir/
+        ├── video1/
+        │   ├── frame_001.png
+        │   ├── frame_045.png
+        │   └── ...
+        ├── video2/
+        │   ├── frame_012.png
+        │   └── ...
+        └── video3/
+            └── ...
+
+    Notes
+    -----
+    - Only processes .mp4 and .avi video files
+    - The PCA-kmeans method resizes frames to 32x32 pixels for analysis, but exports frames at
+      original resolution
+    - Context frames (neighboring frames) are included in the selection
+    - Progress information is logged during processing
+    - Frame selection aims to maximize visual diversity while avoiding redundant or similar frames
+
+    """
+
+    print(f'Extracting frames from: {input_path}')
+    print(f'Saving to: {output_dir}')
+    print(f'Method: {method}')
+    print(f'Frames per video: {frames_per_video}')
 
     video_files = list(input_path.glob('*.mp4')) + list(input_path.glob('*.avi'))
     total_videos = 0
@@ -43,12 +119,25 @@ def extract_frames(
         else:
             raise NotImplementedError
 
+        n_digits = 8
+        extension = 'png'
+        save_dir = output_dir.joinpath(video_file.stem)
         export_frames(
             video_file=video_file,
-            output_dir=output_dir.joinpath(video_file.stem),
+            output_dir=save_dir,
             frame_idxs=idxs,
             context_frames=1,
+            n_digits=n_digits,
+            extension=extension,
         )
+
+        # save csv file inside same output directory
+        frames_to_label = np.array([
+            "img%s.%s" % (str(idx).zfill(n_digits), extension) for idx in idxs
+        ])
+        csv_path = save_dir / 'selected_frames.csv'
+        np.savetxt(csv_path, np.sort(frames_to_label), delimiter=',', fmt='%s')
+        print(f'Saved selected frame list to: {csv_path}')
 
         total_videos += 1
         total_frames += len(idxs)
@@ -98,7 +187,7 @@ def select_frame_idxs_kmeans(
     assert frame_range[1] <= 1
 
     # read all frames, reshape, chop off unwanted portions of beginning/end
-    _logger.info('computing motion energy...')
+    print('computing motion energy...')
     me, frames = compute_video_motion_energy(
         video_file=video_file,
         resize_dims=resize_dims,
@@ -118,13 +207,13 @@ def select_frame_idxs_kmeans(
         idxs_high_me = np.arange(me.shape[0])
 
     # compute pca over high me frames
-    _logger.info('performing pca over high motion energy frames...')
+    print('performing pca over high motion energy frames...')
     pca_obj = PCA(n_components=np.min([frames[idxs_high_me].shape[0], 32]))
     embedding = pca_obj.fit_transform(X=frames[idxs_high_me])
     del frames  # free up memory
 
     # cluster low-d pca embeddings
-    _logger.info('performing kmeans clustering...')
+    print('performing kmeans clustering...')
     _, centers = _run_kmeans(data=embedding, n_clusters=n_frames_to_select)
     # centers is initially of shape (n_clusters, n_pcs); reformat
     centers = centers.T[None, :]
@@ -150,7 +239,7 @@ def export_frames(
     n_digits: int = 8,
     context_frames: int = 1,
 ) -> None:
-    """
+    """Export selected frames from a video to individual png files.
 
     Parameters
     ----------

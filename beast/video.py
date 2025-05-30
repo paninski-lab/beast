@@ -1,4 +1,3 @@
-import logging
 import shutil
 import subprocess
 from pathlib import Path
@@ -8,8 +7,6 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 from typeguard import typechecked
-
-_logger = logging.getLogger('BEAST.VIDEO')
 
 
 @typechecked
@@ -80,7 +77,7 @@ def copy_and_reformat_video_file(
 
     # check 1: does file exist?
     if not src.is_file():
-        _logger.info(f'{src} does not exist! skipping')
+        print(f'{src} does not exist! skipping')
         return None
 
     # check 2: is file in the correct format for DALI?
@@ -88,7 +85,7 @@ def copy_and_reformat_video_file(
 
     # reencode/rename
     if not video_file_correct_codec:
-        _logger.info(f're-encoding {src} to be compatable with DALI video reader')
+        print(f're-encoding {src} to be compatable with DALI video reader')
         reencode_video(src, dst)
         # remove old video
         if remove_old:
@@ -164,7 +161,7 @@ def get_frames_from_idxs(video_file: str | Path, idxs: np.ndarray) -> np.ndarray
                     frames = np.zeros((n_frames, 3, height, width), dtype='uint8')
                 frames[fr] = frame_rgb.transpose(2, 0, 1)
             else:
-                _logger.debug(
+                print(
                     'warning! reached end of video; returning blank frames for remainder of '
                     'requested indices'
                 )
@@ -238,7 +235,7 @@ def read_nth_frames(
     cap = cv2.VideoCapture(video_file)
 
     if not cap.isOpened():
-        _logger.error(f'Error opening video file {video_file}')
+        raise IOError(f'Error opening video file {video_file}')
 
     frames = []
     frame_counter = 0

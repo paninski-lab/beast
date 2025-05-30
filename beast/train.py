@@ -1,4 +1,3 @@
-import logging
 import os
 import random
 import sys
@@ -15,8 +14,6 @@ from beast.data.augmentations import imgaug_pipeline
 from beast.data.datamodules import BaseDataModule
 from beast.data.datasets import BaseDataset
 
-_logger = logging.getLogger('BEAST.TRAIN')
-
 
 @typechecked
 def reset_seeds(seed: int = 0) -> None:
@@ -29,10 +26,25 @@ def reset_seeds(seed: int = 0) -> None:
 
 
 @typechecked
+def pretty_print_config(config: dict) -> None:
+    for key, val in config.items():
+        print('--------------------')
+        print(f'{key} parameters')
+        print('--------------------')
+        if isinstance(val, dict):
+            for k, v in val.items():
+                print(f'{k}: {v}')
+        else:
+            print(f'{val}')
+        print()
+    print('\n\n')
+
+
+@typechecked
 def train(config: dict, model, output_dir: str | Path):
 
-    _logger.info(f'output directory: {output_dir}')
-    _logger.info(f'model type: {type(model)}')
+    print(f'output directory: {output_dir}')
+    print(f'model type: {type(model)}')
 
     # reset all seeds
     reset_seeds(seed=0)
@@ -40,8 +52,8 @@ def train(config: dict, model, output_dir: str | Path):
     # record beast version
     config['model']['beast_version'] = beast.version
 
-    # print('config file:')
-    # pretty_print_cfg(config)
+    print('config file:')
+    pretty_print_config(config)
 
     # ----------------------------------------------------------------------------------
     # Set up data objects
@@ -101,7 +113,7 @@ def train(config: dict, model, output_dir: str | Path):
     max_epochs = min_epochs
 
     trainer = pl.Trainer(
-        accelerator="gpu",
+        accelerator='gpu',
         devices=config['training']['num_gpus'],
         max_epochs=max_epochs,
         min_epochs=min_epochs,

@@ -1,8 +1,11 @@
 """Command to extract frames from videos."""
 
+import logging
 from pathlib import Path
 
 from beast.cli.types import output_dir
+
+_logger = logging.getLogger('BEAST.CLI.EXTRACT')
 
 
 def register_parser(subparsers):
@@ -54,6 +57,10 @@ def register_parser(subparsers):
 def handle(args):
     """Handle the extract command execution."""
 
+    _logger.info(f'Running frame extraction with {args.method} method')
+    _logger.info(f'Input directory: {args.input}')
+    _logger.info(f'Output directory: {args.output}')
+
     # Create output directory if it doesn't exist
     args.output.mkdir(parents=True, exist_ok=True)
 
@@ -70,4 +77,4 @@ def handle(args):
     )
 
     # Print summary
-    print(f'Extracted {result["total_frames"]} frames from {result["total_videos"]} videos')
+    _logger.info(f'Extracted {result["total_frames"]} frames from {result["total_videos"]} videos')

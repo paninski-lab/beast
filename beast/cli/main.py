@@ -1,5 +1,6 @@
 """Command-line interface for beast video model pre-training package."""
 
+import logging
 import sys
 from argparse import ArgumentParser
 
@@ -31,6 +32,16 @@ def build_parser() -> ArgumentParser:
 
 def main():
     """Main CLI entry point."""
+
+    # configure logging once at application startup
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s  %(name)s : %(message)s',
+        handlers=[
+            logging.StreamHandler(),  # Console output
+            logging.FileHandler('app.log')  # Optional: also log to file
+        ]
+    )
 
     parser = build_parser()
 

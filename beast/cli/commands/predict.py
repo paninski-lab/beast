@@ -1,6 +1,9 @@
 """Command to run model inference on videos."""
 
+import logging
 from pathlib import Path
+
+_logger = logging.getLogger('BEAST.CLI.PREDICT')
 
 
 def register_parser(subparsers):
@@ -55,9 +58,13 @@ def register_parser(subparsers):
 def handle(args):
     """Handle the predict command execution."""
 
-    print(f'Running inference with model from: {args.model}')
-    print(f'Input: {args.input}')
-    print(f'Output directory: {args.output or args.model}')
+    _logger.info(f'Running inference with model from: {args.model}')
+    _logger.info(f'Input: {args.input}')
+    _logger.info(f'Output directory: {args.output or args.model}')
+    if not args.save_latents and not args.save_reconstructions:
+        _logger.warning(
+            f'did not detect --save_latents or --save_reconstructions; no outputs will be saved'
+        )
 
     # Load model
     from beast.api.model import Model
@@ -81,7 +88,7 @@ def handle(args):
         )
 
         if num_videos > 0 and num_images > 0:
-            print(f'Found both videos and images in {args.input}; aborting')
+            _logger.error(f'Found both videos and images in {args.input}; aborting')
             return
         elif num_videos > 0:
             raise NotImplementedError('coming soon')

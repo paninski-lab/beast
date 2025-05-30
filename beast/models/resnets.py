@@ -16,6 +16,7 @@ from beast.models.base import BaseLightningModel
 
 @typechecked
 def get_configs(arch='resnet18') -> tuple:
+    """Get number and type of layers for resnet models."""
     # True or False means wether to use BottleNeck
 
     if arch == 'resnet18':
@@ -90,7 +91,10 @@ class ResnetAutoencoder(BaseLightningModel):
         stage: str,
         images: Float[torch.Tensor, 'batch channels img_height img_width'],
         reconstructions: Float[torch.Tensor, 'batch channels img_height img_width'],
-        latents: torch.tensor,
+        latents: Union[
+            Float[torch.Tensor, 'batch features feat_height feat_width'],
+            Float[torch.Tensor, 'batch num_latents'],
+        ],
         **kwargs,
     ) -> tuple[torch.tensor, list[dict]]:
         mse_loss = nn.functional.mse_loss(images, reconstructions, reduction='mean')

@@ -1,9 +1,12 @@
 """Command to train a model."""
 
 import datetime
+import logging
 from pathlib import Path
 
 from beast.cli.types import config_file, output_dir
+
+_logger = logging.getLogger('BEAST.CLI.TRAIN')
 
 
 def register_parser(subparsers):
@@ -86,7 +89,10 @@ def handle(args):
     # if args.resume:
     #     train_kwargs['resume_from_checkpoint'] = args.resume
 
+    _logger.info(f'Training {type(model.model)} model')
+    _logger.info(f'Output directory: {args.output}')
+
     # Run training
     model.train(output_dir=args.output)
 
-    print(f'Training complete. Model saved to {args.output}')
+    _logger.info(f'Training complete. Model saved to {args.output}')

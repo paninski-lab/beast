@@ -24,7 +24,10 @@ class BaseLightningModel(pl.LightningModule):
         self.save_hyperparameters(config)
         # Child classes implement architecture setup
 
-    def get_scheduler(self, optimizer):
+    def get_scheduler(
+        self,
+        optimizer: torch.optim.Optimizer
+    ) -> torch.optim.lr_scheduler.LRScheduler:
         scheduler = self.config['optimizer']['scheduler']
         if scheduler == 'step':
             # define a scheduler that reduces the base learning rate at predefined steps

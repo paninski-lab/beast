@@ -19,6 +19,9 @@ def test_extract_frames(video_file, tmpdir):
     )
     assert details['total_frames'] == frames_per_video
     assert details['total_videos'] == 1
+    output_dir = tmpdir / video_file.stem
+    assert output_dir.is_dir()
+    assert (output_dir / 'selected_frames.csv').is_file()
 
     with pytest.raises(NotImplementedError):
         extract_frames(
