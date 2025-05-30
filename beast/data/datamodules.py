@@ -28,19 +28,20 @@ class BaseDataModule(pl.LightningDataModule):
     ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
 
-        Args:
-            dataset: base dataset to be split into train/val/test
-            train_batch_size: number of samples of training batches
-            val_batch_size: number of samples in validation batches
-            test_batch_size: number of samples in test batches
-            num_workers: number of threads used for prefetching data
-            train_probability: fraction of full dataset used for training
-            val_probability: fraction of full dataset used for validation
-            test_probability: fraction of full dataset used for testing
-            train_frames: if integer, select this number of training frames from the initially
-                selected train frames (defined by `train_probability`); if float, must be between
-                0 and 1 (exclusive) and defines the fraction of the initially selected train frames
-            seed: control data splits
+        Parameters
+        ----------
+        dataset: base dataset to be split into train/val/test
+        train_batch_size: number of samples of training batches
+        val_batch_size: number of samples in validation batches
+        test_batch_size: number of samples in test batches
+        num_workers: number of threads used for prefetching data
+        train_probability: fraction of full dataset used for training
+        val_probability: fraction of full dataset used for validation
+        test_probability: fraction of full dataset used for testing
+        train_frames: if integer, select this number of training frames from the initially
+            selected train frames (defined by `train_probability`); if float, must be between
+            0 and 1 (exclusive) and defines the fraction of the initially selected train frames
+        seed: control data splits
 
         """
         super().__init__()
@@ -153,15 +154,17 @@ def split_sizes_from_probabilities(
 ) -> list[int]:
     """Returns the number of examples for train, val and test given split probs.
 
-    Args:
-        total_number: total number of examples in dataset
-        train_probability: fraction of examples used for training
-        val_probability: fraction of examples used for validation
-        test_probability: fraction of examples used for test. Defaults to None. Can be computed
-            as the remaining examples.
+    Parameters
+    ----------
+    total_number: total number of examples in dataset
+    train_probability: fraction of examples used for training
+    val_probability: fraction of examples used for validation
+    test_probability: fraction of examples used for test. Defaults to None. Can be computed as the
+        remaining examples.
 
-    Returns:
-        [num training examples, num validation examples, num test examples]
+    Returns
+    -------
+    [num training examples, num validation examples, num test examples]
 
     """
 

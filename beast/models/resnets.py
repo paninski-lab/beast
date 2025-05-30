@@ -250,7 +250,6 @@ class ResNetDecoder(nn.Module):
                 in_channels=256, hidden_channels=64, down_channels=64, layers=configs[3],
             )
 
-
         else:
 
             self.conv1 = DecoderResidualBlock(

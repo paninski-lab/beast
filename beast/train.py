@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+import sys
 from pathlib import Path
 
 import lightning.pytorch as pl
@@ -63,7 +64,7 @@ def train(config: dict, model, output_dir: str | Path):
     datamodule = BaseDataModule(
         dataset=dataset,
         train_batch_size=config['training']['train_batch_size'],
-        val_batch_size = config['training']['val_batch_size'],
+        val_batch_size=config['training']['val_batch_size'],
         test_batch_size=config['training']['test_batch_size'],
         num_workers=config['training']['num_workers'],
         train_probability=config['training'].get('train_probability', 0.95),

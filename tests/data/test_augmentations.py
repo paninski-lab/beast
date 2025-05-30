@@ -1,10 +1,6 @@
 """Test imgaug pipeline functionality."""
 
-import copy
-import os
-
 import numpy as np
-import pytest
 from PIL import Image
 
 

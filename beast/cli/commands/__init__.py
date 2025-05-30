@@ -6,5 +6,5 @@ from beast.cli.commands import extract, predict, train
 COMMANDS = {
     'extract': extract,  # frame extraction
     'train': train,      # model training
-    'predict': predict,  # model inference
+    'predict': predict,  # model inference on images and videos
 }

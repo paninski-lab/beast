@@ -10,41 +10,43 @@ from typeguard import typechecked
 def imgaug_pipeline(params_dict: dict) -> Callable:
     """Create simple and flexible data transform pipeline that augments images.
 
-    Args:
-        params_dict: each key must be the name of a transform importable from imgaug.augmenters,
-            e.g. 'Affine', 'Fliplr', etc. The value must be a dict with several optional keys:
+    Parameters
+    ----------
+    params_dict: each key must be the name of a transform importable from imgaug.augmenters,
+        e.g. 'Affine', 'Fliplr', etc. The value must be a dict with several optional keys:
             - 'p' (float): probability of applying transform (using imgaug.augmenters.Sometimes)
             - 'args' (list): arguments for transform
             - 'kwargs' (dict): keyword args for the transformation
 
-    Examples:
+    Returns
+    -------
+    imgaug pipeline
 
-        Create a pipeline with
-        - Affine transformation applied 50% of the time with rotation uniformly sampled from
-          (-25, 25) degrees
-        - MotionBlur transformation that is applied 25% of the time with a kernel size of 5 pixels
-          and blur direction uniformly sampled from (-90, 90) degrees
+    Examples
+    --------
+    Create a pipeline with
+    - Affine transformation applied 50% of the time with rotation uniformly sampled from
+      (-25, 25) degrees
+    - MotionBlur transformation that is applied 25% of the time with a kernel size of 5 pixels
+      and blur direction uniformly sampled from (-90, 90) degrees
 
-        >>> params_dict = {
-        >>>    'Affine': {'p': 0.5, 'kwargs': {'rotate': (-25, 25)}},
-        >>>    'MotionBlur': {'p': 0.25, 'kwargs': {'k': 5, 'angle': (-90, 90)}},
-        >>> }
+      >>> params_dict = {
+      >>>    'Affine': {'p': 0.5, 'kwargs': {'rotate': (-25, 25)}},
+      >>>    'MotionBlur': {'p': 0.25, 'kwargs': {'k': 5, 'angle': (-90, 90)}},
+      >>> }
 
-        In a config file, this will look like:
-        >>> training:
-        >>>   imgaug:
-        >>>     Affine:
-        >>>       p: 0.5
-        >>>       kwargs:
-        >>>         rotate: [-10, 10]
-        >>>     MotionBlur:
-        >>>       p: 0.25
-        >>>       kwargs:
-        >>>         k: 5
-        >>>         angle: [-90, 90]
-
-    Returns:
-        imgaug pipeline
+    In a config file, this will look like:
+      >>> training:
+      >>>   imgaug:
+      >>>     Affine:
+      >>>       p: 0.5
+      >>>       kwargs:
+      >>>         rotate: [-10, 10]
+      >>>     MotionBlur:
+      >>>       p: 0.25
+      >>>       kwargs:
+      >>>         k: 5
+      >>>         angle: [-90, 90]
 
     """
 

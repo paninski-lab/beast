@@ -4,7 +4,7 @@ import torch
 
 
 def test_base_dataset(base_dataset):
-    
+
     # check stored object properties
     assert base_dataset.data_dir.is_dir()
     assert len(base_dataset.image_list) > 0

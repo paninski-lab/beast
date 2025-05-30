@@ -54,7 +54,11 @@ def reencode_video(input_file: str | Path, output_file: str | Path) -> None:
 
 
 @typechecked
-def copy_and_reformat_video_file(video_file: str | Path, dst_dir: str | Path, remove_old: bool = False) -> Path | None:
+def copy_and_reformat_video_file(
+    video_file: str | Path,
+    dst_dir: str | Path,
+    remove_old: bool = False
+) -> Path | None:
     """Copy a single video and reencode to be DALI compatible if necessary.
 
     Parameters
@@ -102,7 +106,11 @@ def copy_and_reformat_video_file(video_file: str | Path, dst_dir: str | Path, re
 
 
 @typechecked
-def copy_and_reformat_video_directory(src_dir: str | Path, dst_dir: str | Path, remove_old: bool = False) -> None:
+def copy_and_reformat_video_directory(
+    src_dir: str | Path,
+    dst_dir: str | Path,
+    remove_old: bool = False
+) -> None:
     """Copy a directory of videos and reencode to be DALI compatible if necessary.
 
     Parameters
@@ -177,7 +185,8 @@ def compute_video_motion_energy(
     Paramters
     ---------
     video_file: absolute path to mp4
-    resize_dims: number of pixels (in both dimensions) to downsample video before computing motion energy
+    resize_dims: number of pixels (in both dimensions) to downsample video before computing motion
+        energy
 
     Returns
     -------
@@ -216,7 +225,8 @@ def read_nth_frames(
 
     video_file: absolute path to mp4
     n: number of frames to advance after successfully loading a frame
-    resize_dims: number of pixels (in both dimensions) to downsample video before computing motion energy
+    resize_dims: number of pixels (in both dimensions) to downsample video before computing motion
+        energy
 
     Returns
     -------

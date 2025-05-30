@@ -152,13 +152,16 @@ class PredictionHandler:
     ) -> dict[str, Any]:
         """Process all predictions from trainer.predict() and save results.
 
-        Args:
-            predictions: List of prediction dictionaries from trainer.predict()
-            save_reconstructions: Whether to save reconstruction images
-            save_latents: Whether to save latent representations
+        Parameters
+        ----------
+        predictions: List of prediction dictionaries from trainer.predict()
+        save_reconstructions: Whether to save reconstruction images
+        save_latents: Whether to save latent representations
 
-        Returns:
-            Dictionary with summary of saved files and metadata
+        Returns
+        -------
+        Dictionary with summary of saved files and metadata
+
         """
         all_saved_files = {
             'reconstructions': [],
@@ -229,6 +232,34 @@ def predict_images(
     save_latents: bool = False,
     save_reconstructions: bool = True,
 ) -> dict[str, Any]:
+    """Run inference on images using a trained model and save results.
+
+    Processes all images in a directory (including nested subdirectories) through
+    a trained PyTorch Lightning model, generating reconstructions and/or latent
+    representations. Preserves the original directory structure in the output.
+
+    Parameters
+    ----------
+    model: trained Beast model for inference
+    output_dir: directory where results will be saved; creates subdirectories matching the source
+        directory structure
+    source_dir: directory containing input images; supports nested directory structures
+    batch_size: number of images to process in each batch
+    save_latents: whether to save latent representations as .npy files in a 'latents/' subdirectory
+    save_reconstructions: whether to save reconstructed images as PNG files
+
+    Returns
+    -------
+    Dictionary containing inference results with keys:
+        - 'output_dir': Path to output directory
+        - 'num_images_processed': Total number of images processed
+        - 'metadata_file': Path to YAML metadata summary file
+        - 'reconstructions_saved': Number of reconstructions saved (if enabled)
+        - 'latents_saved': Number of latent files saved (if enabled)
+        - 'reconstructions_dir': Path to reconstructions directory (if enabled)
+        - 'latents_dir': Path to latents directory (if enabled)
+
+    """
 
     output_dir = Path(output_dir)
     source_dir = Path(source_dir)

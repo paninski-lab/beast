@@ -28,6 +28,7 @@ def test_extract_frames(video_file, tmpdir):
             method='uniform',
         )
 
+
 def test_run_kmeans():
 
     from beast.extraction import _run_kmeans

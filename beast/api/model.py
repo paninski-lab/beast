@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-import lightning.pytorch as pl
 import torch
 import yaml
 from typeguard import typechecked
@@ -137,11 +136,12 @@ class Model:
     def predict_images(
         self,
         image_dir: str | Path,
+        output_dir: str | Path | None = None,
         batch_size: int = 32,
         save_latents: bool = True,
         save_reconstructions: bool = True,
     ) -> dict[str, Any]:
-        """Run inference on a video.
+        """Run inference on a possibly nested directory of images.
 
         Parameters
         ----------
@@ -158,7 +158,7 @@ class Model:
         image_dir = Path(image_dir)
         outputs = predict_images(
             model=self.model,
-            output_dir=self.model_dir / 'image_preds' / image_dir.stem,
+            output_dir=output_dir or self.model_dir / 'image_predictions' / image_dir.stem,
             source_dir=image_dir,
             batch_size=batch_size,
             save_latents=save_latents,
@@ -185,24 +185,3 @@ class Model:
     #     Predictions and intermediate features
     #
     #     """
-    #     # Extract frames from video
-    #     frames = self._extract_frames(video_path)
-    #
-    #     # Create DataLoader for frames
-    #     dataloader = self._create_frame_dataloader(frames, batch_size=batch_size)
-    #
-    #     # Set up feature extraction hooks if needed
-    #     if extract_layers:
-    #         extracted_features = self._setup_feature_extraction(extract_layers)
-    #
-    #     # Run inference
-    #     trainer = pl.Trainer(accelerator='auto', devices=1)
-    #     predictions = trainer.predict(self.model, dataloaders=dataloader)
-    #
-    #     results = {'predictions': predictions}
-    #
-    #     # Add extracted features if available
-    #     if extract_layers:
-    #         results['features'] = extracted_features
-    #
-    #     return results

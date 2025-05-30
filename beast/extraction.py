@@ -99,7 +99,11 @@ def select_frame_idxs_kmeans(
 
     # read all frames, reshape, chop off unwanted portions of beginning/end
     _logger.info('computing motion energy...')
-    me, frames = compute_video_motion_energy(video_file=video_file, resize_dims=resize_dims, return_frames=True)
+    me, frames = compute_video_motion_energy(
+        video_file=video_file,
+        resize_dims=resize_dims,
+        return_frames=True,
+    )
     frame_count = me.shape[0]
     beg_frame = int(float(frame_range[0]) * frame_count)
     end_frame = int(float(frame_range[1]) * frame_count) - 2  # leave room for context
