@@ -5,7 +5,7 @@ model:
   model_class: resnet
   model_params:
     backbone: resnet18
-    hidden_size: 12  # null is a fully convolutional model, integer value forces bottleneck
+    num_latents: 12  # null is a fully convolutional model, integer value forces bottleneck
     image_size: 224  # usually 224
     num_channels: 3  # 3 for RGB
 
@@ -13,7 +13,7 @@ model:
 training:
   seed: 0
   imgaug: default
-  train_batch_size: 512      # per GPU
+  train_batch_size: 512       # per GPU
   val_batch_size: 1024
   test_batch_size: 128
   num_epochs: 800
@@ -28,8 +28,8 @@ optimizer:
   accumulate_grad_batches: 1
   lr: 5.e-5
   wd: 0.05
-  scheduler: cosine  # {step, cosine, linear}
-  warmup_pct: 0.15   # for cosine/linear
+  scheduler: cosine  # {step, cosine}
+  warmup_pct: 0.15   # for cosine
   div_factor: 10     # for cosine
   total_steps: 1000  # make this dynamic later
   gamma: 0.5         # for step

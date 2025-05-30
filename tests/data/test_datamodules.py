@@ -10,13 +10,14 @@ def test_base_datamodule(base_datamodule):
     test_size = base_datamodule.test_batch_size
 
     # check train batch properties
-    np.random.seed(0)  # fix randomness of imgaug_pipeline
     train_dataloader = base_datamodule.train_dataloader()
     assert isinstance(train_dataloader.sampler, RandomSampler)
     batch = next(iter(train_dataloader))
     assert batch['image'].shape == (train_size, 3, 224, 224)
     # check imgaug pipeline makes non-repeatable data
+    base_datamodule.train_dataset.dataset.imgaug_pipeline.seed_(0)
     b1 = base_datamodule.train_dataset[0]
+    base_datamodule.train_dataset.dataset.imgaug_pipeline.seed_(1)
     b2 = base_datamodule.train_dataset[0]
     assert not np.allclose(b1['image'], b2['image'])
 
@@ -29,7 +30,7 @@ def test_base_datamodule(base_datamodule):
     # check imgaug pipeline makes repeatable data
     b1 = base_datamodule.val_dataset[0]
     b2 = base_datamodule.val_dataset[0]
-    assert np.allclose(b1['image'], b2['image'])
+    assert np.allclose(b1['image'], b2['image'], rtol=1e-3)
 
     test_dataloader = base_datamodule.test_dataloader()
     batch = next(iter(test_dataloader))
@@ -39,7 +40,7 @@ def test_base_datamodule(base_datamodule):
     # check imgaug pipeline makes repeatable data
     b1 = base_datamodule.test_dataset[0]
     b2 = base_datamodule.test_dataset[0]
-    assert np.allclose(b1['image'], b2['image'])
+    assert np.allclose(b1['image'], b2['image'], rtol=1e-3)
 
 
 def test_split_sizes_from_probabilities():

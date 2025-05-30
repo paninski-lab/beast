@@ -4,7 +4,7 @@ Adapted from https://github.com/Horizon2333/imagenet-autoencoder
 
 """
 
-from typing import Literal
+from typing import Literal, Union
 
 import torch
 import torch.nn as nn
@@ -44,15 +44,34 @@ class ResnetAutoencoder(BaseLightningModel):
         self.encoder = ResNetEncoder(configs=resnet_config, bottleneck=bottleneck)
         self.decoder = ResNetDecoder(configs=resnet_config[::-1], bottleneck=bottleneck)
 
+        # if 'num_latents' exists, create a linear bottleneck layer
+        # otherwise, the intermediate bottleneck is a set of high-dimensional feature maps
+        self.num_latents = config['model']['model_params'].get('num_latents')
+        if self.num_latents:
+            self.encoder_to_latents = LatentMapping(
+                num_latents=self.num_latents, source='encoder', bottleneck=bottleneck,
+            )
+            self.latents_to_decoder = LatentMapping(
+                num_latents=self.num_latents, source='latents', bottleneck=bottleneck,
+            )
+
     def forward(
         self,
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
     ) -> tuple[
-        Float[torch.Tensor, 'batch channels img_height img_width'],
-        Float[torch.Tensor, 'batch features feat_height feat_width'],
+        Float[torch.Tensor, 'batch channels img_height img_width'],         # reconstructions
+        Union[                                                              # latents
+            Float[torch.Tensor, 'batch features feat_height feat_width'],
+            Float[torch.Tensor, 'batch num_latents'],
+        ]
     ]:
-        z = self.encoder(x)
-        xhat = self.decoder(z)
+        features = self.encoder(x)
+        if self.num_latents:
+            z = self.encoder_to_latents(features)
+            features = self.latents_to_decoder(z)
+        else:
+            z = features
+        xhat = self.decoder(features)
         return xhat, z
 
     def get_model_outputs(self, batch_dict: dict, return_images: bool = True) -> dict:
@@ -89,6 +108,62 @@ class ResnetAutoencoder(BaseLightningModel):
             'image_paths': batch_dict['image_path'],
         }
         return results_dict
+
+
+class LatentMapping(nn.Module):
+
+    def __init__(self, num_latents: int, source: str, bottleneck: bool) -> None:
+
+        super().__init__()
+
+        self.num_latents = num_latents
+        self.source = source
+        self.bottleneck = bottleneck
+
+        self.reduce = None  # expanded feature maps to reduced dim feature maps
+        self.expand = None  # reduced feature maps to expanded dim feature maps
+        if source == 'encoder':
+            if bottleneck:
+                self.reduce = nn.Conv2d(
+                    in_channels=2048, out_channels=512, kernel_size=1, stride=1, padding=0,
+                )
+            in_features = 512 * 7 * 7  # feature maps * feature_height * feature_width
+            out_features = num_latents
+        elif source == 'latents':
+            if bottleneck:
+                self.expand = nn.Conv2d(
+                    in_channels=512, out_channels=2048, kernel_size=1, stride=1, padding=0,
+                )
+            out_features = 512 * 7 * 7  # feature maps * feature_height * feature_width
+            in_features = num_latents
+        else:
+            raise ValueError(
+                f'source argument to LatentMapping must be "encoder" or "latents", not {source}'
+            )
+
+        self.layer = nn.Sequential(nn.Linear(in_features=in_features, out_features=out_features))
+
+    def forward(
+        self,
+        x: Union[
+            Float[torch.Tensor, 'batch num_features feature_height feature_width'],
+            Float[torch.Tensor, 'batch num_features'],
+        ]
+    ) -> Union[
+        Float[torch.Tensor, 'batch num_features feature_height feature_width'],
+        Float[torch.Tensor, 'batch num_features'],
+    ]:
+        if self.source == 'encoder':
+            if self.reduce:
+                x = self.reduce(x)
+            x = x.reshape((x.shape[0], -1))
+            x = self.layer(x)
+        else:
+            x = self.layer(x)
+            x = x.reshape((x.shape[0], -1, 7, 7))
+            if self.expand:
+                x = self.expand(x)
+        return x
 
 
 class ResNetEncoder(nn.Module):
