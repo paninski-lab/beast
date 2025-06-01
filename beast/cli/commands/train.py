@@ -80,7 +80,7 @@ def handle(args):
     if args.data:
         config['data_dir'] = str(args.data)
     if args.gpus is not None:
-        config['trainer']['num_gpus'] = args.gpus
+        config['training']['num_gpus'] = args.gpus
 
     # Initialize model
     from beast.api.model import Model
