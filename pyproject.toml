@@ -59,6 +59,7 @@ dev = [
     "flake8-pyproject",
     "isort",
     "pytest",
+    "requests",
 ]
 
 [tool.isort]

@@ -1,8 +1,12 @@
 import gc
+import io
+import json
+import zipfile
 from pathlib import Path
 from typing import Callable
 
 import pytest
+import requests
 import torch
 
 from beast.api.model import Model
@@ -12,6 +16,82 @@ from beast.data.datasets import BaseDataset
 
 ROOT = Path(__file__).parent.parent
 
+
+# ---------------------------------------------
+# functions for loading test data from figshare
+# ---------------------------------------------
+
+def _load_dataset_metadata(dst_dir: Path) -> dict:
+    """Load metadata from dataset directory."""
+    metadata_file = dst_dir / '.dataset_metadata.json'
+    if metadata_file.exists():
+        with open(metadata_file, 'r') as f:
+            return json.load(f)
+    return {}
+
+
+def _save_dataset_metadata(dst_dir: Path, url: str, dataset_name: str) -> None:
+    """Save metadata to dataset directory."""
+    metadata = {
+        'url': url,
+        'dataset_name': dataset_name
+    }
+    metadata_file = dst_dir / '.dataset_metadata.json'
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
+
+
+def fetch_test_data_if_needed(save_dir: str | Path, dataset_name: str = 'testing_data') -> None:
+    """
+    Fetch test data from figshare if needed.
+
+    Downloads data if:
+    1. Dataset directory doesn't exist
+    2. URL in function differs from cached URL (version change)
+
+    Args:
+        save_dir: Directory to save the dataset
+        dataset_name: Name of the dataset to download
+    """
+    datasets_url_dict = {
+        'testing_data': 'https://figshare.com/ndownloader/articles/29207330/versions/1',
+    }
+
+    dst_dir = Path(save_dir) / dataset_name
+    url = datasets_url_dict[dataset_name]
+
+    # Check if data exists and URL matches
+    if dst_dir.exists():
+        metadata = _load_dataset_metadata(dst_dir)
+        cached_url = metadata.get('url')
+
+        if cached_url == url:
+            print(f'Dataset {dataset_name} is up to date')
+            return
+        else:
+            print(f'URL changed from {cached_url} to {url}, updating dataset')
+            # Remove old data
+            import shutil
+            shutil.rmtree(dst_dir)
+
+    # Download data
+    print(f'Fetching {dataset_name} from {url}')
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()  # Check for download errors
+        with zipfile.ZipFile(io.BytesIO(r.raw.read())) as z:
+            z.extractall(dst_dir)
+
+    # Save metadata with current URL
+    _save_dataset_metadata(dst_dir, url, dataset_name)
+
+    print('Done')
+
+
+fetch_test_data_if_needed(save_dir=Path(__file__).parent)
+
+# ---------------------------------------------
+# pytest fixtures
+# ---------------------------------------------
 
 @pytest.fixture
 def data_dir() -> Path:
