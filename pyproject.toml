@@ -38,7 +38,6 @@ dependencies = [
     "tqdm",
     "torchvision",
     "typeguard (==2.13.3)",
-    "nvidia-dali-cuda110",
 ]
 
 [project.urls]
