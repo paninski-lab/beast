@@ -26,12 +26,11 @@ training:
 optimizer:
   type: Adam
   accumulate_grad_batches: 1
-  lr: 5.e-5
+  lr: 5.e-4
   wd: 0.05
   scheduler: cosine  # {step, cosine}
   warmup_pct: 0.15   # for cosine
   div_factor: 10     # for cosine
-  total_steps: 1000  # make this dynamic later
   gamma: 0.5         # for step
   steps:             # for step
     - 200

@@ -84,6 +84,16 @@ def train(config: dict, model, output_dir: str | Path):
         seed=config['training']['seed'],
     )
 
+    # update number of training steps (for learning rate scheduler with step information)
+    num_epochs = config['training']['num_epochs']
+    steps_per_epoch = int(np.ceil(
+        len(datamodule.train_dataset)
+        / config['training']['train_batch_size']
+        / config['training']['num_gpus']
+    ))
+    model.config['optimizer']['steps_per_epoch'] = steps_per_epoch
+    model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
+
     # ----------------------------------------------------------------------------------
     # Save configuration in output directory
     # ----------------------------------------------------------------------------------
