@@ -35,8 +35,9 @@ dependencies = [
     "opencv-python-headless",
     "pillow",
     "scikit-learn",
-    "tqdm",
+    "tensorboard",
     "torchvision",
+    "tqdm",
     "typeguard (==2.13.3)",
 ]
 
@@ -58,6 +59,7 @@ dev = [
     "flake8-pyproject",
     "isort",
     "pytest",
+    "pytest-html",
     "requests",
 ]
 
