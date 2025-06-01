@@ -38,12 +38,14 @@ II. Setup on axon (or other SLURM cluster):
         chmod +x ~/buildbot/build.sh
 
     Setup your conda environment, and configure the variables in build.sh.
+    Note that it was necessary to install packages via conda rather than pip on Axon, because
+    ffmpeg needs to be install via `conda install -c conda-forge opencv`.
 
 III. Test that this is working.
 
 From a server that meets the requirements of the self-hosted runner in I, run:
 
-    ssh axon 'sh beast/buildbot/build_srun.sh <PR NUMBER>'
+    ssh axon 'sh buildbot/build_srun.sh <PR NUMBER>'
 
 It should successfully run tests. If not, debug.
 
