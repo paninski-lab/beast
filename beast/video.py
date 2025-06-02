@@ -133,26 +133,35 @@ def copy_and_reformat_video_directory(
 
 
 @typechecked
-def get_frames_from_idxs(video_file: str | Path, idxs: np.ndarray) -> np.ndarray:
+def get_frames_from_idxs(
+    video_file: str | Path | None,
+    idxs: np.ndarray,
+    cap: cv2.VideoCapture | None = None,
+) -> np.ndarray:
     """Load frames from specific indices into memory.
 
     Parameters
     ----------
     video_file: absolute path to mp4
     idxs: frame indices into video
+    cap: already-created video capture object
 
     Returns
     -------
     frames array of shape (n_frames, n_channels, ypix, xpix)
 
     """
-    cap = cv2.VideoCapture(video_file)
+    should_release = False
+    if cap is None:
+        cap = cv2.VideoCapture(video_file)
+        should_release = True
+
     try:
         is_contiguous = np.sum(np.diff(idxs)) == (len(idxs) - 1)
         n_frames = len(idxs)
-        for fr, i in enumerate(idxs):
+        for fr, idx in enumerate(idxs):
             if fr == 0 or not is_contiguous:
-                cap.set(1, i)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             ret, frame = cap.read()
             if ret:
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -167,7 +176,9 @@ def get_frames_from_idxs(video_file: str | Path, idxs: np.ndarray) -> np.ndarray
                 )
                 break
     finally:
-        cap.release()
+        if should_release:
+            cap.release()
+
     return frames
 
 

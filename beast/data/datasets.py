@@ -56,7 +56,7 @@ class BaseDataset(torch.utils.data.Dataset):
 
         # read image from file and apply transformations (if any)
         # if 1 color channel, change to 3.
-        image = Image.open(img_path).convert("RGB")
+        image = Image.open(img_path).convert('RGB')
         if self.imgaug_pipeline is not None:
             # expands add batch dim for imgaug
             transformed_images = self.imgaug_pipeline(images=np.expand_dims(image, axis=0))

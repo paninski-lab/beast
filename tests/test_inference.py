@@ -2,16 +2,17 @@ import shutil
 import tempfile
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 import torch
 import yaml
 from PIL import Image
 
-from beast.inference import PredictionHandler
+from beast.inference import ImagePredictionHandler, VideoPredictionHandler
 
 
-class TestPredictionHandler:
+class TestImagePredictionHandler:
     """Test suite for PredictionHandler class."""
 
     @pytest.fixture
@@ -40,7 +41,7 @@ class TestPredictionHandler:
     def handler(self, temp_dirs):
         """Create PredictionHandler instance with temp directories."""
         source_dir, output_dir = temp_dirs
-        return PredictionHandler(output_dir, source_dir)
+        return ImagePredictionHandler(output_dir, source_dir)
 
     @pytest.fixture
     def sample_tensor(self):
@@ -73,7 +74,7 @@ class TestPredictionHandler:
     def test_init(self, temp_dirs):
         """Test PredictionHandler initialization."""
         source_dir, output_dir = temp_dirs
-        handler = PredictionHandler(output_dir, source_dir)
+        handler = ImagePredictionHandler(output_dir, source_dir)
         assert handler.output_dir == Path(output_dir)
         assert handler.source_dir == Path(source_dir)
         assert handler.output_dir.exists()
@@ -350,3 +351,152 @@ class TestPredictionHandler:
             assert result['latents_saved'] == 2
         else:
             assert result.get('latents_saved', 0) == 0
+
+
+class TestVideoPredictionHandler:
+    """Test suite for VideoPredictionHandler class."""
+
+    @pytest.fixture
+    def temp_dirs(self):
+        """Create temporary source and output directories."""
+        temp_source = Path(tempfile.mkdtemp())
+        temp_output = Path(tempfile.mkdtemp())
+
+        # create test video file
+        video_file = temp_source / 'video1.mp4'
+        # create a simple test video with 10 frames
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(str(video_file), fourcc, 10.0, (64, 64))
+        for i in range(10):
+            # create frames with different colors
+            frame = np.full((64, 64, 3), (i * 25, i * 25, i * 25), dtype=np.uint8)
+            out.write(frame)
+
+        out.release()
+
+        yield temp_source, temp_output, video_file
+
+        # cleanup
+        shutil.rmtree(temp_source)
+        shutil.rmtree(temp_output)
+
+    @pytest.fixture
+    def handler(self, temp_dirs):
+        """Create VideoPredictionHandler instance with temp directories."""
+        source_dir, output_dir, video_file = temp_dirs
+        return VideoPredictionHandler(output_dir, video_file)
+
+    @pytest.fixture
+    def sample_tensor(self):
+        """Create sample tensor for testing."""
+        return torch.rand(3, 64, 64)  # (C, H, W) format
+
+    @pytest.fixture
+    def sample_batch_tensor(self):
+        """Create sample batch tensor for testing."""
+        return torch.rand(2, 3, 64, 64)  # (B, C, H, W) format
+
+    @pytest.fixture
+    def sample_latents(self):
+        """Create sample latent tensor."""
+        return torch.rand(2, 128)  # (B, latent_dim)
+
+    @pytest.fixture
+    def sample_metadata(self, temp_dirs):
+        """Create sample batch metadata for video."""
+        source_dir, _, video_paths = temp_dirs
+        return {
+            'video_path': [str(video_paths[0]), str(video_paths[0])],
+            'frame_idx': [torch.tensor(0), torch.tensor(1)],
+            'batch_start_idx': torch.tensor(0)
+        }
+
+    def test_init(self, temp_dirs):
+        """Test VideoPredictionHandler initialization."""
+        _, output_dir, video_file = temp_dirs
+        handler = VideoPredictionHandler(output_dir, video_file)
+        assert handler.output_dir == Path(output_dir)
+        assert handler.output_dir.exists()
+        assert handler.metadata == {
+            'video_file': str(video_file),
+            'output_dir': str(output_dir),
+            'fps': 10,
+            'width': 64,
+            'height': 64,
+            'total_frames': 10,
+        }
+
+    def test_tensor_to_image_3d(self, handler, sample_tensor):
+        """Test tensor to image conversion with 3D tensor (C, H, W)."""
+        image = handler.tensor_to_numpy_bgr(sample_tensor)
+        assert isinstance(image, np.ndarray)
+        assert image.shape == (64, 64, 3)
+
+    def test_tensor_to_image_4d(self, handler, sample_batch_tensor):
+        """Test tensor to image conversion with 4D tensor (B, C, H, W)."""
+        image = handler.tensor_to_numpy_bgr(sample_batch_tensor)
+        assert isinstance(image, np.ndarray)
+        assert image.shape == (64, 64, 3)
+
+    def test_tensor_to_image_grayscale(self, handler):
+        """Test tensor to image conversion with grayscale (1 channel)."""
+        tensor_gray = torch.rand(1, 32, 32)
+        image = handler.tensor_to_numpy_bgr(tensor_gray)
+        assert isinstance(image, np.ndarray)
+        assert image.shape == (32, 32, 3)
+
+    def test_tensor_to_image_scaling(self, handler):
+        """Test tensor value scaling from [0,1] to [0,255]."""
+        # Create tensor with known values
+        tensor = torch.ones(3, 2, 2) * 0.5  # All values = 0.5
+        image = handler.tensor_to_numpy_bgr(tensor)
+        # Check that values were scaled (0.5 * 255 = 127.5 → 127)
+        np_array = np.array(image)
+        assert np_array.max() <= 255
+        assert np_array.min() >= 1
+
+    def test_process_predictions_empty_list(self, handler):
+        """Test process_predictions with empty prediction list."""
+        result = handler.process_predictions([], save_reconstructions=True)
+
+        assert result['frames_processed'] == 0
+        assert result['reconstruction_video'] is None
+
+    @pytest.mark.parametrize('save_recons,save_latents', [
+        (True, False),
+        (True, True),
+        (False, False),
+        (False, True),
+    ])
+    def test_process_predictions_save_options(
+        self, handler, sample_batch_tensor, sample_latents, save_recons, save_latents,
+    ):
+        """Test different combinations of save options."""
+
+        predictions = [
+            {
+                'reconstructions': sample_batch_tensor,
+                'latents': sample_latents,
+            },
+            {
+                'reconstructions': sample_batch_tensor,
+                'latents': sample_latents,
+            },
+        ]
+
+        result = handler.process_predictions(
+            predictions,
+            save_reconstructions=save_recons,
+            save_latents=save_latents,
+        )
+
+        if save_recons:
+            assert Path(result['reconstruction_video']).is_file()
+        else:
+            assert result['reconstruction_video'] is None
+
+        if save_latents:
+            assert Path(result['latents_file']).is_file()
+            assert result['latents_shape'] == (4, 128)
+        else:
+            assert result['latents_file'] is None
