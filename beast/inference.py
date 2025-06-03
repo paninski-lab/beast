@@ -9,7 +9,7 @@ import yaml
 from PIL import Image
 from typeguard import typechecked
 
-from beast.data.datasets import BaseDataset
+from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD, BaseDataset
 from beast.data.video import VideoFrameIterator
 from beast.models.base import BaseLightningModel
 
@@ -26,6 +26,10 @@ class ImagePredictionHandler:
         # store metadata for each prediction
         self.metadata = []
 
+        # for normalization
+        self.mean = torch.Tensor(_IMAGENET_MEAN).view(1, 1, 3)
+        self.std = torch.Tensor(_IMAGENET_STD).view(1, 1, 3)
+
     def tensor_to_image(self, tensor: torch.Tensor) -> Image.Image:
         """Convert tensor (C, H, W) to PIL Image."""
         # Handle different tensor formats
@@ -36,19 +40,22 @@ class ImagePredictionHandler:
         if tensor.dim() == 3:
             tensor = tensor.permute(1, 2, 0)
 
-        # Ensure values are in [0, 255] range
-        if tensor.max() <= 1.0:
-            tensor = tensor * 255
+        # ensure values are in [0, 255] range
+        # This gets you back to [0, 1]
+        tensor = tensor * self.std + self.mean
+        # after getting to [0, 1], scale to [0, 255]
+        tensor = torch.clamp(tensor, 0, 1)  # Ensure [0, 1] range
+        tensor = tensor * 255.0
 
         # Convert to uint8 numpy array
         np_array = tensor.detach().cpu().numpy().astype(np.uint8)
 
         # Handle grayscale vs RGB
-        if np_array.shape[2] == 1:
-            np_array = np_array.squeeze(2)
-            return Image.fromarray(np_array, mode='L')
-        else:
-            return Image.fromarray(np_array, mode='RGB')
+        # if np_array.shape[2] == 1:
+        #     np_array = np_array.squeeze(2)
+        #     return Image.fromarray(np_array, mode='L')
+        # else:
+        return Image.fromarray(np_array, mode='RGB')
 
     def save_reconstruction(
         self,
@@ -265,6 +272,10 @@ class VideoPredictionHandler:
         self.reconstruction_writer = None
         self.frames_processed = 0
 
+        # for normalization
+        self.mean = torch.Tensor(_IMAGENET_MEAN).view(1, 1, 3)
+        self.std = torch.Tensor(_IMAGENET_STD).view(1, 1, 3)
+
     def tensor_to_numpy_bgr(self, tensor: torch.Tensor):
         """Convert tensor (C, H, W) to OpenCV BGR format."""
         # handle different tensor formats
@@ -276,18 +287,21 @@ class VideoPredictionHandler:
             tensor = tensor.permute(1, 2, 0)
 
         # ensure values are in [0, 255] range
-        if tensor.max() <= 1.0:
-            tensor = tensor * 255.0
+        # This gets you back to [0, 1]
+        tensor = tensor * self.std + self.mean
+        # after getting to [0, 1], scale to [0, 255]
+        tensor = torch.clamp(tensor, 0, 1)  # Ensure [0, 1] range
+        tensor = tensor * 255.0
 
         # convert to uint8 numpy array
         np_array = tensor.detach().cpu().numpy().astype(np.uint8)
 
         # convert RGB to BGR for OpenCV
-        if np_array.shape[2] == 3:
-            np_array = cv2.cvtColor(np_array, cv2.COLOR_RGB2BGR)
-        elif np_array.shape[2] == 1:
-            # Convert grayscale to BGR
-            np_array = cv2.cvtColor(np_array.squeeze(2), cv2.COLOR_GRAY2BGR)
+        # if np_array.shape[2] == 3:
+        np_array = cv2.cvtColor(np_array, cv2.COLOR_RGB2BGR)
+        # elif np_array.shape[2] == 1:
+        #     # Convert grayscale to BGR
+        #     np_array = cv2.cvtColor(np_array.squeeze(2), cv2.COLOR_GRAY2BGR)
 
         return np_array
 

@@ -278,7 +278,7 @@ class ResNetDecoder(nn.Module):
             ),
         )
 
-        self.gate = nn.Sigmoid()
+        # self.gate = nn.Sigmoid()
 
     def forward(self, x: torch.tensor) -> torch.tensor:
         x = self.conv1(x)
@@ -286,7 +286,7 @@ class ResNetDecoder(nn.Module):
         x = self.conv3(x)
         x = self.conv4(x)
         x = self.conv5(x)
-        x = self.gate(x)
+        # x = self.gate(x)
         return x
 
 
