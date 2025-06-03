@@ -7,7 +7,7 @@ import torch
 import yaml
 from typeguard import typechecked
 
-from beast.inference import predict_images
+from beast.inference import predict_images, predict_video
 from beast.models.base import BaseLightningModel
 from beast.models.resnets import ResnetAutoencoder
 from beast.models.vits import VisionTransformer
@@ -164,22 +164,31 @@ class Model:
         )
         return outputs
 
-    # def predict_video(
-    #     self,
-    #     video_path: str,
-    #     batch_size: int = 32,
-    #     extract_layers: Optional[List[str]] = None
-    # ) -> Dict[str, Any]:
-    #     """Run inference on a video.
-    #
-    #     Parameters
-    #     ----------
-    #     video_path: Path to video file
-    #     batch_size: Batch size for inference
-    #     extract_layers: Optional layers to extract features from
-    #
-    #     Returns
-    #     -------
-    #     Predictions and intermediate features
-    #
-    #     """
+    def predict_video(
+        self,
+        video_file: str | Path,
+        output_dir: str | Path | None = None,
+        batch_size: int = 32,
+        save_latents: bool = True,
+        save_reconstructions: bool = True,
+    ) -> None:
+        """Run inference on a single video.
+
+        Parameters
+        ----------
+        video_file: absolute path to video file (mp4 or avi)
+        output_dir: absolute path to directory where results are saved
+        batch_size: batch size for inference
+        save_latents: save latents for each image as a numpy file
+        save_reconstructions: save reconstructed images
+
+        """
+        video_file = Path(video_file)
+        predict_video(
+            model=self.model,
+            output_dir=output_dir or self.model_dir / 'video_predictions',
+            video_file=video_file,
+            batch_size=batch_size,
+            save_latents=save_latents,
+            save_reconstructions=save_reconstructions,
+        )

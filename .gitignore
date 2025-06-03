@@ -179,3 +179,4 @@ cython_debug/
 # cached test data
 tests/testing_data/
 runs/
+app.log

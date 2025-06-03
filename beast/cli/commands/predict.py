@@ -74,13 +74,18 @@ def handle(args):
     if args.input.is_file():
         # Single video inference
         model.predict_video(
-            video_path=args.input,
+            video_file=args.input,
+            output_dir=args.output,
             batch_size=args.batch_size,
+            save_latents=True,
+            save_reconstructions=args.save_reconstructions,
         )
 
     elif args.input.is_dir():
 
-        num_videos = len(list(args.input.rglob('*.mp4')))
+        videos = list(args.input.rglob('*.mp4')) + list(args.input.rglob('*.avi'))
+        num_videos = len(videos)
+
         num_images = len(
             list(args.input.rglob('*.png'))
             + list(args.input.rglob('*.jpg'))
@@ -91,10 +96,19 @@ def handle(args):
             _logger.error(f'Found both videos and images in {args.input}; aborting')
             return
         elif num_videos > 0:
-            raise NotImplementedError('coming soon')
+            for video_file in videos:
+                _logger.info(f'Running inference on {video_file}')
+                model.predict_video(
+                    video_file=video_file,
+                    output_dir=args.output,
+                    batch_size=args.batch_size,
+                    save_latents=True,
+                    save_reconstructions=args.save_reconstructions,
+                )
         else:
             model.predict_images(
                 image_dir=args.input,
+                output_dir=args.output,
                 batch_size=args.batch_size,
                 save_latents=args.save_latents,
                 save_reconstructions=args.save_reconstructions,

@@ -69,7 +69,13 @@ Type "beast train -h" in the terminal for details on the options.
 
 ### Run inference
 
-Only inference on directories of videos is currently supported; inference for videos coming soon. 
+Inference on a single video or a directory of videos: 
+
+```commandline
+beast predict --model <model_dir> --input <video_path> [options]
+```
+
+Inference on (possibly nested) directories of images: 
 
 ```commandline
 beast predict --model <model_dir> --input <video_path> [options]
