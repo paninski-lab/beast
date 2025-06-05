@@ -39,6 +39,7 @@ dependencies = [
     "torchvision",
     "tqdm",
     "typeguard (==2.13.3)",
+    "transformers (==4.38.2)",
 ]
 
 [project.urls]
