@@ -3,7 +3,6 @@
 from beast.models.base import BaseLightningModel
 from transformers import (
     ViTMAEConfig, 
-    ViTMAEModel, 
     ViTMAEForPreTraining,
 )
 import torch
@@ -20,6 +19,7 @@ class VisionTransformer(BaseLightningModel):
         # Set up ViT architecture
         vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
         self.vit_mae = ViTMAE(vit_mae_config).from_pretrained("facebook/vit-mae-base")
+        self.mask_ratio = config['model']['model_params']['mask_ratio']
     # Other required methods...
 
     def forward(
@@ -41,6 +41,7 @@ class VisionTransformer(BaseLightningModel):
         stage: str,
         **kwargs,
     ) -> tuple[torch.tensor, list[dict]]:
+        assert 'loss' in kwargs, "Loss is not in the kwargs"
         mse_loss = kwargs['loss']
         # add all losses here for logging
         log_list = [
@@ -49,7 +50,12 @@ class VisionTransformer(BaseLightningModel):
         return mse_loss, log_list
 
     def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
+        # set mask_ratio to 0 for inference
+        self.vit_mae.config.mask_ratio = 0
+        # get model outputs
         results_dict = self.get_model_outputs(batch_dict, return_images=False)
+        # reset mask_ratio to the original value
+        self.vit_mae.config.mask_ratio = self.mask_ratio
         results_dict['metadata'] = {
             'video': batch_dict['video'],
             'idx': batch_dict['idx'],
@@ -119,4 +125,4 @@ class ViTMAE(ViTMAEForPreTraining):
             'latents':cls_latent, 
             'loss':loss, 
             'logits':logits
-            }
+        }

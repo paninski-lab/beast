@@ -117,6 +117,19 @@ def config_ae(config_ae_path, data_dir) -> dict:
 
 
 @pytest.fixture
+def config_vit_path() -> Path:
+    return ROOT.joinpath('configs/vit.yaml')
+
+
+@pytest.fixture
+def config_vit(config_vit_path, data_dir) -> dict:
+    from beast.io import load_config
+    config = load_config(config_vit_path)
+    config['data_dir'] = data_dir
+    return config
+
+
+@pytest.fixture
 def aug_pipeline() -> Callable:
     params_dict = expand_imgaug_str_to_dict('default')
     pipeline = imgaug_pipeline(params_dict)
