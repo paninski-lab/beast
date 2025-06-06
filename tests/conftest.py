@@ -112,7 +112,26 @@ def config_ae_path() -> Path:
 def config_ae(config_ae_path, data_dir) -> dict:
     from beast.io import load_config
     config = load_config(config_ae_path)
-    config['data_dir'] = data_dir
+    config['data']['data_dir'] = data_dir
+    config['training']['train_batch_size'] = 32
+    config['training']['val_batch_size'] = 32
+    config['training']['test_batch_size'] = 32
+    return config
+
+
+@pytest.fixture
+def config_vit_path() -> Path:
+    return ROOT.joinpath('configs/vit.yaml')
+
+
+@pytest.fixture
+def config_vit(config_vit_path, data_dir) -> dict:
+    from beast.io import load_config
+    config = load_config(config_vit_path)
+    config['data']['data_dir'] = data_dir
+    config['training']['train_batch_size'] = 8
+    config['training']['val_batch_size'] = 8
+    config['training']['test_batch_size'] = 8
     return config
 
 

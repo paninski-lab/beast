@@ -180,3 +180,7 @@ cython_debug/
 tests/testing_data/
 runs/
 app.log
+
+# data
+data/
+*.png

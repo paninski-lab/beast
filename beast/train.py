@@ -68,7 +68,7 @@ def train(config: dict, model, output_dir: str | Path):
 
     # dataset
     dataset = BaseDataset(
-        data_dir=config['data_dir'],
+        data_dir=config['data']['data_dir'],
         imgaug_pipeline=imgaug_pipeline_,
     )
 
@@ -90,6 +90,7 @@ def train(config: dict, model, output_dir: str | Path):
         len(datamodule.train_dataset)
         / config['training']['train_batch_size']
         / config['training']['num_gpus']
+        / config['training']['num_nodes']
     ))
     model.config['optimizer']['steps_per_epoch'] = steps_per_epoch
     model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
@@ -125,6 +126,7 @@ def train(config: dict, model, output_dir: str | Path):
     trainer = pl.Trainer(
         accelerator='gpu',
         devices=config['training']['num_gpus'],
+        num_nodes=config['training']['num_nodes'],
         max_epochs=max_epochs,
         min_epochs=min_epochs,
         check_val_every_n_epoch=config['training'].get('check_val_every_n_epoch', 1),
