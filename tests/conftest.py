@@ -113,6 +113,9 @@ def config_ae(config_ae_path, data_dir) -> dict:
     from beast.io import load_config
     config = load_config(config_ae_path)
     config['data']['data_dir'] = data_dir
+    config['training']['train_batch_size'] = 32
+    config['training']['val_batch_size'] = 32
+    config['training']['test_batch_size'] = 32
     return config
 
 
@@ -126,6 +129,9 @@ def config_vit(config_vit_path, data_dir) -> dict:
     from beast.io import load_config
     config = load_config(config_vit_path)
     config['data']['data_dir'] = data_dir
+    config['training']['train_batch_size'] = 8
+    config['training']['val_batch_size'] = 8
+    config['training']['test_batch_size'] = 8
     return config
 
 
@@ -172,7 +178,7 @@ def run_model_test(tmp_path, data_dir) -> Callable:
             # train model for a couple epochs
             model.train(tmp_path)
             # run inference on labeled data
-            model.predict_images(image_dir=data_dir, batch_size=2)
+            model.predict_images(image_dir=data_dir)
         finally:
             # remove tensors from gpu
             del model
