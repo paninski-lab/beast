@@ -172,7 +172,7 @@ def run_model_test(tmp_path, data_dir) -> Callable:
             # train model for a couple epochs
             model.train(tmp_path)
             # run inference on labeled data
-            model.predict_images(image_dir=data_dir)
+            model.predict_images(image_dir=data_dir, batch_size=2)
         finally:
             # remove tensors from gpu
             del model
