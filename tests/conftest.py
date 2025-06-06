@@ -112,7 +112,7 @@ def config_ae_path() -> Path:
 def config_ae(config_ae_path, data_dir) -> dict:
     from beast.io import load_config
     config = load_config(config_ae_path)
-    config['data_dir'] = data_dir
+    config['data']['data_dir'] = data_dir
     return config
 
 
@@ -125,7 +125,7 @@ def config_vit_path() -> Path:
 def config_vit(config_vit_path, data_dir) -> dict:
     from beast.io import load_config
     config = load_config(config_vit_path)
-    config['data_dir'] = data_dir
+    config['data']['data_dir'] = data_dir
     return config
 
 
