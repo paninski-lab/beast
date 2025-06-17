@@ -1,14 +1,17 @@
 """Vision transformer autoencoder implementation."""
 
-from beast.models.base import BaseLightningModel
+from typing import Dict
+
+import torch
+from jaxtyping import Float
 from transformers import (
-    ViTMAEConfig, 
+    ViTMAEConfig,
     ViTMAEForPreTraining,
 )
-import torch
-from typing import Dict
-from jaxtyping import Float
 from typeguard import typechecked
+
+from beast.models.base import BaseLightningModel
+
 
 @typechecked
 class VisionTransformer(BaseLightningModel):
@@ -117,12 +120,12 @@ class ViTMAE(ViTMAEForPreTraining):
         loss = self.forward_loss(pixel_values, logits, mask)
         if return_recon:
             return {
-                'latents':latent, 
-                'loss':loss, 
+                'latents': latent, 
+                'loss': loss, 
                 'reconstructions':self.unpatchify(logits)
                 }
         return {
-            'latents':cls_latent, 
-            'loss':loss, 
-            'logits':logits
+            'latents': cls_latent, 
+            'loss': loss, 
+            'logits': logits,
         }

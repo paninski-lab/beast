@@ -1,5 +1,7 @@
 import copy
+
 import torch
+
 
 def test_vit_autoencoder_forward(config_vit):
     from beast.models.vits import VisionTransformer
