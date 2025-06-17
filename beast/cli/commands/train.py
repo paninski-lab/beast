@@ -83,7 +83,7 @@ def handle(args):
 
     # Override specific values from command line
     if args.data:
-        config['data_dir'] = str(args.data)
+        config['data']['data_dir'] = str(args.data)
     if args.gpus is not None:
         config['training']['num_gpus'] = args.gpus
     if args.nodes is not None:

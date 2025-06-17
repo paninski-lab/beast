@@ -1,6 +1,6 @@
 """Vision transformer autoencoder implementation."""
 
-from typing import Dict
+from typing import Dict, Optional, Union
 
 import torch
 from jaxtyping import Float
@@ -67,17 +67,20 @@ class VisionTransformer(BaseLightningModel):
         return results_dict
 
 class ViTMAE(ViTMAEForPreTraining):
+    # Overriding the forward method to return the latent and loss
+    # This is used for training and inference
+    # Huggingface Transformer library
     def forward(
         self,
-        pixel_values,
-        noise=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        return_latent=False,
-        return_recon=False,
-    ):
+        pixel_values: torch.Tensor,
+        noise: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        return_latent: bool = False,
+        return_recon: bool = False,
+    ) -> Dict[str, torch.Tensor]:
         # Setting default for return_dict based on the configuration
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if (self.training or self.config.mask_ratio > 0) or return_recon:
