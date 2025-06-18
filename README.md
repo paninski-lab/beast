@@ -26,7 +26,7 @@ First, [install anaconda](https://docs.anaconda.com/free/anaconda/install/index.
 Next, create and activate a conda environment:
 
 ```commandline
-conda create --yes --name beast python=3.10.8
+conda create --yes --name beast python=3.10
 conda activate beast
 ```
 
