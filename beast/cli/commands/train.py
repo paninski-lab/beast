@@ -44,6 +44,11 @@ def register_parser(subparsers):
         type=int,
         help='Number of GPUs to use (overrides config)',
     )
+    optional.add_argument(
+        '--nodes',
+        type=int,
+        help='Number of nodes to use (overrides config)',
+    )
     # optional.add_argument(
     #     '--resume',
     #     type=Path,
@@ -78,9 +83,11 @@ def handle(args):
 
     # Override specific values from command line
     if args.data:
-        config['data_dir'] = str(args.data)
+        config['data']['data_dir'] = str(args.data)
     if args.gpus is not None:
         config['training']['num_gpus'] = args.gpus
+    if args.nodes is not None:
+        config['training']['num_nodes'] = args.nodes
 
     # Initialize model
     from beast.api.model import Model

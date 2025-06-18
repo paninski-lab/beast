@@ -38,6 +38,7 @@ dependencies = [
     "tensorboard",
     "torchvision",
     "tqdm",
+    "transformers",
     "typeguard (==2.13.3)",
 ]
 

@@ -19,6 +19,7 @@ training:
   num_epochs: 800
   num_workers: 8              # Number of CPU workers for the DataLoader
   num_gpus: 1
+  num_nodes: 1
   log_every_n_steps: 10       # frequency to log training metrics
   check_val_every_n_epoch: 5  # frequency to log validation metrics
 
@@ -35,3 +36,7 @@ optimizer:
   steps:             # for step
     - 200
     - 400
+
+# data configuration
+data:
+  data_dir: /PATH/TO/DATA

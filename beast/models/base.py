@@ -39,9 +39,12 @@ class BaseLightningModel(pl.LightningModule):
             )
         elif scheduler == 'cosine':
             from torch.optim.lr_scheduler import OneCycleLR
+
             # compute max learning rate
             global_batch_size = (
-                self.config['training']['train_batch_size'] * self.config['training']['num_gpus']
+                self.config['training']['train_batch_size']
+                * self.config['training']['num_gpus']
+                * self.config['training']['num_nodes']
             )
             max_lr = self.config['optimizer']['lr'] * global_batch_size / 256
             scheduler = OneCycleLR(
