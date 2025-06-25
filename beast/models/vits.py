@@ -2,7 +2,10 @@
 
 from typing import Dict, Optional, Union
 
+import numpy as np
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from jaxtyping import Float
 from transformers import (
     ViTMAEConfig,
@@ -12,6 +15,23 @@ from typeguard import typechecked
 
 from beast.models.base import BaseLightningModel
 
+
+class BatchNormProjector(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.proj = nn.Sequential(
+            nn.Linear(self.config.hidden_size, self.config.hidden_size),
+            nn.BatchNorm1d(self.config.hidden_size),
+            nn.ReLU(),
+            nn.Linear(self.config.hidden_size, self.config.hidden_size),
+            nn.BatchNorm1d(self.config.hidden_size),
+            nn.ReLU(),
+            nn.Linear(self.config.hidden_size, self.config.embed_size)
+        )
+    def forward(self, x):
+        proj_hidden = self.proj(x)
+        return proj_hidden
 
 @typechecked
 class VisionTransformer(BaseLightningModel):
@@ -23,13 +43,24 @@ class VisionTransformer(BaseLightningModel):
         vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
         self.vit_mae = ViTMAE(vit_mae_config).from_pretrained("facebook/vit-mae-base")
         self.mask_ratio = config['model']['model_params']['mask_ratio']
-    # Other required methods...
+        # contrastive loss
+        if config['model']['model_params']['use_infoNCE']:
+            self.proj = BatchNormProjector(vit_mae_config)
+            self.temperature = nn.Parameter(torch.ones([]) * np.log(1))      
 
     def forward(
         self,
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
     ) -> Dict[str, torch.Tensor]:
         results_dict = self.vit_mae(pixel_values=x,return_recon=True)
+        if self.config['model']['model_params']['use_infoNCE']:
+            cls_token = results_dict['latents'][:, 0, :]
+            proj_hidden = self.proj(cls_token)
+            # normalize projection
+            z = proj_hidden / proj_hidden.norm(dim=-1, keepdim=True)
+            results_dict['z'] = z
+            results_dict['cls_token'] = cls_token
+
         return results_dict
 
     def get_model_outputs(self, batch_dict: dict, return_images: bool = True) -> dict:
@@ -50,7 +81,18 @@ class VisionTransformer(BaseLightningModel):
         log_list = [
             {'name': f'{stage}_mse', 'value': mse_loss}
         ]
-        return mse_loss, log_list
+        loss = mse_loss
+        if self.config['model']['model_params']['use_infoNCE']:
+            z = kwargs['z']
+            sim_matrix = z @ z.T
+            if self.config['model']['model_params']['temp_scale']:
+                sim_matrix /= self.temperature.exp() 
+            loss_dict = batch_wise_contrastive_loss(sim_matrix)
+            loss_dict['infoNCE_loss'] *= self.config['model']['model_params']['infoNCE_weight']
+            log_list.append({'name': f'{stage}_infoNCE', 'value': loss_dict['infoNCE_loss']})
+            log_list.append({'name': f'{stage}_infoNCE_percent_correct', 'value': loss_dict['percent_correct']})
+            loss += loss_dict['infoNCE_loss']
+        return loss, log_list
 
     def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
         # set mask_ratio to 0 for inference
@@ -132,3 +174,26 @@ class ViTMAE(ViTMAEForPreTraining):
             'loss': loss, 
             'logits': logits,
         }
+
+def topk(similarities,labels,k=5):
+    if k > similarities.shape[0]:
+        k = similarities.shape[0]
+    topsum=0
+    for i in range(k):
+        topsum += torch.sum(torch.argsort(similarities,axis=1)[:,-(i+1)] == labels)/len(labels)
+    return topsum
+
+def batch_wise_contrastive_loss(sim_matrix):
+    N = sim_matrix.shape[0]
+    # remove the diagonal from the sim_matrix
+    mask = torch.eye(N, dtype=torch.bool, device=sim_matrix.device)
+    sim_matrix = sim_matrix[~mask].view(N, N-1)
+    labels = torch.arange(N).to(sim_matrix.device)
+    labels_i, labels_j = labels[:N//2], labels[N//2:] -1
+    labels = torch.cat([labels_j, labels_i]).to(sim_matrix.device)
+    loss = F.cross_entropy(sim_matrix, labels)
+    percent_correct = topk(sim_matrix, labels, k=1)
+    return{
+        "infoNCE_loss": loss,
+        "percent_correct": percent_correct
+    }

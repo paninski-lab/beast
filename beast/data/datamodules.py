@@ -9,6 +9,8 @@ import torch
 from torch.utils.data import DataLoader, Subset, random_split
 from typeguard import typechecked
 
+from beast.data.samplers import ContrastBatchSampler, contrastive_collate_fn
+
 
 @typechecked
 class BaseDataModule(pl.LightningDataModule):
@@ -20,6 +22,7 @@ class BaseDataModule(pl.LightningDataModule):
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 16,
+        use_sampler: bool = False,
         num_workers: int | None = None,
         train_probability: float = 0.8,
         val_probability: float | None = None,
@@ -34,6 +37,7 @@ class BaseDataModule(pl.LightningDataModule):
         train_batch_size: number of samples of training batches
         val_batch_size: number of samples in validation batches
         test_batch_size: number of samples in test batches
+        use_sampler: whether to use a sampler for the dataset
         num_workers: number of threads used for prefetching data
         train_probability: fraction of full dataset used for training
         val_probability: fraction of full dataset used for validation
@@ -49,6 +53,7 @@ class BaseDataModule(pl.LightningDataModule):
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
         self.test_batch_size = test_batch_size
+        self.use_sampler = use_sampler
         if num_workers is not None:
             self.num_workers = num_workers
         else:
@@ -81,6 +86,7 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
         if self.dataset.imgaug_pipeline is None:
+            assert not self.use_sampler, 'Sampler cannot be used without augmentations'
             # no augmentations in the pipeline; subsets can share same underlying dataset
             self.train_dataset, self.val_dataset, self.test_dataset = random_split(
                 self.dataset,
@@ -92,7 +98,8 @@ class BaseDataModule(pl.LightningDataModule):
             # we can't simply change the imgaug pipeline in the datasets after they've been split
             # because the subsets actually point to the same underlying dataset, so we create
             # separate datasets here
-            train_idxs, val_idxs, test_idxs = random_split(
+            split_fn = self._sequential_split if self.use_sampler else random_split
+            train_idxs, val_idxs, test_idxs = split_fn(
                 range(len(self.dataset)),
                 data_splits_list,
                 generator=torch.Generator().manual_seed(self.seed),
@@ -112,14 +119,37 @@ class BaseDataModule(pl.LightningDataModule):
             f'test: {len(self.test_dataset)}'
         )
 
+    def _sequential_split(self, dataset_or_range, split_sizes, generator=None):
+        """Create sequential splits: first portion for train, second for val, third for test."""
+        train_size, val_size, test_size = split_sizes
+        
+        # Calculate cumulative indices for sequential splitting
+        train_end = train_size
+        val_end = train_end + val_size
+        test_end = val_end + test_size
+        
+        # Create sequential splits
+        train_split = dataset_or_range[:train_end]
+        val_split = dataset_or_range[train_end:val_end]
+        test_split = dataset_or_range[val_end:test_end]
+        
+        return train_split, val_split, test_split
+
     def train_dataloader(self) -> torch.utils.data.DataLoader:
+        if self.use_sampler:
+            self.sampler = ContrastBatchSampler(
+                dataset=self.train_dataset,
+                batch_size=self.train_batch_size,
+            )
         return DataLoader(
             self.train_dataset,
-            batch_size=self.train_batch_size,
+            batch_size=None if self.use_sampler else self.train_batch_size,
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
-            shuffle=True,
+            shuffle=True if self.sampler is None else False,
+            sampler=self.sampler,
             generator=torch.Generator().manual_seed(self.seed),
+            collate_fn=contrastive_collate_fn if self.use_sampler else None,
         )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:

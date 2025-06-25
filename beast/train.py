@@ -78,6 +78,7 @@ def train(config: dict, model, output_dir: str | Path):
         train_batch_size=config['training']['train_batch_size'],
         val_batch_size=config['training']['val_batch_size'],
         test_batch_size=config['training']['test_batch_size'],
+        use_sampler=config['model']['model_params']['use_infoNCE'],
         num_workers=config['training']['num_workers'],
         train_probability=config['training'].get('train_probability', 0.95),
         val_probability=config['training'].get('val_probability', 0.05),
