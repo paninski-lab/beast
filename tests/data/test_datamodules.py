@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
-from torch.utils.data import RandomSampler
+from torch.utils.data import SequentialSampler
+
+from beast.data.samplers import ContrastBatchSampler
 
 
 def test_base_datamodule(base_datamodule):
@@ -11,7 +13,7 @@ def test_base_datamodule(base_datamodule):
 
     # check train batch properties
     train_dataloader = base_datamodule.train_dataloader()
-    assert isinstance(train_dataloader.sampler, RandomSampler)
+    assert isinstance(train_dataloader.sampler, SequentialSampler) or isinstance(train_dataloader.sampler, ContrastBatchSampler)
     batch = next(iter(train_dataloader))
     assert batch['image'].shape == (train_size, 3, 224, 224)
     # check imgaug pipeline makes non-repeatable data
@@ -24,7 +26,7 @@ def test_base_datamodule(base_datamodule):
     # check val batch properties
     val_dataloader = base_datamodule.val_dataloader()
     batch = next(iter(val_dataloader))
-    assert not isinstance(val_dataloader.sampler, RandomSampler)
+    assert not isinstance(val_dataloader.sampler, SequentialSampler) or not isinstance(val_dataloader.sampler, ContrastBatchSampler)
     assert batch['image'].shape[1:] == (3, 224, 224)
     assert batch['image'].shape[0] <= val_size
     # check imgaug pipeline makes repeatable data
@@ -34,7 +36,7 @@ def test_base_datamodule(base_datamodule):
 
     test_dataloader = base_datamodule.test_dataloader()
     batch = next(iter(test_dataloader))
-    assert not isinstance(test_dataloader.sampler, RandomSampler)
+    assert not isinstance(test_dataloader.sampler, SequentialSampler) or not isinstance(test_dataloader.sampler, ContrastBatchSampler)
     assert batch['image'].shape[1:] == (3, 224, 224)
     assert batch['image'].shape[0] <= test_size
     # check imgaug pipeline makes repeatable data
