@@ -146,7 +146,7 @@ class BaseDataModule(pl.LightningDataModule):
             batch_size=None if self.use_sampler else self.train_batch_size,
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
-            shuffle=True if self.use_sampler is None else False,
+            shuffle=True if not self.use_sampler else False,
             sampler=self.sampler if self.use_sampler else None,
             generator=torch.Generator().manual_seed(self.seed),
             collate_fn=contrastive_collate_fn if self.use_sampler else None,

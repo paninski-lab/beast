@@ -30,3 +30,9 @@ def test_vit_autoencoder_get_model_outputs(config_vit):
 def test_vit_autoencoder_integration(config_vit, run_model_test):
     config = copy.deepcopy(config_vit)
     run_model_test(config=config)
+
+def test_vit_autoencoder_contrastive_integration(config_vit, run_model_test):
+    """Test ViT autoencoder with contrastive learning (infoNCE) enabled."""
+    config = copy.deepcopy(config_vit)
+    config['model']['model_params']['use_infoNCE'] = True
+    run_model_test(config=config)

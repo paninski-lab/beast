@@ -5,6 +5,75 @@ import torch
 from torch.utils.data import Sampler
 
 
+def find_positive_candidates(ref_idx, idx_offset, max_idx, all_indices_set, used_indices):
+    """
+    Find valid positive candidates for a given reference index.
+    
+    Args:
+        ref_idx: Reference index
+        idx_offset: Offset for finding positive pairs
+        max_idx: Maximum valid index
+        all_indices_set: Set of all valid indices
+        used_indices: Set of already used indices
+        
+    Returns:
+        List of valid positive candidate indices
+    """
+    i_p_candidates = []
+    for cand in [ref_idx - idx_offset, ref_idx + idx_offset]:
+        if 0 <= cand < max_idx:
+            if cand not in used_indices:
+                if cand in all_indices_set:
+                    i_p_candidates.append(cand)
+    return i_p_candidates
+
+
+def get_neighbor_indices(ref_idx, idx_offset):
+    """
+    Get all neighbor indices within the offset range.
+    
+    Args:
+        ref_idx: Reference index
+        idx_offset: Offset range
+        
+    Returns:
+        List of neighbor indices
+    """
+    return [ref_idx + j for j in range(-idx_offset, idx_offset + 1)]
+
+
+def fill_remaining_batch(batch, batch_size, all_indices, used_indices, drop_last):
+    """
+    Fill remaining slots in a batch with far-away indices.
+    
+    Args:
+        batch: Current batch indices
+        batch_size: Target batch size
+        all_indices: All available indices
+        used_indices: Set of used indices
+        drop_last: Whether to drop incomplete batches
+        
+    Returns:
+        Updated batch and used_indices
+    """
+    if len(batch) < batch_size:
+        if drop_last:
+            return batch, used_indices
+        
+        # Fill remainder randomly from unused "far" indices
+        needed = batch_size - len(batch)
+        far_candidates = [x for x in all_indices if x not in used_indices]
+        if len(far_candidates) < needed:
+            # Can't fill, return as is
+            return batch, used_indices
+        
+        chosen = random.sample(far_candidates, needed)
+        used_indices.update(chosen)
+        batch.extend(chosen)
+    
+    return batch, used_indices
+
+
 class ContrastBatchSampler(Sampler):
     """
     Custom batch sampler:
@@ -28,12 +97,19 @@ class ContrastBatchSampler(Sampler):
         if not drop_last and self.num_samples % self.batch_size != 0:
             self.num_batches += 1  # if you want to allow incomplete batch
         # if dataset.frame_idx exists, use it to get the number of clip
-        if hasattr(dataset, 'frame_idx'):
+        if hasattr(dataset, 'frame_idx') and dataset.frame_idx is not None:
             # frame_idx is a dict contain index: path; get the list of index
-            self.all_indices = list(dataset.frame_idx.keys())
+            try:
+                self.all_indices = list(dataset.frame_idx.keys())
+                self.max_idx = max(self.all_indices)
+            except (TypeError, AttributeError):
+                # If frame_idx exists but is not iterable (e.g., mock object), fall back to range
+                self.all_indices = list(range(self.num_samples))
+                self.max_idx = self.num_samples - 1
         else:
+            # No frame_idx, use sequential indices
             self.all_indices = list(range(self.num_samples))
-        self.max_idx = max(self.all_indices)
+            self.max_idx = self.num_samples - 1
         # self.used_indices_freq = {i: 0 for i in self.all_indices}
         # self.used_indices = set()
         self.epoch = 0
@@ -42,19 +118,7 @@ class ContrastBatchSampler(Sampler):
     
     def __iter__(self):
         self.epoch += 1
-        # plot self.used_indices_freq
-        # bar width is 1
-        # plt.bar(
-        #     self.used_indices_freq.keys(), 
-        #     self.used_indices_freq.values(),
-        #     width=1
-        # )
-        # plt.savefig(f"used_indices_freq_epoch_{self.epoch}.png")
-        # print(f"Total clips: {self.num_samples}, batch size: {self.batch_size}")
-        # print(f"Used indices: {len(self.used_indices)} / {self.num_samples}")
-        # # print unsed indices
-        # unused_indices = [i for i in self.all_indices if i not in self.used_indices]
-        # print(unused_indices)
+        
         if self.shuffle:
             random.shuffle(self.all_indices)
         
@@ -78,14 +142,10 @@ class ContrastBatchSampler(Sampler):
                 
                 i = self.all_indices[idx_cursor]
                 
-                # Attempt to pick i_p from [i - offset, i + offset]
-                i_p_candidates = []
-                for cand in [i - self.idx_offset, i + self.idx_offset]:
-                    if 0 <= cand < self.max_idx:
-                        if cand not in used:
-                            if cand not in self.all_indices_set:
-                                continue
-                            i_p_candidates.append(cand)
+                # Use helper function to find positive candidates
+                i_p_candidates = find_positive_candidates(
+                    i, self.idx_offset, self.max_idx, self.all_indices_set, used
+                )
                 
                 if not i_p_candidates:
                     # if no valid positives, skip this ref
@@ -100,14 +160,19 @@ class ContrastBatchSampler(Sampler):
                 
                 # Now we have a reference i, a positive i_p
                 # Mark them as used
-                # mark list range from i-id_offset to i+id_offset as used
-                neighbors = [i + j for j in range(-self.idx_offset, self.idx_offset+1)]
+                # Use helper function to get neighbor indices
+                neighbors = get_neighbor_indices(i, self.idx_offset)
                 used.update(neighbors)
                 batch.extend([i, i_p])
                 
                 idx_cursor += 1
                 if idx_cursor >= self.num_samples:
                     break
+            
+            # Use helper function to fill remaining batch
+            batch, used = fill_remaining_batch(
+                batch, self.batch_size, self.all_indices, used, self.drop_last
+            )
             
             # If we failed to get a full batch size, then drop or return partial
             if len(batch) < self.batch_size:
@@ -122,16 +187,8 @@ class ContrastBatchSampler(Sampler):
                 chosen = random.sample(far_candidates, needed)
                 used.update(chosen)
                 batch.extend(chosen)
-            
-            # We now have pairs in `batch`, but we also need to ensure
-            #   the rest of the batch are "far away" from any i or i_p.
-            # Minimal example: we won't do extra checks here, but you
-            # may want to refine logic to exclude neighbors of i or i_p.
-            # E.g., remove i±1 from the candidate pool, etc.
-            
             yield batch
             batches_returned += 1
-        # print(f"{batches_returned} / {self.num_batches}")
     def __len__(self):
         return self.num_batches
 
