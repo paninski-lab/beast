@@ -6,7 +6,6 @@ from torch.utils.data import RandomSampler
 from beast.data.samplers import ContrastBatchSampler
 
 
-
 def test_base_datamodule(base_datamodule):
 
     train_size = base_datamodule.train_batch_size
