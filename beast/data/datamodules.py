@@ -141,6 +141,7 @@ class BaseDataModule(pl.LightningDataModule):
                 dataset=self.train_dataset,
                 batch_size=self.train_batch_size,
             )
+            self.train_dataset.offset = 1 # set offset to 1 for contrastive learning
         return DataLoader(
             self.train_dataset,
             batch_size=None if self.use_sampler else self.train_batch_size,

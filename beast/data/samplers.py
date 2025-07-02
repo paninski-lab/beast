@@ -97,10 +97,10 @@ class ContrastBatchSampler(Sampler):
         if not drop_last and self.num_samples % self.batch_size != 0:
             self.num_batches += 1  # if you want to allow incomplete batch
         # if dataset.frame_idx exists, use it to get the number of clip
-        if hasattr(dataset, 'frame_idx') and dataset.frame_idx is not None:
+        if hasattr(dataset, 'image_list') and dataset.frame_idx is not None:
             # frame_idx is a dict contain index: path; get the list of index
             try:
-                self.all_indices = list(dataset.frame_idx.keys())
+                self.all_indices = list(dataset.image_list.keys())
                 self.max_idx = max(self.all_indices)
             except (TypeError, AttributeError):
                 # If frame_idx exists but is not iterable (e.g., mock object), fall back to range

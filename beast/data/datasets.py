@@ -33,9 +33,20 @@ class BaseDataset(torch.utils.data.Dataset):
             raise ValueError(f'{self.data_dir} is not a directory')
 
         self.imgaug_pipeline = imgaug_pipeline
-
-        # collect ALL png files in data_dir
-        self.image_list = list(self.data_dir.rglob('*.png'))
+        self.offset = 0 # offset frames for each anchor. 0 means no offset.
+        try:
+            # find all subdirectories in data_dir
+            subdirs = list(self.data_dir.iterdir())
+            self.image_list = {}
+            for idx, subdir in enumerate(subdirs):
+                start_idx = idx * self.offset + len(self.frame_idx)
+                subdir_frames = list(subdir.rglob('*.png'))
+                # store the index of each fram
+                for i, frame_path in enumerate(subdir_frames):
+                    self.image_list[start_idx + i] = frame_path
+        except:
+            # collect ALL png files in data_dir
+            self.image_list = list(self.data_dir.rglob('*.png'))
         if len(self.image_list) == 0:
             raise ValueError(f'{self.data_dir} does not contain image data in png format')
 
