@@ -14,7 +14,7 @@ def test_base_datamodule(base_datamodule):
 
     # check train batch properties
     train_dataloader = base_datamodule.train_dataloader()
-    assert isinstance(train_dataloader.sampler, RandomSampler) or isinstance(train_dataloader.sampler, ContrastBatchSampler)
+    assert isinstance(train_dataloader.sampler, RandomSampler)
     batch = next(iter(train_dataloader))
     assert batch['image'].shape == (train_size, 3, 224, 224)
     # check imgaug pipeline makes non-repeatable data
@@ -85,7 +85,7 @@ def test_base_datamodule_contrastive(base_datamodule_contrastive):
     
     # Check that we have unique indices (no duplicates within a batch)
     unique_indices = torch.unique(batch['idx'])
-    assert len(unique_indices) <= expected_batch_size
+    assert len(unique_indices) == len(batch['idx'])
     
     # Test that the collate function reorganizes data correctly
     # The contrastive_collate_fn reorganizes from [ref1, pos1, ref2, pos2, ...] 

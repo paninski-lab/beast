@@ -7,7 +7,6 @@ import torch
 from beast.data.samplers import (
     ContrastBatchSampler,
     contrastive_collate_fn,
-    fill_remaining_batch,
     find_positive_candidates,
     get_neighbor_indices,
 )
@@ -80,40 +79,6 @@ class TestHelperFunctions:
         
         # Should only include the reference index itself
         assert neighbors == [5]
-    
-    def test_fill_remaining_batch_drop_last(self):
-        """Test filling remaining batch with drop_last=True."""
-        batch = [1, 2, 3, 4]
-        batch_size = 6
-        all_indices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-        used_indices = {1, 2, 3, 4}
-        drop_last = True
-        
-        result_batch, result_used = fill_remaining_batch(
-            batch, batch_size, all_indices, used_indices, drop_last
-        )
-        
-        # Should return batch as-is when drop_last=True
-        assert result_batch == [1, 2, 3, 4]
-        assert result_used == {1, 2, 3, 4}
-    
-    def test_fill_remaining_batch_fill_remaining(self):
-        """Test filling remaining batch with drop_last=False."""
-        batch = [1, 2, 3, 4]
-        batch_size = 6
-        all_indices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-        used_indices = {1, 2, 3, 4}
-        drop_last = False
-        
-        result_batch, result_used = fill_remaining_batch(
-            batch, batch_size, all_indices, used_indices, drop_last
-        )
-        
-        # Should fill with 2 additional indices from unused ones
-        assert len(result_batch) == 6
-        assert set(result_batch[:4]) == {1, 2, 3, 4}
-        assert len(result_used) == 6  # Original 4 + 2 new ones
-
 
 class TestContrastBatchSampler:
     """Test the ContrastBatchSampler class."""
