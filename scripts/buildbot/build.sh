@@ -26,8 +26,14 @@ PR_NUMBER="$1"
 
 echo "Running from $(hostname)"
 
+# Activate environment
+echo "Setting up environment..."
+source ~/.bashrc
 ml Miniforge-24.7.1-2
 conda activate $CONDA_ENV
+echo "Active conda environment: $CONDA_ENV"
+echo "Python location: $(which python)"
+echo "Pip location $(which pip)"
 
 # Remove builds older than 24 hours
 find "$BASE_DIR" -maxdepth 1 -type d -mtime +0 -print0 | while IFS= read -r -d $'\0' directory; do
@@ -46,6 +52,13 @@ cd "$TARGET_DIR"
 git remote add upstream "https://github.com/$USER/$REPO_NAME.git"
 git fetch upstream "refs/pull/$PR_NUMBER/merge"
 git checkout FETCH_HEAD
+
+# Install beast with checks
+pip install -e .
+echo "Pip install exit code: $?"
+pip show beast
+python -c "import sys; print('Python path:'); [print(p) for p in sys.path]"
+python -c "import beast; print('Beast import successful')"
 
 # Run with html reporting.
 pytest --html=report.html --self-contained-html
