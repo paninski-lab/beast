@@ -41,39 +41,6 @@ def get_neighbor_indices(ref_idx, idx_offset):
     """
     return [ref_idx + j for j in range(-idx_offset, idx_offset + 1)]
 
-
-def fill_remaining_batch(batch, batch_size, all_indices, used_indices, drop_last):
-    """
-    Fill remaining slots in a batch with far-away indices.
-    
-    Args:
-        batch: Current batch indices
-        batch_size: Target batch size
-        all_indices: All available indices
-        used_indices: Set of used indices
-        drop_last: Whether to drop incomplete batches
-        
-    Returns:
-        Updated batch and used_indices
-    """
-    if len(batch) < batch_size:
-        if drop_last:
-            return batch, used_indices
-        
-        # Fill remainder randomly from unused "far" indices
-        needed = batch_size - len(batch)
-        far_candidates = [x for x in all_indices if x not in used_indices]
-        if len(far_candidates) < needed:
-            # Can't fill, return as is
-            return batch, used_indices
-        
-        chosen = random.sample(far_candidates, needed)
-        used_indices.update(chosen)
-        batch.extend(chosen)
-    
-    return batch, used_indices
-
-
 class ContrastBatchSampler(Sampler):
     """
     Custom batch sampler:
@@ -168,11 +135,6 @@ class ContrastBatchSampler(Sampler):
                 idx_cursor += 1
                 if idx_cursor >= self.num_samples:
                     break
-            
-            # Use helper function to fill remaining batch
-            batch, used = fill_remaining_batch(
-                batch, self.batch_size, self.all_indices, used, self.drop_last
-            )
             
             # If we failed to get a full batch size, then drop or return partial
             if len(batch) < self.batch_size:
