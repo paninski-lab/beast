@@ -54,7 +54,8 @@ def extract_anchor_indices(image_list):
         # Add to anchor indices if it has at least one valid neighbor
         if has_prev or has_next:
             anchor_indices.append(frame['idx'])
-    
+    # return the indices in sorted order
+    anchor_indices.sort()
     return anchor_indices
 
 
@@ -125,7 +126,8 @@ class ContrastBatchSampler(Sampler):
         image_list = dataset.dataset.image_list
         self.anchor_indices = extract_anchor_indices(image_list)
         # only remain anchor indices that are in the dataset.indices
-        self.anchor_indices = [i for i in self.anchor_indices if i in dataset.indices[idx_offset:-idx_offset]]
+        dataset_indices = sorted(dataset.indices)
+        self.anchor_indices = [i for i in self.anchor_indices if i in dataset_indices[idx_offset:-idx_offset]]
         
         self.epoch = 0
         self.all_indices_set = set(self.all_indices)

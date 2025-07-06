@@ -7,6 +7,7 @@ import torch
 from beast.data.samplers import (
     ContrastBatchSampler,
     contrastive_collate_fn,
+    extract_anchor_indices,
     find_positive_candidates,
     get_neighbor_indices,
 )
@@ -79,6 +80,38 @@ class TestHelperFunctions:
         
         # Should only include the reference index itself
         assert neighbors == [5]
+
+    def test_extract_anchor_indices_basic(self):
+        """Test basic anchor index extraction with consecutive frames."""
+        # Create a list of image paths with consecutive frame numbers
+        image_list = [
+            "video1/frame001.png",
+            "video1/frame002.png", 
+            "video1/frame003.png",
+            "video1/frame008.png",
+            "video2/frame001.png",
+            "video2/frame002.png",
+            "video2/frame003.png",
+        ]
+        
+        anchor_indices = extract_anchor_indices(image_list)
+        
+        # All frames except the first and last of each video should be anchors
+        # because they have neighbors
+        expected_anchors = [0, 1, 2, 4, 5, 6]  # v1-frame001, v1-frame002, v1-frame003, v2-frame001, v2-frame002, v2-frame003
+        assert set(anchor_indices) == set(expected_anchors), f"Extracted anchor indices: {anchor_indices}"
+
+    def test_extract_anchor_indices_no_neighbors(self):
+        """Test anchor index extraction with no neighbors."""
+        image_list = [
+            "video1/frame001.png",
+            "video1/frame002.png",
+            "video1/frame005.png",
+            "video1/frame008.png",
+        ]
+        anchor_indices = extract_anchor_indices(image_list)
+
+        assert anchor_indices == [0, 1], f"Extracted anchor indices: {anchor_indices}"
 
 class TestContrastBatchSampler:
     """Test the ContrastBatchSampler class."""
@@ -575,6 +608,10 @@ class TestContrastBatchSamplerWithRealDataset:
         assert len(sampler) > 0
         assert sampler.batch_size == 4
         assert sampler.num_samples == len(train_dataset)
+        assert sampler.drop_last == True
+        assert sampler.idx_offset == 1
+        assert 0 not in sampler.anchor_indices
+
         
         # Get a few batches
         batches = list(sampler)[:3]  # Get first 3 batches
@@ -602,10 +639,14 @@ class TestContrastBatchSamplerWithRealDataset:
             idx_offset=1,
             shuffle=False
         )
+        assert sampler.idx_offset == 1
+        assert sampler.drop_last == True
+        assert sampler.batch_size == 4
+        assert sampler.num_samples == len(train_dataset)
+        assert 0 not in sampler.anchor_indices
         
         # Get a batch of indices
         batch_indices = next(iter(sampler))
-        print(f"Batch indices: {batch_indices}")
         # Get the actual data using the dataset
         batch_data = []
         for idx in batch_indices:
