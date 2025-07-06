@@ -1,8 +1,61 @@
 import random
+import re
+from pathlib import Path
 
 import numpy as np
 import torch
 from torch.utils.data import Sampler
+
+
+def extract_anchor_indices(image_list):
+    """
+    Extract anchor indices from image paths that have valid neighboring frames.
+    
+    Args:
+        image_list: List of image paths
+        
+    Returns:
+        List of indices that can serve as anchors (have valid neighbors)
+    """
+    anchor_indices = []
+    
+    # Parse each image path to extract video and frame information
+    frame_info = []
+    for idx, img_path in enumerate(image_list):
+        path = Path(img_path)
+        # Extract video name (parent directory) and frame number from filename
+        video_name = path.parent.name
+        # Try to extract frame number from filename (assuming format like frame001.png, 001.png, etc.)
+        frame_match = re.search(r'(\d+)', path.stem)
+        if frame_match:
+            frame_num = int(frame_match.group(1))
+            frame_info.append({
+                'idx': idx,
+                'video': video_name,
+                'frame_num': frame_num,
+                'path': path
+            })
+    
+    # Sort by video and frame number
+    frame_info.sort(key=lambda x: (x['video'], x['frame_num']))
+    
+    # Find frames that have valid neighbors (same video, consecutive frame numbers)
+    for i, frame in enumerate(frame_info):
+        # Check if previous frame exists and is from same video
+        has_prev = (i > 0 and 
+                   frame_info[i-1]['video'] == frame['video'] and 
+                   frame_info[i-1]['frame_num'] == frame['frame_num'] - 1)
+        
+        # Check if next frame exists and is from same video
+        has_next = (i < len(frame_info) - 1 and 
+                   frame_info[i+1]['video'] == frame['video'] and 
+                   frame_info[i+1]['frame_num'] == frame['frame_num'] + 1)
+        
+        # Add to anchor indices if it has at least one valid neighbor
+        if has_prev or has_next:
+            anchor_indices.append(frame['idx'])
+    
+    return anchor_indices
 
 
 def find_positive_candidates(ref_idx, idx_offset, max_idx, all_indices_set, used_indices):
@@ -63,31 +116,25 @@ class ContrastBatchSampler(Sampler):
         self.num_batches = self.num_samples // self.batch_size
         if not drop_last and self.num_samples % self.batch_size != 0:
             self.num_batches += 1  # if you want to allow incomplete batch
-        # if dataset.frame_idx exists, use it to get the number of clip
-        if hasattr(dataset, 'image_list') and dataset.frame_idx is not None:
-            # frame_idx is a dict contain index: path; get the list of index
-            try:
-                self.all_indices = list(dataset.image_list.keys())
-                self.max_idx = max(self.all_indices)
-            except (TypeError, AttributeError):
-                # If frame_idx exists but is not iterable (e.g., mock object), fall back to range
-                self.all_indices = list(range(self.num_samples))
-                self.max_idx = self.num_samples - 1
-        else:
-            # No frame_idx, use sequential indices
-            self.all_indices = list(range(self.num_samples))
-            self.max_idx = self.num_samples - 1
-        # self.used_indices_freq = {i: 0 for i in self.all_indices}
-        # self.used_indices = set()
+        
+        # Use sequential indices for all samples
+        self.all_indices = list(range(self.num_samples))
+        self.max_idx = self.num_samples - 1
+        
+
+        image_list = dataset.dataset.image_list
+        self.anchor_indices = extract_anchor_indices(image_list)
+        # only remain anchor indices that are in the dataset.indices
+        self.anchor_indices = [i for i in self.anchor_indices if i in dataset.indices[:-idx_offset]]
+        
         self.epoch = 0
         self.all_indices_set = set(self.all_indices)
-        # self.idx_offset = 16 # 16 for vic-mae
     
     def __iter__(self):
         self.epoch += 1
         
         if self.shuffle:
-            random.shuffle(self.all_indices)
+            random.shuffle(self.anchor_indices)
         
         used = set()
         batches_returned = 0
@@ -102,34 +149,21 @@ class ContrastBatchSampler(Sampler):
                 
                 # If we run out of "unused" indices, we break early
                 # (especially if drop_last == True)
-                while idx_cursor < self.num_samples and self.all_indices[idx_cursor] in used:
+                while idx_cursor < len(self.anchor_indices) and self.anchor_indices[idx_cursor] in used:
                     idx_cursor += 1
-                if idx_cursor >= self.num_samples:
+                if idx_cursor >= len(self.anchor_indices):
                     break
                 
-                i = self.all_indices[idx_cursor]
-                
-                # Use helper function to find positive candidates
-                i_p_candidates = find_positive_candidates(
-                    i, self.idx_offset, self.max_idx, self.all_indices_set, used
-                )
-                
-                if not i_p_candidates:
-                    # if no valid positives, skip this ref
-                    # print(f"Skipping ref {i} as no valid positives found.")
-                    idx_cursor += 1
-                    continue
+                i = self.anchor_indices[idx_cursor]
                 
                 # choose a random positive
-                pos_idx = int(np.random.uniform(0, len(i_p_candidates)))
-                # uniform sampling to choose a positive
-                i_p = i_p_candidates[pos_idx]
+                i_p_offset = np.random.choice([-1, 1])
+                i_p = i + i_p_offset
                 
                 # Now we have a reference i, a positive i_p
                 # Mark them as used
-                # Use helper function to get neighbor indices
-                neighbors = get_neighbor_indices(i, self.idx_offset)
-                used.update(neighbors)
+                neighbor_indices = get_neighbor_indices(i, self.idx_offset)
+                used.update(neighbor_indices)
                 batch.extend([i, i_p])
                 
                 idx_cursor += 1
@@ -151,6 +185,7 @@ class ContrastBatchSampler(Sampler):
                 batch.extend(chosen)
             yield batch
             batches_returned += 1
+
     def __len__(self):
         return self.num_batches
 

@@ -87,7 +87,10 @@ class TestContrastBatchSampler:
         """Test basic initialization."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=100)
-        dataset.frame_idx = {i: f"path_{i}" for i in range(100)}
+        subdataset = Mock()
+        subdataset.image_list = [f"path_{i}" for i in range(100)]
+        dataset.indices = list(range(100))
+        dataset.dataset = subdataset
         
         sampler = ContrastBatchSampler(dataset, batch_size=8, idx_offset=2)
         
@@ -102,6 +105,9 @@ class TestContrastBatchSampler:
         """Test that odd batch size raises error."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=100)
+        dataset.dataset = Mock()
+        dataset.dataset.image_list = [f"path_{i}" for i in range(100)]
+        dataset.indices = list(range(100))
         
         with pytest.raises(AssertionError, match="Batch size must be even"):
             ContrastBatchSampler(dataset, batch_size=7)
@@ -110,6 +116,9 @@ class TestContrastBatchSampler:
         """Test initialization when dataset doesn't have frame_idx."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=50)
+        dataset.dataset = Mock()
+        dataset.dataset.image_list = [f"path_{i}" for i in range(50)]
+        dataset.indices = list(range(50))
         # No frame_idx attribute - this should work fine
         
         sampler = ContrastBatchSampler(dataset, batch_size=4)
@@ -121,7 +130,10 @@ class TestContrastBatchSampler:
         """Test initialization with drop_last=False."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=10)
-        dataset.frame_idx = {i: f"path_{i}" for i in range(10)}
+        subdataset = Mock()
+        subdataset.image_list = [f"path_{i}" for i in range(10)]
+        dataset.indices = list(range(10))
+        dataset.dataset = subdataset
         
         sampler = ContrastBatchSampler(dataset, batch_size=4, drop_last=False)
         
@@ -132,7 +144,10 @@ class TestContrastBatchSampler:
         """Test the __len__ method."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=100)
-        dataset.frame_idx = {i: f"path_{i}" for i in range(100)}
+        subdataset = Mock()
+        subdataset.image_list = [f"path_{i}" for i in range(100)]
+        dataset.indices = list(range(100))
+        dataset.dataset = subdataset
         
         sampler = ContrastBatchSampler(dataset, batch_size=8)
         
@@ -143,7 +158,10 @@ class TestContrastBatchSampler:
         """Test basic iteration behavior."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=20)
-        dataset.frame_idx = {i: f"path_{i}" for i in range(20)}
+        subdataset = Mock()
+        subdataset.image_list = [f"path_{i}" for i in range(20)]
+        dataset.indices = list(range(20))
+        dataset.dataset = subdataset
         
         sampler = ContrastBatchSampler(dataset, batch_size=4, shuffle=True)
         
@@ -164,7 +182,10 @@ class TestContrastBatchSampler:
         """Test iteration without shuffling."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=20)
-        dataset.frame_idx = {i: f"path_{i}" for i in range(20)}
+        subdataset = Mock()
+        subdataset.image_list = [f"path_{i}" for i in range(20)]
+        dataset.indices = list(range(20))
+        dataset.dataset = subdataset
         
         sampler = ContrastBatchSampler(dataset, batch_size=4, shuffle=False)
         
@@ -175,6 +196,7 @@ class TestContrastBatchSampler:
         
         # First batch should be in order since no shuffle
         first_batch = batches[0]
+        print(f'first_batch: {first_batch}')
         # The exact order depends on the sampling logic, but should contain indices 0-19
         assert all(0 <= idx < 20 for idx in first_batch)
     
@@ -182,7 +204,10 @@ class TestContrastBatchSampler:
         """Test that batches contain reference-positive pairs."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=20)
-        dataset.frame_idx = {i: f"path_{i}" for i in range(20)}
+        subdataset = Mock()
+        subdataset.image_list = [f"path_{i}" for i in range(20)]
+        dataset.indices = list(range(20))
+        dataset.dataset = subdataset
         
         sampler = ContrastBatchSampler(dataset, batch_size=4, idx_offset=1)
         
@@ -206,7 +231,10 @@ class TestContrastBatchSampler:
         """Test iteration with drop_last=True."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=10)
-        dataset.frame_idx = {i: f"path_{i}" for i in range(10)}
+        subdataset = Mock()
+        subdataset.image_list = [f"path_{i}" for i in range(10)]
+        dataset.indices = list(range(10))
+        dataset.dataset = subdataset
         
         sampler = ContrastBatchSampler(dataset, batch_size=4, drop_last=True)
         
@@ -225,7 +253,10 @@ class TestContrastBatchSampler:
         """Test iteration with drop_last=False."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=10)
-        dataset.frame_idx = {i: f"path_{i}" for i in range(10)}
+        subdataset = Mock()
+        subdataset.image_list = [f"path_{i}" for i in range(10)]
+        dataset.indices = list(range(10))
+        dataset.dataset = subdataset
         
         sampler = ContrastBatchSampler(dataset, batch_size=4, drop_last=False)
         
