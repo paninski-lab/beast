@@ -125,7 +125,7 @@ class ContrastBatchSampler(Sampler):
         image_list = dataset.dataset.image_list
         self.anchor_indices = extract_anchor_indices(image_list)
         # only remain anchor indices that are in the dataset.indices
-        self.anchor_indices = [i for i in self.anchor_indices if i in dataset.indices[:-idx_offset]]
+        self.anchor_indices = [i for i in self.anchor_indices if i in dataset.indices[idx_offset:-idx_offset]]
         
         self.epoch = 0
         self.all_indices_set = set(self.all_indices)
@@ -167,7 +167,7 @@ class ContrastBatchSampler(Sampler):
                 batch.extend([i, i_p])
                 
                 idx_cursor += 1
-                if idx_cursor >= self.num_samples:
+                if idx_cursor >= len(self.anchor_indices):
                     break
             
             # If we failed to get a full batch size, then drop or return partial
