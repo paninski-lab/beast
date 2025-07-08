@@ -58,7 +58,6 @@ def extract_anchor_indices(image_list, idx_offset=1):
             pos = []
             if has_prev:
                 pos.append(frame_info[i-1]['idx'])
-                print(f"anchor video frame: {frame['video']} {frame['frame_num']} | pos video frame: {frame_info[i-1]['video']} {frame_info[i-1]['frame_num']}")
             if has_next:
                 pos.append(frame_info[i+1]['idx'])
             if len(pos) > 0:
