@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import Sampler
 
 
-def extract_anchor_indices(image_list):
+def extract_anchor_indices(image_list, idx_offset=1):
     """
     Extract anchor indices from image paths that have valid neighboring frames.
     
@@ -18,6 +18,7 @@ def extract_anchor_indices(image_list):
         List of indices that can serve as anchors (have valid neighbors)
     """
     anchor_indices = []
+    pos_indices = {}
     
     # Parse each image path to extract video and frame information
     frame_info = []
@@ -44,19 +45,27 @@ def extract_anchor_indices(image_list):
         # Check if previous frame exists and is from same video
         has_prev = (i > 0 and 
                    frame_info[i-1]['video'] == frame['video'] and 
-                   frame_info[i-1]['frame_num'] == frame['frame_num'] - 1)
+                   frame_info[i-1]['frame_num'] == frame['frame_num'] - idx_offset)
         
         # Check if next frame exists and is from same video
         has_next = (i < len(frame_info) - 1 and 
                    frame_info[i+1]['video'] == frame['video'] and 
-                   frame_info[i+1]['frame_num'] == frame['frame_num'] + 1)
+                   frame_info[i+1]['frame_num'] == frame['frame_num'] + idx_offset)
         
         # Add to anchor indices if it has at least one valid neighbor
         if has_prev or has_next:
             anchor_indices.append(frame['idx'])
+            pos = []
+            if has_prev:
+                pos.append(frame_info[i-1]['idx'])
+                print(f"anchor video frame: {frame['video']} {frame['frame_num']} | pos video frame: {frame_info[i-1]['video']} {frame_info[i-1]['frame_num']}")
+            if has_next:
+                pos.append(frame_info[i+1]['idx'])
+            if len(pos) > 0:
+                pos_indices[frame['idx']] = pos
     # return the indices in sorted order
     anchor_indices.sort()
-    return anchor_indices
+    return anchor_indices, pos_indices
 
 
 def find_positive_candidates(ref_idx, idx_offset, max_idx, all_indices_set, used_indices):
@@ -121,12 +130,11 @@ class ContrastBatchSampler(Sampler):
         
 
         image_list = dataset.dataset.image_list
-        self.anchor_indices = extract_anchor_indices(image_list)
+        self.anchor_indices, self.pos_indices = extract_anchor_indices(image_list, idx_offset=self.idx_offset)
         # only remain anchor indices that are in the dataset.indices
-        dataset_indices = sorted(dataset.indices)
-        self.anchor_indices = [i for i in self.anchor_indices if i in dataset_indices[idx_offset:-idx_offset]]
+        self.dataset_indices = sorted(dataset.indices)
+        self.anchor_indices = [i for i in self.anchor_indices if i in self.dataset_indices[self.idx_offset:-self.idx_offset]]
         self.epoch = 0
-        self.all_indices_set = set(self.all_indices)
     
     def __iter__(self):
         self.epoch += 1
@@ -154,14 +162,19 @@ class ContrastBatchSampler(Sampler):
                 i = self.anchor_indices[idx_cursor]
                 
                 # choose a random positive
-                i_p_offset = np.random.choice([-1, 1])
-                i_p = i + i_p_offset
+                i_p = np.random.choice(self.pos_indices[i])
                 
                 # Now we have a reference i, a positive i_p
                 # Mark them as used
-                neighbor_indices = get_neighbor_indices(i, self.idx_offset)
-                used.update(neighbor_indices)
-                batch.extend([i, i_p])
+                used.update(self.pos_indices[i])
+                used.add(i)
+                # if neighther pos_indices[i] are in self.dataset_indices, continue
+                if not any(j in self.dataset_indices for j in self.pos_indices[i]):
+                    pass
+                elif i_p not in self.dataset_indices:
+                    pass
+                else:
+                    batch.extend([i, i_p])
                 
                 idx_cursor += 1
                 if idx_cursor >= len(self.anchor_indices):

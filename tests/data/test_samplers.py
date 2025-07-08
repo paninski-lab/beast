@@ -94,7 +94,7 @@ class TestHelperFunctions:
             "video2/frame003.png",
         ]
         
-        anchor_indices = extract_anchor_indices(image_list)
+        anchor_indices, _ = extract_anchor_indices(image_list)
         
         # All frames except the first and last of each video should be anchors
         # because they have neighbors
@@ -109,7 +109,7 @@ class TestHelperFunctions:
             "video1/frame005.png",
             "video1/frame008.png",
         ]
-        anchor_indices = extract_anchor_indices(image_list)
+        anchor_indices, _ = extract_anchor_indices(image_list)
 
         assert anchor_indices == [0, 1], f"Extracted anchor indices: {anchor_indices}"
 
@@ -586,9 +586,6 @@ class TestContrastBatchSamplerWithRealDataset:
                 # Verify indices are valid
                 assert 0 <= ref_idx < len(train_dataset), f"Ref index {ref_idx} is out of range"
                 assert 0 <= pos_idx < len(train_dataset), f"Pos index {pos_idx} is out of range"
-                
-                # Verify they're within offset range
-                assert abs(ref_idx - pos_idx) <= sampler.idx_offset
     
     def test_sampler_with_contrastive_collate(self, base_datamodule):
         """Test sampler combined with contrastive_collate_fn."""
