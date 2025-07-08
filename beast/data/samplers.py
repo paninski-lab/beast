@@ -104,7 +104,7 @@ class ContrastBatchSampler(Sampler):
       - The rest of the clips in that batch are chosen from "far away" indices.
     The __len__ of this sampler is #batches, i.e. total_clips // batch_size.
     """
-    def __init__(self, dataset, batch_size, idx_offset=1, shuffle=True, drop_last=True):
+    def __init__(self, dataset, batch_size, idx_offset=1, shuffle=True):
         assert batch_size % 2 == 0, (
             "Batch size must be even to form (ref, pos) pairs."
         )
@@ -112,11 +112,8 @@ class ContrastBatchSampler(Sampler):
         self.batch_size = batch_size
         self.idx_offset = idx_offset
         self.shuffle = shuffle
-        self.drop_last = drop_last
         self.num_samples = len(dataset)  # total number of clips
         self.num_batches = self.num_samples // self.batch_size
-        if not drop_last and self.num_samples % self.batch_size != 0:
-            self.num_batches += 1  # if you want to allow incomplete batch
         
         # Use sequential indices for all samples
         self.all_indices = list(range(self.num_samples))
@@ -128,7 +125,6 @@ class ContrastBatchSampler(Sampler):
         # only remain anchor indices that are in the dataset.indices
         dataset_indices = sorted(dataset.indices)
         self.anchor_indices = [i for i in self.anchor_indices if i in dataset_indices[idx_offset:-idx_offset]]
-        
         self.epoch = 0
         self.all_indices_set = set(self.all_indices)
     
@@ -150,7 +146,6 @@ class ContrastBatchSampler(Sampler):
             while len(batch) < self.batch_size:
                 
                 # If we run out of "unused" indices, we break early
-                # (especially if drop_last == True)
                 while idx_cursor < len(self.anchor_indices) and self.anchor_indices[idx_cursor] in used:
                     idx_cursor += 1
                 if idx_cursor >= len(self.anchor_indices):
@@ -174,17 +169,8 @@ class ContrastBatchSampler(Sampler):
             
             # If we failed to get a full batch size, then drop or return partial
             if len(batch) < self.batch_size:
-                if self.drop_last:
-                    break  # discard partial batch
-                # else fill the remainder randomly from unused "far" indices
-                needed = self.batch_size - len(batch)
-                far_candidates = [x for x in self.all_indices if x not in used]
-                if len(far_candidates) < needed:
-                    # can't fill
-                    break
-                chosen = random.sample(far_candidates, needed)
-                used.update(chosen)
-                batch.extend(chosen)
+                break
+            # return the batch
             yield batch
             batches_returned += 1
 

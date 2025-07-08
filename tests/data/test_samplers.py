@@ -159,20 +159,6 @@ class TestContrastBatchSampler:
         assert sampler.all_indices == list(range(50))
         assert sampler.max_idx == 49
     
-    def test_init_drop_last_false(self):
-        """Test initialization with drop_last=False."""
-        dataset = Mock()
-        dataset.__len__ = Mock(return_value=10)
-        subdataset = Mock()
-        subdataset.image_list = [f"path_{i}" for i in range(10)]
-        dataset.indices = list(range(10))
-        dataset.dataset = subdataset
-        
-        sampler = ContrastBatchSampler(dataset, batch_size=4, drop_last=False)
-        
-        # Should have 3 batches: 10 // 4 = 2, but with drop_last=False, we get 3
-        assert sampler.num_batches == 3
-    
     def test_len(self):
         """Test the __len__ method."""
         dataset = Mock()
@@ -269,7 +255,7 @@ class TestContrastBatchSampler:
         dataset.indices = list(range(10))
         dataset.dataset = subdataset
         
-        sampler = ContrastBatchSampler(dataset, batch_size=4, drop_last=True)
+        sampler = ContrastBatchSampler(dataset, batch_size=4)
         
         batches = list(sampler)
         
@@ -282,31 +268,6 @@ class TestContrastBatchSampler:
         for batch in batches:
             assert len(batch) == 4
     
-    def test_iter_drop_last_false(self):
-        """Test iteration with drop_last=False."""
-        dataset = Mock()
-        dataset.__len__ = Mock(return_value=10)
-        subdataset = Mock()
-        subdataset.image_list = [f"path_{i}" for i in range(10)]
-        dataset.indices = list(range(10))
-        dataset.dataset = subdataset
-        
-        sampler = ContrastBatchSampler(dataset, batch_size=4, drop_last=False)
-        
-        batches = list(sampler)
-        
-        # The actual number of batches depends on the sampling logic
-        # With drop_last=False, we might get more batches including partial ones
-        assert len(batches) >= 1  # At least one batch
-        
-        # Check that we have some complete batches and possibly a partial one
-        complete_batches = [b for b in batches if len(b) == 4]
-        partial_batches = [b for b in batches if len(b) < 4]
-        
-        assert len(complete_batches) >= 0
-        assert len(partial_batches) >= 0
-
-
 class TestContrastiveCollateFn:
     """Test the contrastive_collate_fn function."""
     
@@ -608,7 +569,6 @@ class TestContrastBatchSamplerWithRealDataset:
         assert len(sampler) > 0
         assert sampler.batch_size == 4
         assert sampler.num_samples == len(train_dataset)
-        assert sampler.drop_last == True
         assert sampler.idx_offset == 1
         assert 0 not in sampler.anchor_indices
 
@@ -640,7 +600,6 @@ class TestContrastBatchSamplerWithRealDataset:
             shuffle=False
         )
         assert sampler.idx_offset == 1
-        assert sampler.drop_last == True
         assert sampler.batch_size == 4
         assert sampler.num_samples == len(train_dataset)
         assert 0 not in sampler.anchor_indices
