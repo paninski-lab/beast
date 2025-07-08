@@ -85,7 +85,7 @@ def test_base_datamodule_contrastive(base_datamodule_contrastive):
     
     # Check that we have unique indices (no duplicates within a batch)
     unique_indices = torch.unique(batch['idx'])
-    assert len(unique_indices) == len(batch['idx'])
+    assert len(unique_indices) == len(batch['idx']), f"Unique indices: {unique_indices}, batch indices: {batch['idx']}"
     
     # Test that the collate function reorganizes data correctly
     # The contrastive_collate_fn reorganizes from [ref1, pos1, ref2, pos2, ...] 

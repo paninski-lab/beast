@@ -8,78 +8,11 @@ from beast.data.samplers import (
     ContrastBatchSampler,
     contrastive_collate_fn,
     extract_anchor_indices,
-    find_positive_candidates,
-    get_neighbor_indices,
 )
 
 
 class TestHelperFunctions:
     """Test the helper functions extracted from ContrastBatchSampler."""
-    
-    def test_find_positive_candidates_basic(self):
-        """Test finding positive candidates with basic parameters."""
-        ref_idx = 5
-        idx_offset = 2
-        max_idx = 10
-        all_indices_set = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-        used_indices = {1, 4}
-        
-        candidates = find_positive_candidates(
-            ref_idx, idx_offset, max_idx, all_indices_set, used_indices
-        )
-        
-        # Should find candidates at indices 3 and 7 (5-2 and 5+2)
-        # But 3 is not used, 7 is not used, so both should be included
-        assert set(candidates) == {3, 7}
-    
-    def test_find_positive_candidates_boundary_conditions(self):
-        """Test finding positive candidates at boundary conditions."""
-        ref_idx = 1
-        idx_offset = 2
-        max_idx = 5
-        all_indices_set = {0, 1, 2, 3, 4}
-        used_indices = set()
-        
-        candidates = find_positive_candidates(
-            ref_idx, idx_offset, max_idx, all_indices_set, used_indices
-        )
-        
-        # Should only find candidate at index 3 (1+2), since -1 is out of bounds
-        assert candidates == [3]
-    
-    def test_find_positive_candidates_all_used(self):
-        """Test when all potential candidates are already used."""
-        ref_idx = 5
-        idx_offset = 1
-        max_idx = 10
-        all_indices_set = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-        used_indices = {4, 6}  # Both candidates are used
-        
-        candidates = find_positive_candidates(
-            ref_idx, idx_offset, max_idx, all_indices_set, used_indices
-        )
-        
-        assert candidates == []
-    
-    def test_get_neighbor_indices(self):
-        """Test getting neighbor indices."""
-        ref_idx = 5
-        idx_offset = 2
-        
-        neighbors = get_neighbor_indices(ref_idx, idx_offset)
-        
-        # Should include indices from 3 to 7 (5-2 to 5+2)
-        assert neighbors == [3, 4, 5, 6, 7]
-    
-    def test_get_neighbor_indices_zero_offset(self):
-        """Test getting neighbor indices with zero offset."""
-        ref_idx = 5
-        idx_offset = 0
-        
-        neighbors = get_neighbor_indices(ref_idx, idx_offset)
-        
-        # Should only include the reference index itself
-        assert neighbors == [5]
 
     def test_extract_anchor_indices_basic(self):
         """Test basic anchor index extraction with consecutive frames."""

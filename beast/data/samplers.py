@@ -67,42 +67,6 @@ def extract_anchor_indices(image_list, idx_offset=1):
     return anchor_indices, pos_indices
 
 
-def find_positive_candidates(ref_idx, idx_offset, max_idx, all_indices_set, used_indices):
-    """
-    Find valid positive candidates for a given reference index.
-    
-    Args:
-        ref_idx: Reference index
-        idx_offset: Offset for finding positive pairs
-        max_idx: Maximum valid index
-        all_indices_set: Set of all valid indices
-        used_indices: Set of already used indices
-        
-    Returns:
-        List of valid positive candidate indices
-    """
-    i_p_candidates = []
-    for cand in [ref_idx - idx_offset, ref_idx + idx_offset]:
-        if 0 <= cand < max_idx:
-            if cand not in used_indices:
-                if cand in all_indices_set:
-                    i_p_candidates.append(cand)
-    return i_p_candidates
-
-
-def get_neighbor_indices(ref_idx, idx_offset):
-    """
-    Get all neighbor indices within the offset range.
-    
-    Args:
-        ref_idx: Reference index
-        idx_offset: Offset range
-        
-    Returns:
-        List of neighbor indices
-    """
-    return [ref_idx + j for j in range(-idx_offset, idx_offset + 1)]
-
 class ContrastBatchSampler(Sampler):
     """
     Custom batch sampler:
