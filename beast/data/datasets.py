@@ -51,14 +51,15 @@ class BaseDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx: int | list) -> ExampleDict | list[ExampleDict]:
         """Get item(s) from dataset.
-        
+
         Parameters
         ----------
-        idx: single index or list of indices
-        
+        idx: single index or list  indices
+
         Returns
         -------
         Single ExampleDict or list of ExampleDict objects
+
         """
         # Handle batch of indices
         if isinstance(idx, list):
@@ -66,7 +67,7 @@ class BaseDataset(torch.utils.data.Dataset):
         else:
             # Handle single index
             return self._get_single_item(idx)
-    
+
     def _get_single_item(self, idx: int) -> ExampleDict:
         """Get a single item from the dataset."""
         img_path = self.image_list[idx]

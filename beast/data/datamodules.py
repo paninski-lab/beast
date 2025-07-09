@@ -70,6 +70,7 @@ class BaseDataModule(pl.LightningDataModule):
         self.val_dataset = None  # populated by self.setup()
         self.test_dataset = None  # populated by self.setup()
         self.seed = seed
+        self.sampler = None
         self.setup()
 
     def setup(self, stage: str = None) -> None:
@@ -119,20 +120,21 @@ class BaseDataModule(pl.LightningDataModule):
             f'test: {len(self.test_dataset)}'
         )
 
-    def _sequential_split(self, dataset_or_range, split_sizes, generator=None):
+    @staticmethod
+    def _sequential_split(dataset_or_range, split_sizes):
         """Create sequential splits: first portion for train, second for val, third for test."""
         train_size, val_size, test_size = split_sizes
-        
+
         # Calculate cumulative indices for sequential splitting
         train_end = train_size
         val_end = train_end + val_size
         test_end = val_end + test_size
-        
+
         # Create sequential splits
         train_split = dataset_or_range[:train_end]
         val_split = dataset_or_range[train_end:val_end]
         test_split = dataset_or_range[val_end:test_end]
-        
+
         return train_split, val_split, test_split
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
@@ -141,7 +143,6 @@ class BaseDataModule(pl.LightningDataModule):
                 dataset=self.train_dataset,
                 batch_size=self.train_batch_size,
             )
-            self.train_dataset.offset = 1 # set offset to 1 for contrastive learning
         return DataLoader(
             self.train_dataset,
             batch_size=None if self.use_sampler else self.train_batch_size,

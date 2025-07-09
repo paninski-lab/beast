@@ -27,7 +27,8 @@ def test_base_datamodule(base_datamodule):
     # check val batch properties
     val_dataloader = base_datamodule.val_dataloader()
     batch = next(iter(val_dataloader))
-    assert not isinstance(val_dataloader.sampler, RandomSampler) and not isinstance(val_dataloader.sampler, ContrastBatchSampler)
+    assert not isinstance(val_dataloader.sampler, RandomSampler)
+    assert not isinstance(val_dataloader.sampler, ContrastBatchSampler)
     assert batch['image'].shape[1:] == (3, 224, 224)
     assert batch['image'].shape[0] <= val_size
     # check imgaug pipeline makes repeatable data
@@ -37,7 +38,8 @@ def test_base_datamodule(base_datamodule):
 
     test_dataloader = base_datamodule.test_dataloader()
     batch = next(iter(test_dataloader))
-    assert not isinstance(test_dataloader.sampler, RandomSampler) and not isinstance(test_dataloader.sampler, ContrastBatchSampler)
+    assert not isinstance(test_dataloader.sampler, RandomSampler)
+    assert not isinstance(val_dataloader.sampler, ContrastBatchSampler)
     assert batch['image'].shape[1:] == (3, 224, 224)
     assert batch['image'].shape[0] <= test_size
     # check imgaug pipeline makes repeatable data
@@ -48,40 +50,40 @@ def test_base_datamodule(base_datamodule):
 
 def test_base_datamodule_contrastive(base_datamodule_contrastive):
     """Test the contrastive datamodule functionality."""
-    
+
     # Check that the datamodule is configured for contrastive learning
     assert base_datamodule_contrastive.use_sampler is True
     assert base_datamodule_contrastive.train_batch_size % 2 == 0  # Even batch size for pairs
-    
+
     # Get the train dataloader
     train_dataloader = base_datamodule_contrastive.train_dataloader()
-    
+
     # Verify it's using the contrastive sampler
     assert hasattr(train_dataloader, 'sampler')
     assert isinstance(train_dataloader.sampler, ContrastBatchSampler)
-    
+
     # Check sampler properties
     sampler = train_dataloader.sampler
     assert sampler.batch_size == base_datamodule_contrastive.train_batch_size
     assert sampler.num_samples == len(base_datamodule_contrastive.train_dataset)
     assert sampler.batch_size % 2 == 0  # Even batch size for reference-positive pairs
-    
+
     # Get a batch and verify its structure
     batch = next(iter(train_dataloader))
-    
+
     # Verify batch structure
     assert isinstance(batch, dict)
     assert 'image' in batch
     assert 'idx' in batch
 
     # Test that the collate function reorganizes data correctly
-    # The contrastive_collate_fn reorganizes from [ref1, pos1, ref2, pos2, ...] 
+    # The contrastive_collate_fn reorganizes from [ref1, pos1, ref2, pos2, ...]
     # to [ref1, ref2, ..., pos1, pos2, ...]
     expected_batch_size = base_datamodule_contrastive.train_batch_size
     num_pairs = expected_batch_size // 2
     ref_indices = batch['idx'][:num_pairs]
     pos_indices = batch['idx'][num_pairs:]
-    
+
     # Verify that reference and positive indices are within the expected range
     # (they should be within idx_offset of each other, but we can't directly check
     # this since the collate function reorganizes the data)
@@ -89,7 +91,7 @@ def test_base_datamodule_contrastive(base_datamodule_contrastive):
     assert torch.all(pos_indices >= 0)
     assert torch.all(ref_indices < len(base_datamodule_contrastive.train_dataset))
     assert torch.all(pos_indices < len(base_datamodule_contrastive.train_dataset))
-    
+
     # Test all batches to ensure consistency
     batch_count = 0
     for batch in train_dataloader:
@@ -108,7 +110,7 @@ def test_base_datamodule_contrastive(base_datamodule_contrastive):
             f"Unique indices: {unique_indices}, batch indices: {batch['idx']}"
 
         batch_count += 1
-    
+
     # Verify that we can get at least one batch
     assert batch_count > 0
 

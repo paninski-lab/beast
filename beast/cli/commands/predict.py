@@ -63,7 +63,7 @@ def handle(args):
     _logger.info(f'Output directory: {args.output or args.model}')
     if not args.save_latents and not args.save_reconstructions:
         _logger.warning(
-            f'did not detect --save_latents or --save_reconstructions; no outputs will be saved'
+            'did not detect --save_latents or --save_reconstructions; no outputs will be saved'
         )
 
     # Load model
