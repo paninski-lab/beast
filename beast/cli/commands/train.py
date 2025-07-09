@@ -109,6 +109,10 @@ def handle(args):
 
         _logger.info(f'Training complete. Model saved to {args.output}')
 
+    except Exception as e:
+
+        _logger.error(e)
+
     finally:
 
         # Clean up the handler when done
