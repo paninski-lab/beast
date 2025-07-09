@@ -72,34 +72,84 @@ def handle(args):
 
     args.output.mkdir(parents=True, exist_ok=True)
 
-    # Load config
-    from beast.io import load_config
-    config = load_config(args.config)
+    # Set up logging to the model directory
+    model_log_handler = _setup_model_logging(args.output)
 
-    # Apply overrides
-    if args.overrides:
-        from beast.io import apply_config_overrides
-        config = apply_config_overrides(config, args.overrides)
+    try:
 
-    # Override specific values from command line
-    if args.data:
-        config['data']['data_dir'] = str(args.data)
-    if args.gpus is not None:
-        config['training']['num_gpus'] = args.gpus
-    if args.nodes is not None:
-        config['training']['num_nodes'] = args.nodes
+        # Load config
+        from beast.io import load_config
+        config = load_config(args.config)
 
-    # Initialize model
-    from beast.api.model import Model
-    model = Model.from_config(config)
+        # Apply overrides
+        if args.overrides:
+            from beast.io import apply_config_overrides
+            config = apply_config_overrides(config, args.overrides)
 
-    # if args.resume:
-    #     train_kwargs['resume_from_checkpoint'] = args.resume
+        # Override specific values from command line
+        if args.data:
+            config['data']['data_dir'] = str(args.data)
+        if args.gpus is not None:
+            config['training']['num_gpus'] = args.gpus
+        if args.nodes is not None:
+            config['training']['num_nodes'] = args.nodes
 
-    _logger.info(f'Training {type(model.model)} model')
-    _logger.info(f'Output directory: {args.output}')
+        # Initialize model
+        from beast.api.model import Model
+        model = Model.from_config(config)
 
-    # Run training
-    model.train(output_dir=args.output)
+        # if args.resume:
+        #     train_kwargs['resume_from_checkpoint'] = args.resume
 
-    _logger.info(f'Training complete. Model saved to {args.output}')
+        _logger.info(f'Training {type(model.model)} model')
+        _logger.info(f'Output directory: {args.output}')
+
+        # Run training
+        model.train(output_dir=args.output)
+
+        _logger.info(f'Training complete. Model saved to {args.output}')
+
+    finally:
+
+        # Clean up the handler when done
+        root_logger = logging.getLogger()
+        root_logger.removeHandler(model_log_handler)
+        model_log_handler.close()
+
+
+def _setup_model_logging(output_dir: Path):
+    """Set up additional logging to the model directory and remove original file handler."""
+
+    # Create log file path
+    log_file = output_dir / 'training.log'
+
+    # Get the root logger
+    root_logger = logging.getLogger()
+
+    # Find and remove the existing FileHandler ('app.log')
+    original_file_handler = None
+    for handler in root_logger.handlers[:]:  # Use slice to avoid modification during iteration
+        if isinstance(handler, logging.FileHandler):
+            original_file_handler = handler
+            root_logger.removeHandler(handler)
+            handler.close()
+            break
+
+    # Create a new file handler for the model directory
+    model_handler = logging.FileHandler(log_file)
+    model_handler.setLevel(logging.INFO)
+
+    # Copy formatter from the original file handler if it existed
+    if original_file_handler and original_file_handler.formatter:
+        model_handler.setFormatter(original_file_handler.formatter)
+    else:
+        # Fallback formatter if no original handler was found
+        formatter = logging.Formatter(
+            '%(asctime)s %(levelname)s  %(name)s : %(message)s'
+        )
+        model_handler.setFormatter(formatter)
+
+    # Add the new handler to the root logger
+    root_logger.addHandler(model_handler)
+
+    return model_handler
