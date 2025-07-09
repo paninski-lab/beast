@@ -33,9 +33,8 @@ class BaseDataset(torch.utils.data.Dataset):
             raise ValueError(f'{self.data_dir} is not a directory')
 
         self.imgaug_pipeline = imgaug_pipeline
-
         # collect ALL png files in data_dir
-        self.image_list = list(self.data_dir.rglob('*.png'))
+        self.image_list = sorted(list(self.data_dir.rglob('*.png')))
         if len(self.image_list) == 0:
             raise ValueError(f'{self.data_dir} does not contain image data in png format')
 
@@ -50,8 +49,27 @@ class BaseDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.image_list)
 
-    def __getitem__(self, idx: int) -> ExampleDict:
+    def __getitem__(self, idx: int | list) -> ExampleDict | list[ExampleDict]:
+        """Get item(s) from dataset.
 
+        Parameters
+        ----------
+        idx: single index or list  indices
+
+        Returns
+        -------
+        Single ExampleDict or list of ExampleDict objects
+
+        """
+        # Handle batch of indices
+        if isinstance(idx, list):
+            return [self._get_single_item(i) for i in idx]
+        else:
+            # Handle single index
+            return self._get_single_item(idx)
+
+    def _get_single_item(self, idx: int) -> ExampleDict:
+        """Get a single item from the dataset."""
         img_path = self.image_list[idx]
 
         # read image from file and apply transformations (if any)

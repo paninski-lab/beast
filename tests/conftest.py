@@ -93,6 +93,7 @@ fetch_test_data_if_needed(save_dir=Path(__file__).parent)
 # pytest fixtures
 # ---------------------------------------------
 
+
 @pytest.fixture
 def data_dir() -> Path:
     return ROOT.joinpath('tests/testing_data/data_dir')
@@ -132,6 +133,7 @@ def config_vit(config_vit_path, data_dir) -> dict:
     config['training']['train_batch_size'] = 8
     config['training']['val_batch_size'] = 8
     config['training']['test_batch_size'] = 8
+    config['model']['model_params']['use_infoNCE'] = False
     return config
 
 
@@ -158,6 +160,22 @@ def base_datamodule(base_dataset) -> BaseDataModule:
         train_probability=0.8,
         val_probability=0.1,
         test_probability=0.1,
+    )
+    return datamodule
+
+
+@pytest.fixture
+def base_datamodule_contrastive(base_dataset) -> BaseDataModule:
+    """Fixture for testing contrastive learning functionality."""
+    datamodule = BaseDataModule(
+        dataset=base_dataset,
+        train_batch_size=8,  # Even batch size for contrastive pairs
+        val_batch_size=8,
+        test_batch_size=8,
+        train_probability=0.9,
+        val_probability=0.05,
+        test_probability=0.05,
+        use_sampler=True,  # Enable contrastive sampler
     )
     return datamodule
 
