@@ -80,7 +80,7 @@ class BaseLightningModel(pl.LightningModule):
             optimizer = torch.optim.AdamW(
                 params,
                 lr=learning_rate,
-                weight_decay=self.config['optmizer']['wd'],
+                weight_decay=self.config['optimizer']['wd'],
             )
         else:
             raise NotImplementedError(f'{optimizer} optimizer is not yet implemented')
