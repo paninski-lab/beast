@@ -11,7 +11,7 @@ from beast.data.samplers import (
 )
 
 
-class TestHelperFunctions:
+class TestExtractAnchorIndices:
     """Test the helper functions extracted from ContrastBatchSampler."""
 
     def test_extract_anchor_indices_basic(self):
@@ -200,7 +200,8 @@ class TestContrastBatchSampler:
         # All batches should be complete
         for batch in batches:
             assert len(batch) == 4
-    
+
+
 class TestContrastiveCollateFn:
     """Test the contrastive_collate_fn function."""
     

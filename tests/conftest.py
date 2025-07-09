@@ -171,9 +171,9 @@ def base_datamodule_contrastive(base_dataset) -> BaseDataModule:
         train_batch_size=8,  # Even batch size for contrastive pairs
         val_batch_size=8,
         test_batch_size=8,
-        train_probability=0.8,
-        val_probability=0.1,
-        test_probability=0.1,
+        train_probability=0.9,
+        val_probability=0.05,
+        test_probability=0.05,
         use_sampler=True,  # Enable contrastive sampler
     )
     return datamodule

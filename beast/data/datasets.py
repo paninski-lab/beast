@@ -34,7 +34,7 @@ class BaseDataset(torch.utils.data.Dataset):
 
         self.imgaug_pipeline = imgaug_pipeline
         # collect ALL png files in data_dir
-        self.image_list = list(self.data_dir.rglob('*.png'))
+        self.image_list = sorted(list(self.data_dir.rglob('*.png')))
         if len(self.image_list) == 0:
             raise ValueError(f'{self.data_dir} does not contain image data in png format')
 

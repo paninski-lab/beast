@@ -90,7 +90,6 @@ class ContrastBatchSampler(Sampler):
         # Use sequential indices for all samples
         self.all_indices = list(range(self.num_samples))
         self.max_idx = self.num_samples - 1
-        
 
         image_list = dataset.dataset.image_list
         self.anchor_indices, self.pos_indices = extract_anchor_indices(image_list, idx_offset=self.idx_offset)
@@ -104,7 +103,7 @@ class ContrastBatchSampler(Sampler):
         
         if self.shuffle:
             random.shuffle(self.anchor_indices)
-        
+
         used = set()
         batches_returned = 0
         
@@ -115,7 +114,6 @@ class ContrastBatchSampler(Sampler):
             batch = []
             # Keep pairing up references and positives until we have batch_size
             while len(batch) < self.batch_size:
-                
                 # If we run out of "unused" indices, we break early
                 while idx_cursor < len(self.anchor_indices) and self.anchor_indices[idx_cursor] in used:
                     idx_cursor += 1
@@ -153,6 +151,7 @@ class ContrastBatchSampler(Sampler):
     def __len__(self):
         return self.num_batches
 
+
 def contrastive_collate_fn(batch_of_dicts):
     """
     Splits a batch of dictionaries into separate lists for refs and pos.
@@ -175,8 +174,8 @@ def contrastive_collate_fn(batch_of_dicts):
             refs.append(sample["image"])
             ref_idx.append(sample["idx"])
         else:
-            pos.append(sample["image"])  # Assuming 'ref' key is used for both
-                                       # since __getitem__ returns only 'ref'
+            # Assuming 'ref' key is used for both since __getitem__ returns only 'ref'
+            pos.append(sample["image"])
             pos_idx.append(sample["idx"])
 
     all_data = torch.cat([torch.stack(refs), torch.stack(pos)], dim=0)

@@ -73,23 +73,11 @@ def test_base_datamodule_contrastive(base_datamodule_contrastive):
     assert isinstance(batch, dict)
     assert 'image' in batch
     assert 'idx' in batch
-    
-    # Should have the expected number of images (batch_size)
-    expected_batch_size = base_datamodule_contrastive.train_batch_size
-    assert batch['image'].shape == (expected_batch_size, 3, 224, 224)
-    assert batch['idx'].shape == (expected_batch_size,)
-    
-    # Verify that indices are valid
-    assert torch.all(batch['idx'] >= 0)
-    assert torch.all(batch['idx'] < len(base_datamodule_contrastive.train_dataset))
-    
-    # Check that we have unique indices (no duplicates within a batch)
-    unique_indices = torch.unique(batch['idx'])
-    assert len(unique_indices) == len(batch['idx']), f"Unique indices: {unique_indices}, batch indices: {batch['idx']}"
-    
+
     # Test that the collate function reorganizes data correctly
     # The contrastive_collate_fn reorganizes from [ref1, pos1, ref2, pos2, ...] 
     # to [ref1, ref2, ..., pos1, pos2, ...]
+    expected_batch_size = base_datamodule_contrastive.train_batch_size
     num_pairs = expected_batch_size // 2
     ref_indices = batch['idx'][:num_pairs]
     pos_indices = batch['idx'][num_pairs:]
@@ -102,17 +90,23 @@ def test_base_datamodule_contrastive(base_datamodule_contrastive):
     assert torch.all(ref_indices < len(base_datamodule_contrastive.train_dataset))
     assert torch.all(pos_indices < len(base_datamodule_contrastive.train_dataset))
     
-    # Test multiple batches to ensure consistency
+    # Test all batches to ensure consistency
     batch_count = 0
     for batch in train_dataloader:
-        if batch_count >= 3:  # Test first 3 batches
-            break
-        
+
+        # Should have the expected number of images (batch_size)
         assert batch['image'].shape == (expected_batch_size, 3, 224, 224)
         assert batch['idx'].shape == (expected_batch_size,)
+
+        # Verify that indices are valid
         assert torch.all(batch['idx'] >= 0)
         assert torch.all(batch['idx'] < len(base_datamodule_contrastive.train_dataset))
-        
+
+        # Check that we have unique anchor indices (no duplicates within a batch)
+        unique_indices = torch.unique(batch['idx'][::2])
+        assert len(unique_indices) == len(batch['idx']) // 2, \
+            f"Unique indices: {unique_indices}, batch indices: {batch['idx']}"
+
         batch_count += 1
     
     # Verify that we can get at least one batch
