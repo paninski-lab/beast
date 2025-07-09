@@ -121,8 +121,12 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     @staticmethod
-    def _sequential_split(dataset_or_range, split_sizes):
-        """Create sequential splits: first portion for train, second for val, third for test."""
+    def _sequential_split(dataset_or_range, split_sizes, generator=None):
+        """Create sequential splits: first portion for train, second for val, third for test.
+
+        'generator' argument needed to match kwargs of random_split function
+
+        """
         train_size, val_size, test_size = split_sizes
 
         # Calculate cumulative indices for sequential splitting
