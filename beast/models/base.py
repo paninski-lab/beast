@@ -76,7 +76,7 @@ class BaseLightningModel(pl.LightningModule):
         learning_rate = self.config['optimizer']['lr']
         if optimizer == 'Adam':
             optimizer = torch.optim.Adam(params, lr=learning_rate)
-        elif self.optimizer == 'AdamW':
+        elif optimizer == 'AdamW':
             optimizer = torch.optim.AdamW(
                 params,
                 lr=learning_rate,
