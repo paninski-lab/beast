@@ -56,6 +56,7 @@ def test_base_datamodule_contrastive(base_datamodule_contrastive):
     assert base_datamodule_contrastive.train_batch_size % 2 == 0  # Even batch size for pairs
 
     # Get the train dataloader
+    np.random.seed(0)
     train_dataloader = base_datamodule_contrastive.train_dataloader()
 
     # Verify it's using the contrastive sampler
@@ -93,6 +94,7 @@ def test_base_datamodule_contrastive(base_datamodule_contrastive):
     assert torch.all(pos_indices < len(base_datamodule_contrastive.train_dataset))
 
     # Test all batches to ensure consistency
+    np.random.seed(1)
     batch_count = 0
     for batch in train_dataloader:
 
