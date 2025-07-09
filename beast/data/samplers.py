@@ -142,17 +142,22 @@ class ContrastBatchSampler(Sampler):
                 # choose a random positive
                 i_p = np.random.choice(self.pos_indices[i])
 
-                # Now we have a reference i, a positive i_p
-                # Mark them as used
-                used.update(self.pos_indices[i])
-                used.add(i)
                 # if neighther pos_indices[i] are in self.dataset_indices, continue
                 if not any(j in self.dataset_indices for j in self.pos_indices[i]):
                     pass
                 elif i_p not in self.dataset_indices:
                     pass
+                elif i_p in used:
+                    pass
                 else:
                     batch.extend([i, i_p])
+                    used.update(self.pos_indices[i])
+                    used.add(i)
+
+                # Now we have a reference i, a positive i_p
+                # Mark them as used
+                used.update(self.pos_indices[i])
+                used.add(i)
 
                 idx_cursor += 1
                 if idx_cursor >= len(self.anchor_indices):
