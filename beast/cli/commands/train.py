@@ -120,9 +120,6 @@ def handle(args):
     #     root_logger.removeHandler(model_log_handler)
     #     model_log_handler.close()
 
-    #     # Remove unused log file
-    #     (args.output / 'app.log').unlink()
-
 
 def _setup_model_logging(output_dir: Path):
     """Set up additional logging to the model directory and remove original file handler."""
@@ -133,28 +130,13 @@ def _setup_model_logging(output_dir: Path):
     # Get the root logger
     root_logger = logging.getLogger()
 
-    # Find and remove the existing FileHandler ('app.log')
-    original_file_handler = None
-    for handler in root_logger.handlers[:]:  # Use slice to avoid modification during iteration
-        if isinstance(handler, logging.FileHandler):
-            original_file_handler = handler
-            root_logger.removeHandler(handler)
-            handler.close()
-            break
-
     # Create a new file handler for the model directory
     model_handler = logging.FileHandler(log_file)
     model_handler.setLevel(logging.INFO)
-
-    # Copy formatter from the original file handler if it existed
-    if original_file_handler and original_file_handler.formatter:
-        model_handler.setFormatter(original_file_handler.formatter)
-    else:
-        # Fallback formatter if no original handler was found
-        formatter = logging.Formatter(
-            '%(asctime)s %(levelname)s  %(name)s : %(message)s'
-        )
-        model_handler.setFormatter(formatter)
+    formatter = logging.Formatter(
+        '%(asctime)s %(levelname)s  %(name)s : %(message)s'
+    )
+    model_handler.setFormatter(formatter)
 
     # Add the new handler to the root logger
     root_logger.addHandler(model_handler)

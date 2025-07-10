@@ -39,7 +39,6 @@ def main():
         format='%(asctime)s %(levelname)s  %(name)s : %(message)s',
         handlers=[
             logging.StreamHandler(),  # Console output
-            logging.FileHandler('app.log')  # Optional: also log to file
         ]
     )
 
