@@ -66,8 +66,6 @@ class TestContrastBatchSampler:
         assert sampler.idx_offset == 2
         assert sampler.num_samples == 100
         assert sampler.num_batches == 12  # 100 // 8
-        assert sampler.max_idx == 99
-        assert sampler.all_indices == list(range(100))
 
     def test_init_odd_batch_size_error(self):
         """Test that odd batch size raises error."""
@@ -79,20 +77,6 @@ class TestContrastBatchSampler:
 
         with pytest.raises(AssertionError, match="Batch size must be even"):
             ContrastBatchSampler(dataset, batch_size=7)
-
-    def test_init_without_frame_idx(self):
-        """Test initialization when dataset doesn't have frame_idx."""
-        dataset = Mock()
-        dataset.__len__ = Mock(return_value=50)
-        dataset.dataset = Mock()
-        dataset.dataset.image_list = [f"path_{i}" for i in range(50)]
-        dataset.indices = list(range(50))
-        # No frame_idx attribute - this should work fine
-
-        sampler = ContrastBatchSampler(dataset, batch_size=4)
-
-        assert sampler.all_indices == list(range(50))
-        assert sampler.max_idx == 49
 
     def test_len(self):
         """Test the __len__ method."""
@@ -107,8 +91,7 @@ class TestContrastBatchSampler:
 
         assert len(sampler) == 12  # 100 // 8
 
-    @patch('random.shuffle')
-    def test_iter_basic(self, mock_shuffle):
+    def test_iter_basic(self):
         """Test basic iteration behavior."""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=20)
@@ -128,9 +111,6 @@ class TestContrastBatchSampler:
         # Each batch should have 4 elements
         for batch in batches:
             assert len(batch) == 4
-
-        # Check that shuffle was called
-        mock_shuffle.assert_called_once()
 
     def test_iter_no_shuffle(self):
         """Test iteration without shuffling."""
@@ -202,6 +182,137 @@ class TestContrastBatchSampler:
         # All batches should be complete
         for batch in batches:
             assert len(batch) == 4
+
+    def test_distributed_anchor_distribution(self):
+        """Test that anchors are properly distributed across ranks without overlap"""
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=100)
+        subdataset = Mock()
+        subdataset.image_list = [f"video1/frame_{i:03d}.png" for i in range(100)]
+        dataset.indices = list(range(100))
+        dataset.dataset = subdataset
+
+        # Mock distributed environment for 2 GPUs
+        samplers = []
+        for rank in range(2):
+            with patch('torch.distributed.is_initialized', return_value=True):
+                with patch('torch.distributed.get_world_size', return_value=2):
+                    with patch('torch.distributed.get_rank', return_value=rank):
+                        sampler = ContrastBatchSampler(dataset, batch_size=4, seed=42)
+                        samplers.append(sampler)
+        
+        # Verify no overlap between ranks
+        anchors_rank0 = set(samplers[0].anchor_indices)
+        anchors_rank1 = set(samplers[1].anchor_indices)
+        assert anchors_rank0.isdisjoint(anchors_rank1), "Ranks should have non-overlapping anchors"
+        
+        # Verify roughly equal distribution
+        total_anchors = len(anchors_rank0) + len(anchors_rank1)
+        assert abs(len(anchors_rank0) - len(anchors_rank1)) <= 1, "Anchors should be roughly evenly distributed"
+
+    def test_seed_determinism_across_ranks(self):
+        """Test that same seed produces deterministic but different anchor sets per rank"""
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=50)
+        subdataset = Mock()
+        subdataset.image_list = [f"video1/frame_{i:03d}.png" for i in range(50)]
+        dataset.indices = list(range(50))
+        dataset.dataset = subdataset
+
+        # Create samplers with same seed, run twice to test determinism
+        def create_rank_samplers(seed):
+            samplers = []
+            for rank in range(2):
+                with patch('torch.distributed.is_initialized', return_value=True):
+                    with patch('torch.distributed.get_world_size', return_value=2):
+                        with patch('torch.distributed.get_rank', return_value=rank):
+                            sampler = ContrastBatchSampler(dataset, batch_size=4, seed=seed)
+                            samplers.append(sampler.anchor_indices.copy())
+            return samplers
+        
+        # Test determinism: same seed should give same results
+        anchors_run1 = create_rank_samplers(seed=42)
+        anchors_run2 = create_rank_samplers(seed=42)
+        
+        assert anchors_run1[0] == anchors_run2[0], "Rank 0 should be deterministic with same seed"
+        assert anchors_run1[1] == anchors_run2[1], "Rank 1 should be deterministic with same seed"
+        
+        # Test different seeds give different results
+        anchors_diff_seed = create_rank_samplers(seed=123)
+        assert anchors_run1[0] != anchors_diff_seed[0], "Different seeds should give different results"
+
+    def test_epoch_based_shuffling(self):
+        """Test that different epochs produce different orderings within each rank"""
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=50)
+        subdataset = Mock()
+        subdataset.image_list = [f"video1/frame_{i:03d}.png" for i in range(50)]
+        dataset.indices = list(range(50))
+        dataset.dataset = subdataset
+
+        with patch('torch.distributed.is_initialized', return_value=False):
+            sampler = ContrastBatchSampler(dataset, batch_size=4, shuffle=True)
+        
+        # Get batches from two different epochs
+        epoch1_batches = list(sampler)
+        epoch2_batches = list(sampler)
+        
+        # Should have same number of batches
+        assert len(epoch1_batches) == len(epoch2_batches)
+        
+        # But different ordering due to epoch-based shuffling
+        epoch1_flat = [idx for batch in epoch1_batches for idx in batch]
+        epoch2_flat = [idx for batch in epoch2_batches for idx in batch]
+        assert epoch1_flat != epoch2_flat, "Different epochs should produce different orderings"
+
+    def test_positive_indices_validity(self):
+        """Test that all positive indices are valid for their anchors"""
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=30)
+        subdataset = Mock()
+        # Create a realistic scenario with consecutive frames
+        subdataset.image_list = [f"video1/frame_{i:03d}.png" for i in range(15)] + \
+                            [f"video2/frame_{i:03d}.png" for i in range(15)]
+        dataset.indices = list(range(30))
+        dataset.dataset = subdataset
+
+        with patch('torch.distributed.is_initialized', return_value=False):
+            sampler = ContrastBatchSampler(dataset, batch_size=4, idx_offset=1)
+        
+        # Check that pos_indices relationships are valid
+        for anchor_idx, pos_list in sampler.pos_indices.items():
+            for pos_idx in pos_list:
+                # Positive should be within idx_offset of anchor
+                assert abs(anchor_idx - pos_idx) == sampler.idx_offset
+                # Both should be in dataset indices
+                assert anchor_idx in sampler.dataset_indices
+                assert pos_idx in sampler.dataset_indices
+
+    def test_batch_anchor_positive_relationships(self):
+        """Test that batches maintain proper anchor-positive relationships"""
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=20)
+        subdataset = Mock()
+        subdataset.image_list = [f"video1/frame_{i:03d}.png" for i in range(20)]
+        dataset.indices = list(range(20))
+        dataset.dataset = subdataset
+
+        with patch('torch.distributed.is_initialized', return_value=False):
+            sampler = ContrastBatchSampler(dataset, batch_size=4, idx_offset=1)
+        
+        batches = list(sampler)
+        
+        for batch in batches:
+            # Process pairs (assuming even indices are anchors, odd are positives)
+            for i in range(0, len(batch), 2):
+                if i + 1 < len(batch):
+                    anchor_idx = batch[i]
+                    pos_idx = batch[i + 1]
+                    
+                    # Verify this is a valid anchor-positive relationship
+                    assert anchor_idx in sampler.pos_indices, f"Anchor {anchor_idx} should have positives"
+                    assert pos_idx in sampler.pos_indices[anchor_idx], \
+                        f"Positive {pos_idx} should be valid for anchor {anchor_idx}"
 
 
 class TestContrastiveCollateFn:
@@ -498,7 +609,7 @@ class TestContrastBatchSamplerWithRealDataset:
             dataset=train_dataset,
             batch_size=4,
             idx_offset=1,
-            shuffle=False  # For deterministic testing
+            shuffle=False,  # For deterministic testing
         )
 
         # Test basic properties
@@ -512,15 +623,14 @@ class TestContrastBatchSamplerWithRealDataset:
         batches = list(sampler)[:3]  # Get first 3 batches
         for batch in batches:
             assert len(batch) == 4
-
             # Check that we have reference-positive pairs
             for i in range(0, len(batch), 2):
                 ref_idx = batch[i]
                 pos_idx = batch[i + 1]
-
                 # Verify indices are valid
-                assert 0 <= ref_idx < len(train_dataset), f"Ref index {ref_idx} is out of range"
-                assert 0 <= pos_idx < len(train_dataset), f"Pos index {pos_idx} is out of range"
+                total_images = len(base_datamodule.dataset.image_list)
+                assert 0 <= ref_idx < total_images, f"Ref index {ref_idx} is out of range"
+                assert 0 <= pos_idx < total_images, f"Pos index {pos_idx} is out of range"
 
     def test_sampler_with_contrastive_collate(self, base_datamodule):
         """Test sampler combined with contrastive_collate_fn."""

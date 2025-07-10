@@ -148,6 +148,7 @@ class BaseDataModule(pl.LightningDataModule):
             self.sampler = ContrastBatchSampler(
                 dataset=self.train_dataset,
                 batch_size=self.train_batch_size,
+                seed=self.seed,
             )
         return DataLoader(
             self.train_dataset,

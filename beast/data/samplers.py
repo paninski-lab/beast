@@ -82,90 +82,120 @@ class ContrastBatchSampler(Sampler):
     The __len__ of this sampler is #batches, i.e. total_clips // batch_size.
     """
 
-    def __init__(self, dataset, batch_size, idx_offset=1, shuffle=True):
+    def __init__(self, dataset, batch_size, idx_offset=1, shuffle=True, seed=42):
 
         super().__init__()
+
+        # Get distributed training info
+        if torch.distributed.is_initialized():
+            self.num_replicas = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
+        else:
+            self.num_replicas = 1
+            self.rank = 0
 
         assert batch_size % 2 == 0, (
             "Batch size must be even to form (ref, pos) pairs."
         )
+
         self.dataset = dataset
         self.batch_size = batch_size
         self.idx_offset = idx_offset
         self.shuffle = shuffle
         self.num_samples = len(dataset)  # total number of clips
-        self.num_batches = self.num_samples // self.batch_size
 
-        # Use sequential indices for all samples
-        self.all_indices = list(range(self.num_samples))
-        self.max_idx = self.num_samples - 1
+        # Calculate samples per replica
+        self.samples_per_replica = self.num_samples // self.num_replicas
+        self.total_samples = self.samples_per_replica * self.num_replicas
+        
+        # Calculate batches for this replica
+        self.num_batches = self.samples_per_replica // self.batch_size
 
-        image_list = dataset.dataset.image_list
-        self.anchor_indices, self.pos_indices = extract_anchor_indices(
-            image_list, idx_offset=self.idx_offset,
-        )
-        # only remain anchor indices that are in the dataset.indices
+        # Extract anchors only from the subset's image list (subset = train/val/test)
         self.dataset_indices = sorted(dataset.indices)
-        self.anchor_indices = [
-            i for i in self.anchor_indices
-            if i in self.dataset_indices[self.idx_offset:-self.idx_offset]
-        ]
+        subset_image_list = [dataset.dataset.image_list[i] for i in self.dataset_indices]
+        self.anchor_indices, self.pos_indices = extract_anchor_indices(
+            subset_image_list, idx_offset=self.idx_offset,
+        )
+
+        # CRITICAL: Shuffle anchor indices with fixed seed across all GPUs
+        # This ensures all GPUs see the same shuffled order before chunking
+        rng = np.random.RandomState(seed)  # Use numpy for deterministic shuffling
+        rng.shuffle(self.anchor_indices)
+
+        # Distribute shuffled anchor indices across replicas
+        indices_per_replica = len(self.anchor_indices) // self.num_replicas
+        start_idx = self.rank * indices_per_replica
+        end_idx = start_idx + indices_per_replica
+        
+        # Handle remainder indices for the last replica
+        if self.rank == self.num_replicas - 1:
+            end_idx = len(self.anchor_indices)
+            
+        self.anchor_indices = self.anchor_indices[start_idx:end_idx]
+
         self.epoch = 0
+        self.seed = seed
 
     def __iter__(self):
+
         self.epoch += 1
 
+        # Set random seed for reproducible shuffling across replicas
         if self.shuffle:
-            random.shuffle(self.anchor_indices)
+            g = torch.Generator()
+            g.manual_seed(self.epoch + hash(self.rank))
+            indices = torch.randperm(len(self.anchor_indices), generator=g).tolist()
+            anchor_indices = [self.anchor_indices[i] for i in indices]
+        else:
+            anchor_indices = self.anchor_indices.copy()
 
         used = set()
         batches_returned = 0
-
-        # We'll keep sampling until we form all possible batches
         idx_cursor = 0
 
         while batches_returned < self.num_batches:
             batch = []
             # Keep pairing up references and positives until we have batch_size
             while len(batch) < self.batch_size:
-                # If we run out of "unused" indices, we break early
+                # Find next unused anchor
                 while (
-                    idx_cursor < len(self.anchor_indices)
-                    and self.anchor_indices[idx_cursor] in used
+                    idx_cursor < len(anchor_indices)
+                    and anchor_indices[idx_cursor] in used
                 ):
                     idx_cursor += 1
-                if idx_cursor >= len(self.anchor_indices):
+
+                if idx_cursor >= len(anchor_indices):
                     break
 
-                i = self.anchor_indices[idx_cursor]
+                i = anchor_indices[idx_cursor]
 
-                # choose a random positive
-                i_p = np.random.choice(self.pos_indices[i])
+                # Find valid positive indices
+                valid_positives = [
+                    p for p in self.pos_indices[i] 
+                    if p in self.dataset_indices and p not in used
+                ]
+                
+                if not valid_positives:
+                    used.add(i)  # Mark this anchor as used even if no valid positives
+                    idx_cursor += 1
+                    continue
+                    
+                # Choose random positive
+                i_p = np.random.choice(valid_positives)
 
-                # if neighther pos_indices[i] are in self.dataset_indices, continue
-                if not any(j in self.dataset_indices for j in self.pos_indices[i]):
-                    pass
-                elif i_p not in self.dataset_indices:
-                    pass
-                elif i_p in used:
-                    pass
-                else:
-                    batch.extend([i, i_p])
-                    used.update(self.pos_indices[i])
-                    used.add(i)
-
-                # Now we have a reference i, a positive i_p
-                # Mark them as used
+                batch.extend([i, i_p])
                 used.update(self.pos_indices[i])
                 used.add(i)
 
                 idx_cursor += 1
-                if idx_cursor >= len(self.anchor_indices):
+                if idx_cursor >= len(anchor_indices):
                     break
 
             # If we failed to get a full batch size, then drop or return partial
             if len(batch) < self.batch_size:
                 break
+
             # return the batch
             yield batch
             batches_returned += 1

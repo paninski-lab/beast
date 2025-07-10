@@ -140,6 +140,7 @@ def train(config: dict, model, output_dir: str | Path):
         logger=logger,
         accumulate_grad_batches=config['optimizer'].get('accumulate_grad_batches', 1),
         sync_batchnorm=True,
+        use_distributed_sampler=False,  # does not place nice with our custom sampler
     )
 
     # train model!
