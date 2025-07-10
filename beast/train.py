@@ -7,6 +7,7 @@ import lightning.pytorch as pl
 import numpy as np
 import torch
 import yaml
+from lightning.pytorch.utilities import rank_zero_only
 from typeguard import typechecked
 
 import beast
@@ -25,8 +26,10 @@ def reset_seeds(seed: int = 0) -> None:
     torch.backends.cudnn.deterministic = True
 
 
+@rank_zero_only
 @typechecked
 def pretty_print_config(config: dict) -> None:
+    print('config file:')
     for key, val in config.items():
         print('--------------------')
         print(f'{key} parameters')
@@ -43,8 +46,10 @@ def pretty_print_config(config: dict) -> None:
 @typechecked
 def train(config: dict, model, output_dir: str | Path):
 
-    print(f'output directory: {output_dir}')
-    print(f'model type: {type(model)}')
+    # Only print from rank 0
+    if rank_zero_only.rank == 0:
+        print(f'output directory: {output_dir}')
+        print(f'model type: {type(model)}')
 
     # reset all seeds
     reset_seeds(seed=0)
@@ -52,7 +57,6 @@ def train(config: dict, model, output_dir: str | Path):
     # record beast version
     config['model']['beast_version'] = beast.version
 
-    print('config file:')
     pretty_print_config(config)
 
     # ----------------------------------------------------------------------------------

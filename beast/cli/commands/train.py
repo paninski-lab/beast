@@ -75,50 +75,53 @@ def handle(args):
     # Set up logging to the model directory
     model_log_handler = _setup_model_logging(args.output)
 
-    try:
+    # try:
 
-        # Load config
-        from beast.io import load_config
-        config = load_config(args.config)
+    # Load config
+    from beast.io import load_config
+    config = load_config(args.config)
 
-        # Apply overrides
-        if args.overrides:
-            from beast.io import apply_config_overrides
-            config = apply_config_overrides(config, args.overrides)
+    # Apply overrides
+    if args.overrides:
+        from beast.io import apply_config_overrides
+        config = apply_config_overrides(config, args.overrides)
 
-        # Override specific values from command line
-        if args.data:
-            config['data']['data_dir'] = str(args.data)
-        if args.gpus is not None:
-            config['training']['num_gpus'] = args.gpus
-        if args.nodes is not None:
-            config['training']['num_nodes'] = args.nodes
+    # Override specific values from command line
+    if args.data:
+        config['data']['data_dir'] = str(args.data)
+    if args.gpus is not None:
+        config['training']['num_gpus'] = args.gpus
+    if args.nodes is not None:
+        config['training']['num_nodes'] = args.nodes
 
-        # Initialize model
-        from beast.api.model import Model
-        model = Model.from_config(config)
+    # Initialize model
+    from beast.api.model import Model
+    model = Model.from_config(config)
 
-        # if args.resume:
-        #     train_kwargs['resume_from_checkpoint'] = args.resume
+    # if args.resume:
+    #     train_kwargs['resume_from_checkpoint'] = args.resume
 
-        _logger.info(f'Training {type(model.model)} model')
-        _logger.info(f'Output directory: {args.output}')
+    _logger.info(f'Training {type(model.model)} model')
+    _logger.info(f'Output directory: {args.output}')
 
-        # Run training
-        model.train(output_dir=args.output)
+    # Run training
+    model.train(output_dir=args.output)
 
-        _logger.info(f'Training complete. Model saved to {args.output}')
+    _logger.info(f'Training complete. Model saved to {args.output}')
 
-    except Exception as e:
+    # except Exception as e:
 
-        _logger.error(e)
+    #     _logger.error(e)
 
-    finally:
+    # finally:
 
-        # Clean up the handler when done
-        root_logger = logging.getLogger()
-        root_logger.removeHandler(model_log_handler)
-        model_log_handler.close()
+    #     # Clean up the handler when done
+    #     root_logger = logging.getLogger()
+    #     root_logger.removeHandler(model_log_handler)
+    #     model_log_handler.close()
+
+    #     # Remove unused log file
+    #     (args.output / 'app.log').unlink()
 
 
 def _setup_model_logging(output_dir: Path):

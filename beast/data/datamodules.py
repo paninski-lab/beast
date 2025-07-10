@@ -6,6 +6,7 @@ import os
 import lightning.pytorch as pl
 import numpy as np
 import torch
+from lightning.pytorch.utilities import rank_zero_only
 from torch.utils.data import DataLoader, Subset, random_split
 from typeguard import typechecked
 
@@ -76,7 +77,6 @@ class BaseDataModule(pl.LightningDataModule):
     def setup(self, stage: str = None) -> None:
 
         datalen = self.dataset.__len__()
-        print(f'Number of images in the full dataset (train+val+test): {datalen}')
 
         # split data based on provided probabilities
         data_splits_list = split_sizes_from_probabilities(
@@ -113,12 +113,14 @@ class BaseDataModule(pl.LightningDataModule):
             self.val_dataset.dataset.imgaug_pipeline = None
             self.test_dataset.dataset.imgaug_pipeline = None
 
-        print(
-            f'Dataset splits -- '
-            f'train: {len(self.train_dataset)}, '
-            f'val: {len(self.val_dataset)}, '
-            f'test: {len(self.test_dataset)}'
-        )
+        if rank_zero_only.rank == 0:
+            print(
+                f'Number of images in the full dataset (train+val+test): {datalen}'
+                f'Dataset splits -- '
+                f'train: {len(self.train_dataset)}, '
+                f'val: {len(self.val_dataset)}, '
+                f'test: {len(self.test_dataset)}'
+            )
 
     @staticmethod
     def _sequential_split(dataset_or_range, split_sizes, generator=None):
