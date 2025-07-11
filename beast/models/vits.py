@@ -48,7 +48,8 @@ class VisionTransformer(BaseLightningModel):
         # contrastive loss
         if config['model']['model_params']['use_infoNCE']:
             self.proj = BatchNormProjector(vit_mae_config)
-            self.temperature = nn.Parameter(torch.ones([]) * np.log(1))
+            if self.config['model']['model_params']['temp_scale']:
+                self.temperature = nn.Parameter(torch.ones([]) * np.log(1))
 
     def forward(
         self,
