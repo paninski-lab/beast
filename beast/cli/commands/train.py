@@ -102,6 +102,7 @@ def handle(args):
     #     train_kwargs['resume_from_checkpoint'] = args.resume
 
     _logger.info(f'Training {type(model.model)} model')
+    _logger.info(f'Data directory: {args.data}')
     _logger.info(f'Output directory: {args.output}')
 
     # Run training
