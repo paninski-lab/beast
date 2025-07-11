@@ -128,6 +128,12 @@ def train(config: dict, model, output_dir: str | Path):
     min_epochs = config['training']['num_epochs']
     max_epochs = min_epochs
 
+    # our custom sampler does not play nice with DDP
+    if config['model']['model_params']['use_infoNCE']:
+        use_distributed_sampler = False
+    else:
+        use_distributed_sampler = True
+
     trainer = pl.Trainer(
         accelerator='gpu',
         devices=config['training']['num_gpus'],
@@ -140,7 +146,7 @@ def train(config: dict, model, output_dir: str | Path):
         logger=logger,
         accumulate_grad_batches=config['optimizer'].get('accumulate_grad_batches', 1),
         sync_batchnorm=True,
-        use_distributed_sampler=False,  # does not place nice with our custom sampler
+        use_distributed_sampler=use_distributed_sampler,
     )
 
     # train model!
