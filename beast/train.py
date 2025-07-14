@@ -129,7 +129,7 @@ def train(config: dict, model, output_dir: str | Path):
     max_epochs = min_epochs
 
     # our custom sampler does not play nice with DDP
-    if config['model']['model_params']['use_infoNCE']:
+    if config['model']['model_params'].get('use_infoNCE', False):
         use_distributed_sampler = False
     else:
         use_distributed_sampler = True
