@@ -82,7 +82,7 @@ class VisionTransformer(BaseLightningModel):
         mse_loss = kwargs['loss']
         # add all losses here for logging
         log_list = [
-            {'name': f'{stage}_mse', 'value': mse_loss}
+            {'name': f'{stage}_mse', 'value': mse_loss.clone()}
         ]
         loss = mse_loss
         if self.config['model']['model_params']['use_infoNCE']:
