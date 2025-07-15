@@ -114,25 +114,13 @@ class ContrastBatchSampler(Sampler):
         # Extract anchors only from the subset's image list (subset = train/val/test)
         self.dataset_indices = sorted(dataset.indices)
         subset_image_list = [dataset.dataset.image_list[i] for i in self.dataset_indices]
-        self.anchor_indices, self.pos_indices = extract_anchor_indices(
+        self.all_anchor_indices, self.pos_indices = extract_anchor_indices(
             subset_image_list, idx_offset=self.idx_offset,
         )
+        self.anchor_indices = None  # assigned in __iter__
 
-        # CRITICAL: Shuffle anchor indices with fixed seed across all GPUs
-        # This ensures all GPUs see the same shuffled order before chunking
-        rng = np.random.RandomState(seed)  # Use numpy for deterministic shuffling
-        rng.shuffle(self.anchor_indices)
-
-        # Distribute shuffled anchor indices across replicas
-        indices_per_replica = len(self.anchor_indices) // self.num_replicas
-        start_idx = self.rank * indices_per_replica
-        end_idx = start_idx + indices_per_replica
-        
-        # Handle remainder indices for the last replica
-        if self.rank == self.num_replicas - 1:
-            end_idx = len(self.anchor_indices)
-            
-        self.anchor_indices = self.anchor_indices[start_idx:end_idx]
+        # Store the original anchor indices - don't split them yet!
+        # We'll redistribute them in __iter__ for each epoch
 
         self.epoch = 0
         self.seed = seed
@@ -141,14 +129,27 @@ class ContrastBatchSampler(Sampler):
 
         self.epoch += 1
 
-        # Set random seed for reproducible shuffling across replicas
+        # Reshuffle ALL anchor indices with epoch-specific seed
+        # This ensures different shuffling each epoch while maintaining reproducibility
         if self.shuffle:
-            g = torch.Generator()
-            g.manual_seed(self.epoch + hash(self.rank))
-            indices = torch.randperm(len(self.anchor_indices), generator=g).tolist()
-            anchor_indices = [self.anchor_indices[i] for i in indices]
+            rng = np.random.RandomState(self.seed + self.epoch)
+            anchor_indices_ = self.all_anchor_indices.copy()
+            rng.shuffle(anchor_indices_)
         else:
-            anchor_indices = self.anchor_indices.copy()
+            anchor_indices_ = self.all_anchor_indices.copy()
+
+        # NOW distribute the reshuffled indices across replicas
+        indices_per_replica = len(anchor_indices_) // self.num_replicas
+        start_idx = self.rank * indices_per_replica
+        end_idx = start_idx + indices_per_replica
+        
+        # Handle remainder indices for the last replica
+        if self.rank == self.num_replicas - 1:
+            end_idx = len(anchor_indices_)
+            
+        # Get this replica's subset of anchor indices for this epoch
+        anchor_indices = anchor_indices_[start_idx:end_idx]
+        self.anchor_indices = anchor_indices  # for testing and debugging
 
         used = set()
         batches_returned = 0
