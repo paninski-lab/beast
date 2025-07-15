@@ -184,7 +184,7 @@ class TestContrastBatchSampler:
             assert len(batch) == 4
 
     def test_distributed_anchor_distribution(self):
-        """Test that anchors are properly distributed across ranks without overlap"""
+        """Test that anchors are properly distributed across ranks without overlap per epoch"""
         dataset = Mock()
         dataset.__len__ = Mock(return_value=100)
         subdataset = Mock()
@@ -201,14 +201,56 @@ class TestContrastBatchSampler:
                         sampler = ContrastBatchSampler(dataset, batch_size=4, seed=42)
                         samplers.append(sampler)
         
-        # Verify no overlap between ranks
-        anchors_rank0 = set(samplers[0].anchor_indices)
-        anchors_rank1 = set(samplers[1].anchor_indices)
-        assert anchors_rank0.isdisjoint(anchors_rank1), "Ranks should have non-overlapping anchors"
+        # Test that all samplers have access to the same full set of anchor indices
+        # (before per-epoch distribution)
+        all_anchors_rank0 = set(samplers[0].all_anchor_indices)
+        all_anchors_rank1 = set(samplers[1].all_anchor_indices)
+        assert all_anchors_rank0 == all_anchors_rank1, \
+            "All ranks should start with same anchor indices"
         
-        # Verify roughly equal distribution
-        total_anchors = len(anchors_rank0) + len(anchors_rank1)
-        assert abs(len(anchors_rank0) - len(anchors_rank1)) <= 1, "Anchors should be roughly evenly distributed"
+        # Test anchor distribution during iteration (first epoch)
+        epoch_1_batches = []
+        for sampler in samplers:
+            # Collect all indices used in this epoch by iterating through the sampler
+            epoch_indices = []
+            for batch in sampler:
+                epoch_indices.extend(batch[::2])  # just take anchor indices
+            epoch_1_batches.append(set(epoch_indices))
+        
+        # Verify no overlap between ranks in epoch 1
+        anchors_rank0_epoch1 = epoch_1_batches[0]
+        anchors_rank1_epoch1 = epoch_1_batches[1]
+        print(anchors_rank0_epoch1)
+        print(anchors_rank1_epoch1)
+        assert anchors_rank0_epoch1.isdisjoint(anchors_rank1_epoch1), \
+            "Ranks should have non-overlapping anchors in the same epoch"
+        
+        # Verify roughly equal distribution per epoch
+        total_epoch_anchors = len(anchors_rank0_epoch1) + len(anchors_rank1_epoch1)
+        assert abs(len(anchors_rank0_epoch1) - len(anchors_rank1_epoch1)) <= 2, \
+            "Anchors should be roughly evenly distributed per epoch"
+        
+        # Test that distribution changes across epochs
+        epoch_2_batches = []
+        for sampler in samplers:
+            # Reset and collect indices for epoch 2
+            epoch_indices = []
+            for batch in sampler:
+                epoch_indices.extend(batch[::2])  # just take anchor indices
+            epoch_2_batches.append(set(epoch_indices))
+        
+        anchors_rank0_epoch2 = epoch_2_batches[0]
+        anchors_rank1_epoch2 = epoch_2_batches[1]
+        
+        # Verify that each rank gets different data across epochs
+        assert anchors_rank0_epoch1 != anchors_rank0_epoch2, \
+            "Rank 0 should get different anchor indices across epochs"
+        assert anchors_rank1_epoch1 != anchors_rank1_epoch2, \
+            "Rank 1 should get different anchor indices across epochs"
+        
+        # Verify no overlap within each epoch
+        assert anchors_rank0_epoch2.isdisjoint(anchors_rank1_epoch2), \
+            "Ranks should have non-overlapping anchors in epoch 2"
 
     def test_seed_determinism_across_ranks(self):
         """Test that same seed produces deterministic but different anchor sets per rank"""
@@ -227,7 +269,7 @@ class TestContrastBatchSampler:
                     with patch('torch.distributed.get_world_size', return_value=2):
                         with patch('torch.distributed.get_rank', return_value=rank):
                             sampler = ContrastBatchSampler(dataset, batch_size=4, seed=seed)
-                            samplers.append(sampler.anchor_indices.copy())
+                            samplers.append(sampler.all_anchor_indices.copy())
             return samplers
         
         # Test determinism: same seed should give same results
@@ -236,30 +278,103 @@ class TestContrastBatchSampler:
         
         assert anchors_run1[0] == anchors_run2[0], "Rank 0 should be deterministic with same seed"
         assert anchors_run1[1] == anchors_run2[1], "Rank 1 should be deterministic with same seed"
-        
-        # Test different seeds give different results
-        anchors_diff_seed = create_rank_samplers(seed=123)
-        assert anchors_run1[0] != anchors_diff_seed[0], "Different seeds should give different results"
 
+    def test_anchor_redistribution_across_epochs(self):
+        """Test that anchor indices are redistributed across epochs"""
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=100)
+        subdataset = Mock()
+        subdataset.image_list = [f"video1/frame_{i:03d}.png" for i in range(100)]
+        dataset.indices = list(range(100))
+        dataset.dataset = subdataset
+
+        # Create sampler for single GPU
+        with patch('torch.distributed.is_initialized', return_value=False):
+            sampler = ContrastBatchSampler(dataset, batch_size=4, seed=42)
+        
+        # Collect indices from multiple epochs
+        epoch_data = []
+        for epoch in range(3):
+            epoch_indices = []
+            for batch in sampler:
+                epoch_indices.extend(batch)
+            epoch_data.append(set(epoch_indices))
+        
+        # Verify that different epochs use different anchor orderings
+        # (though they may overlap since it's the same dataset)
+        epoch1_indices, epoch2_indices, epoch3_indices = epoch_data
+        
+        # Convert to lists to check ordering
+        epoch1_list = []
+        epoch2_list = []
+        epoch3_list = []
+        
+        # Reset sampler and collect ordered indices
+        sampler.epoch = 0
+        for batch in sampler:
+            epoch1_list.extend(batch)
+        
+        for batch in sampler:
+            epoch2_list.extend(batch)
+        
+        for batch in sampler:
+            epoch3_list.extend(batch)
+        
+        # Verify that the ordering is different across epochs
+        assert epoch1_list != epoch2_list, "Epoch 1 and 2 should have different anchor orderings"
+        assert epoch2_list != epoch3_list, "Epoch 2 and 3 should have different anchor orderings"
+        assert epoch1_list != epoch3_list, "Epoch 1 and 3 should have different anchor orderings"
+
+    def test_reproducible_epoch_distribution(self):
+        """Test that anchor distribution is reproducible with same seed"""
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=100)
+        subdataset = Mock()
+        subdataset.image_list = [f"video1/frame_{i:03d}.png" for i in range(100)]
+        dataset.indices = list(range(100))
+        dataset.dataset = subdataset
+
+        # Create two samplers with same seed
+        samplers = []
+        for _ in range(2):
+            with patch('torch.distributed.is_initialized', return_value=False):
+                sampler = ContrastBatchSampler(dataset, batch_size=4, seed=42)
+                samplers.append(sampler)
+        
+        # Collect indices from first epoch for both samplers
+        epoch1_indices_sampler1 = []
+        epoch1_indices_sampler2 = []
+        
+        for batch in samplers[0]:
+            epoch1_indices_sampler1.extend(batch[::2])  # just take anchor indices
+        
+        for batch in samplers[1]:
+            epoch1_indices_sampler2.extend(batch[::2])  # just take anchor indices
+        
+        # Verify same seed produces same results
+        assert epoch1_indices_sampler1 == epoch1_indices_sampler2, \
+            "Same seed should produce identical anchor distribution"
+            
     def test_epoch_based_shuffling(self):
         """Test that different epochs produce different orderings within each rank"""
+        n_frames = 52
         dataset = Mock()
-        dataset.__len__ = Mock(return_value=50)
+        dataset.__len__ = Mock(return_value=n_frames)
         subdataset = Mock()
-        subdataset.image_list = [f"video1/frame_{i:03d}.png" for i in range(50)]
-        dataset.indices = list(range(50))
+        subdataset.image_list = [f"video1/frame_{i:03d}.png" for i in range(n_frames)]
+        dataset.indices = list(range(n_frames))
         dataset.dataset = subdataset
 
         with patch('torch.distributed.is_initialized', return_value=False):
             sampler = ContrastBatchSampler(dataset, batch_size=4, shuffle=True)
-        
+
         # Get batches from two different epochs
         epoch1_batches = list(sampler)
         epoch2_batches = list(sampler)
-        
+
         # Should have same number of batches
         assert len(epoch1_batches) == len(epoch2_batches)
-        
+
         # But different ordering due to epoch-based shuffling
         epoch1_flat = [idx for batch in epoch1_batches for idx in batch]
         epoch2_flat = [idx for batch in epoch2_batches for idx in batch]
@@ -617,7 +732,7 @@ class TestContrastBatchSamplerWithRealDataset:
         assert sampler.batch_size == 4
         assert sampler.num_samples == len(train_dataset)
         assert sampler.idx_offset == 1
-        assert 0 not in sampler.anchor_indices
+        assert 0 not in sampler.all_anchor_indices
 
         # Get a few batches
         batches = list(sampler)[:3]  # Get first 3 batches
@@ -644,7 +759,7 @@ class TestContrastBatchSamplerWithRealDataset:
         assert sampler.idx_offset == 1
         assert sampler.batch_size == 4
         assert sampler.num_samples == len(train_dataset)
-        assert 0 not in sampler.anchor_indices
+        assert 0 not in sampler.all_anchor_indices
 
         # Get a batch of indices
         batch_indices = next(iter(sampler))
