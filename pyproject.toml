@@ -3,8 +3,8 @@ requires = ["poetry-core>=2.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [project]
-name = "beast"
-version = "1.0.0"  # Update the version according to your source
+name = "beast-backbones"
+version = "1.1.0"  # Update the version according to your source
 description = "Behavioral analysis via self-supervised pretraining of transformers"
 license = "MIT"
 readme = "README.md"
@@ -51,6 +51,9 @@ documentation = "https://github.com/paninski-lab/beast"
 # project.dependencies for locking
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
+
+[tool.poetry]
+packages = [{ include = "beast" }]
 
 [tool.poetry.scripts]
 beast = "beast.cli.main:main"

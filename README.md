@@ -1,4 +1,8 @@
 # beast
+
+![GitHub](https://img.shields.io/github/license/paninski-lab/beast)
+![PyPI](https://img.shields.io/pypi/v/py-beast)
+
 **Be**havioral **a**nalysis via **s**elf-supervised pretraining of **t**ransformers
 
 `beast` is a package for pretraining vision transformers on unlabeled data to provide backbones 
