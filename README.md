@@ -1,7 +1,7 @@
 # beast
 
 ![GitHub](https://img.shields.io/github/license/paninski-lab/beast)
-![PyPI](https://img.shields.io/pypi/v/py-beast)
+![PyPI](https://img.shields.io/pypi/v/beast-backbones)
 
 **Be**havioral **a**nalysis via **s**elf-supervised pretraining of **t**ransformers
 
