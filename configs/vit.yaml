@@ -33,7 +33,7 @@ model:
 # training configuration
 training:
   seed: 0
-  imgaug: default
+  imgaug: default  # default | top-down
   train_batch_size: 128    # per GPU
   val_batch_size: 1024
   test_batch_size: 128

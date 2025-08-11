@@ -103,7 +103,7 @@ def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
         # flip
         params_dict['Fliplr'] = {'p': 0.5}
         # rotate
-        rotation = 90  # rotation uniformly sampled from (-rotation, +rotation)
+        rotation = 180  # rotation uniformly sampled from (-rotation, +rotation)
         params_dict['Affine'] = {'p': 1.0, 'kwargs': {'rotate': (-rotation, rotation)}}
         # random crop
         crop_by = 0.15  # number of pix to crop on each side of img given as a fraction
