@@ -34,14 +34,21 @@ conda create --yes --name beast python=3.10
 conda activate beast
 ```
 
-### Step 3: Download the repo from github and install
-Move to your home directory (or wherever you would like to download the code) and install:
+### Step 3: Download and install
+Move to your home directory (or wherever you would like to download the code) and install via Github clone or through PyPI.
+
+For Github cloning:
 
 ```commandline
-cd ~
 git clone https://github.com/paninski-lab/beast
 cd beast
 pip install -e .
+```
+
+For installation through PyPI:
+
+```commandline
+pip install beast-backbones
 ```
 
 ## Usage
