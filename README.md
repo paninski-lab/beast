@@ -40,7 +40,6 @@ Move to your home directory (or wherever you would like to download the code) an
 For Github cloning:
 
 ```commandline
-cd ~
 git clone https://github.com/paninski-lab/beast
 cd beast
 pip install -e .
@@ -49,7 +48,6 @@ pip install -e .
 For installation through PyPI:
 
 ```commandline
-cd ~
 pip install beast-backbones
 ```
 
