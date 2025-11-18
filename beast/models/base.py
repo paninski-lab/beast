@@ -113,7 +113,17 @@ class BaseLightningModel(pl.LightningModule):
             # multi-GPU training. Performance overhead was found negligible.
 
             # log overall supervised loss
-            self.log(f'{stage}_loss', loss, prog_bar=True, sync_dist=True)
+            # For training: log on step; for validation: log on epoch
+            on_step = (stage == 'train')
+            on_epoch = True  # Always log on epoch for both train and val
+            self.log(
+                f'{stage}_loss', 
+                loss, 
+                prog_bar=True, 
+                sync_dist=True,
+                on_step=on_step,
+                on_epoch=on_epoch
+            )
             # log individual supervised losses
             for log_dict in log_list:
                 self.log(
@@ -121,6 +131,8 @@ class BaseLightningModel(pl.LightningModule):
                     log_dict['value'].to(self.device),
                     prog_bar=log_dict.get('prog_bar', False),
                     sync_dist=True,
+                    on_step=on_step,
+                    on_epoch=on_epoch
                 )
 
         return loss
