@@ -111,8 +111,18 @@ class Model:
             raise ValueError(f'Unknown model type: {model_type}')
 
         # Initialize the LightningModule
+        import time
+        def _log_step(msg):
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            print(f"[{timestamp}] MODEL DEBUG: {msg}", flush=True)
+        
+        _log_step(f"Creating {model_type} model instance")
         model_class = cls.MODEL_REGISTRY[model_type]
+        _log_step(f"About to call {model_class.__name__}.__init__() - this may take several minutes if downloading pretrained weights")
+        init_start = time.time()
         model = model_class(config)
+        init_duration = time.time() - init_start
+        _log_step(f"Model initialization completed in {init_duration:.2f} seconds")
 
         print(f'Initialized a {model_class} model')
 

@@ -1,6 +1,7 @@
 """Data modules split a dataset into train, val, and test modules."""
 
 import copy
+import multiprocessing
 import os
 
 import lightning.pytorch as pl
@@ -155,10 +156,12 @@ class BaseDataModule(pl.LightningDataModule):
             batch_size=None if self.use_sampler else self.train_batch_size,
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
+            pin_memory=True,  # Helps with GPU transfer
             shuffle=True if not self.use_sampler else False,
             sampler=self.sampler if self.use_sampler else None,
             generator=torch.Generator().manual_seed(self.seed),
             collate_fn=contrastive_collate_fn if self.use_sampler else None,
+            multiprocessing_context=multiprocessing.get_context('spawn') if self.num_workers > 0 else None,  # More stable on HPC
         )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
@@ -167,6 +170,8 @@ class BaseDataModule(pl.LightningDataModule):
             batch_size=self.val_batch_size,
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
+            pin_memory=True,
+            multiprocessing_context=multiprocessing.get_context('spawn') if self.num_workers > 0 else None,
         )
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
@@ -174,6 +179,8 @@ class BaseDataModule(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.test_batch_size,
             num_workers=self.num_workers,
+            pin_memory=True,
+            multiprocessing_context='spawn' if self.num_workers > 0 else None,
         )
 
     def full_labeled_dataloader(self) -> torch.utils.data.DataLoader:
