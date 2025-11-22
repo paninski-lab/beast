@@ -69,12 +69,17 @@ class VisionTransformer(BaseLightningModel):
             _debug_log("Loading pretrained model from 'facebook/vit-mae-base' (this may take several minutes if downloading)...")
             _debug_log("Note: Model will be cached locally after first download")
             load_start = time.time()
-            self.vit_mae = ViTMAE(
-                vit_mae_config,
-                use_perceptual_loss=use_perceptual_loss,
-                lambda_perceptual=lambda_perceptual,
-                device=device
-            ).from_pretrained("facebook/vit-mae-base")
+            # Load pretrained weights first (from_pretrained creates a new instance)
+            self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
+            # Set perceptual loss settings after loading (from_pretrained doesn't preserve custom init params)
+            self.vit_mae.use_perceptual_loss = use_perceptual_loss
+            self.vit_mae.lambda_perceptual = lambda_perceptual
+            if use_perceptual_loss:
+                # Initialize perceptual loss module on the correct device
+                self.vit_mae.perceptual_loss = AlexPerceptual(
+                    device=device,
+                    criterion=nn.MSELoss()
+                )
             load_duration = time.time() - load_start
             _debug_log(f"Pretrained model loaded in {load_duration:.2f} seconds")
         else:
@@ -142,13 +147,27 @@ class VisionTransformer(BaseLightningModel):
             {'name': f'{stage}_mse', 'value': mse_loss.detach().clone(), 'prog_bar': True},
         ]
         
-        if 'perceptual_loss' in kwargs:
-            perceptual_loss = kwargs['perceptual_loss']
-            log_list.append({
-                'name': f'{stage}_perceptual', 
-                'value': perceptual_loss.detach().clone(), 
-                'prog_bar': True
-            })
+        # Always log perceptual loss if it's enabled in config
+        if self.config['model']['model_params'].get('use_perceptual_loss', False):
+            if 'perceptual_loss' in kwargs:
+                perceptual_loss = kwargs['perceptual_loss']
+                # Ensure it's a tensor and on the correct device
+                if not isinstance(perceptual_loss, torch.Tensor):
+                    perceptual_loss = torch.tensor(perceptual_loss, device=loss.device, dtype=loss.dtype)
+                log_list.append({
+                    'name': f'{stage}_perceptual', 
+                    'value': perceptual_loss.detach().clone(), 
+                    'prog_bar': True
+                })
+            else:
+                # This shouldn't happen if perceptual loss is properly initialized
+                # Log 0 as fallback (shouldn't occur with the fix above)
+                perceptual_loss_value = torch.tensor(0.0, device=loss.device, dtype=loss.dtype)
+                log_list.append({
+                    'name': f'{stage}_perceptual', 
+                    'value': perceptual_loss_value, 
+                    'prog_bar': True
+                })
         
         if self.config['model']['model_params']['use_infoNCE']:
             z = kwargs['z']
