@@ -165,7 +165,7 @@ def train(config: dict, model, output_dir: str | Path):
 def get_callbacks(
     checkpointing: bool = True,
     lr_monitor: bool = True,
-    ckpt_every_n_epochs: int = None,
+    ckpt_every_n_epochs: int | None= None,
 ) -> list:
 
     callbacks = []
