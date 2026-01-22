@@ -184,3 +184,4 @@ app.log
 # data
 data/
 *.png
+.gradio/
