@@ -4,6 +4,10 @@ on:
   release:
     types: [published]
 
+permissions:
+  id-token: write  # OIDC for trusted publishing
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -64,7 +68,7 @@ jobs:
         python -m zipfile -l dist/*.whl | head -20
 
     - name: Publish to PyPI
-      run: poetry publish --username __token__ --password ${{ secrets.PYPI_API_TOKEN }}
+      uses: pypa/gh-action-pypi-publish@release/v1
 
     - name: Verify publication
       run: |
