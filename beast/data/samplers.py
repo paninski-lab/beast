@@ -107,7 +107,7 @@ class ContrastBatchSampler(Sampler):
         # Calculate samples per replica
         self.samples_per_replica = self.num_samples // self.num_replicas
         self.total_samples = self.samples_per_replica * self.num_replicas
-        
+
         # Calculate batches for this replica
         self.num_batches = self.samples_per_replica // self.batch_size
 
@@ -142,11 +142,11 @@ class ContrastBatchSampler(Sampler):
         indices_per_replica = len(anchor_indices_) // self.num_replicas
         start_idx = self.rank * indices_per_replica
         end_idx = start_idx + indices_per_replica
-        
+
         # Handle remainder indices for the last replica
         if self.rank == self.num_replicas - 1:
             end_idx = len(anchor_indices_)
-            
+
         # Get this replica's subset of anchor indices for this epoch
         anchor_indices = anchor_indices_[start_idx:end_idx]
         self.anchor_indices = anchor_indices  # for testing and debugging
@@ -173,15 +173,15 @@ class ContrastBatchSampler(Sampler):
 
                 # Find valid positive indices
                 valid_positives = [
-                    p for p in self.pos_indices[i] 
+                    p for p in self.pos_indices[i]
                     if p in self.dataset_indices and p not in used
                 ]
-                
+
                 if not valid_positives:
                     used.add(i)  # Mark this anchor as used even if no valid positives
                     idx_cursor += 1
                     continue
-                    
+
                 # Choose random positive
                 i_p = np.random.choice(valid_positives)
 
