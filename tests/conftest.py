@@ -54,7 +54,8 @@ def fetch_test_data_if_needed(save_dir: str | Path, dataset_name: str = 'testing
         dataset_name: Name of the dataset to download
     """
     datasets_url_dict = {
-        'testing_data': 'https://figshare.com/ndownloader/articles/29207330/versions/1',
+        # 'testing_data': 'https://figshare.com/ndownloader/articles/29207330/versions/1',
+        'testing_data': 'https://github.com/paninski-lab/beast-test-fixtures/releases/download/v1/test_models.zip',  # noqa
     }
 
     dst_dir = Path(save_dir) / dataset_name
