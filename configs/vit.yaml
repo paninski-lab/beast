@@ -27,8 +27,10 @@ model:
     embed_size: 768 # projected embedding size, used for contrastive learning
     temp_scale: False # temperature scaling for contrastive loss
     random_init: False # use random initialization instead of pretrained weights
-    use_infoNCE: False # use InfoNCE loss
+    use_infoNCE: True # use InfoNCE loss
     infoNCE_weight: 0.03 # weight for InfoNCE loss
+    use_perceptual_loss: False # use perceptual loss (AlexNet features)
+    lambda_perceptual: 10.0 # weight for perceptual loss
 
 # training configuration
 training:
