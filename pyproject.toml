@@ -36,6 +36,7 @@ dependencies = [
     "pillow",
     "scikit-learn",
     "tensorboard",
+    "toml",
     "torchvision",
     "tqdm",
     "transformers",
