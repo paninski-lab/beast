@@ -7,6 +7,7 @@ import torch
 import yaml
 from typeguard import typechecked
 
+import beast
 from beast.inference import predict_images, predict_video
 from beast.models.base import BaseLightningModel
 from beast.models.resnets import ResnetAutoencoder
@@ -112,17 +113,17 @@ class Model:
 
         # Initialize the LightningModule
         import time
-        def _log_step(msg):
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{timestamp}] MODEL DEBUG: {msg}", flush=True)
-        
-        _log_step(f"Creating {model_type} model instance")
+
         model_class = cls.MODEL_REGISTRY[model_type]
-        _log_step(f"About to call {model_class.__name__}.__init__() - this may take several minutes if downloading pretrained weights")
+        beast.log_step(f"Creating {model_type} model instance", level='debug')
+        beast.log_step(
+            f"About to call {model_class.__name__}.__init__() - this may take several minutes if downloading pretrained weights",
+            level='debug',
+        )
         init_start = time.time()
         model = model_class(config)
         init_duration = time.time() - init_start
-        _log_step(f"Model initialization completed in {init_duration:.2f} seconds")
+        beast.log_step(f"Model initialization completed in {init_duration:.2f} seconds", level='debug')
 
         print(f'Initialized a {model_class} model')
 

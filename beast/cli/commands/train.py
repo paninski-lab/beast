@@ -4,6 +4,7 @@ import datetime
 import logging
 from pathlib import Path
 
+from beast import log_step
 from beast.cli.types import config_file, output_dir
 
 _logger = logging.getLogger('BEAST.CLI.TRAIN')
@@ -65,65 +66,59 @@ def register_parser(subparsers):
 def handle(args):
     """Handle the train command execution."""
 
-    import time
-    def _log_step(msg):
-        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-        print(f"[{timestamp}] CLI DEBUG: {msg}", flush=True)
-        _logger.info(msg)
-
-    _log_step("Starting train command handler")
+    log_step("Starting train command handler", level='info', logger=_logger)
 
     # Determine output directory
-    _log_step("Determining output directory")
+    log_step("Determining output directory", level='info', logger=_logger)
     if not args.output:
         now = datetime.datetime.now()
         args.output = Path('runs').resolve() / now.strftime('%Y-%m-%d') / now.strftime('%H-%M-%S')
 
     args.output.mkdir(parents=True, exist_ok=True)
-    _log_step(f"Output directory: {args.output}")
+    log_step(f"Output directory: {args.output}", level='info', logger=_logger)
 
     # Set up logging to the model directory
-    _log_step("Setting up model logging")
+    log_step("Setting up model logging", level='info', logger=_logger)
     model_log_handler = _setup_model_logging(args.output)
-    _log_step("Model logging set up")
+    log_step("Model logging set up", level='info', logger=_logger)
 
     # try:
 
     # Load config
-    _log_step(f"Loading config from: {args.config}")
+    log_step(f"Loading config from: {args.config}", level='info', logger=_logger)
     from beast.io import load_config
     config = load_config(args.config)
-    _log_step("Config loaded")
+    log_step("Config loaded", level='info', logger=_logger)
 
     # Apply overrides
     if args.overrides:
-        _log_step("Applying config overrides")
+        log_step("Applying config overrides", level='info', logger=_logger)
         from beast.io import apply_config_overrides
         config = apply_config_overrides(config, args.overrides)
-        _log_step("Config overrides applied")
+        log_step("Config overrides applied", level='info', logger=_logger)
 
     # Override specific values from command line
-    _log_step("Applying command line overrides")
+    log_step("Applying command line overrides", level='info', logger=_logger)
     if args.data:
         config['data']['data_dir'] = str(args.data)
-        _log_step(f"Data directory overridden to: {args.data}")
+        log_step(f"Data directory overridden to: {args.data}", level='info', logger=_logger)
     if args.gpus is not None:
         config['training']['num_gpus'] = args.gpus
-        _log_step(f"Number of GPUs overridden to: {args.gpus}")
+        log_step(f"Number of GPUs overridden to: {args.gpus}", level='info', logger=_logger)
     if args.nodes is not None:
         config['training']['num_nodes'] = args.nodes
-        _log_step(f"Number of nodes overridden to: {args.nodes}")
+        log_step(f"Number of nodes overridden to: {args.nodes}", level='info', logger=_logger)
 
     # Check for unsupported --checkpoint argument
     if hasattr(args, 'checkpoint') and args.checkpoint:
-        _log_step(f"WARNING: --checkpoint argument provided but not supported: {args.checkpoint}")
-        _log_step("Checkpoint resuming is not currently implemented in the CLI")
+        log_step(f"WARNING: --checkpoint argument provided but not supported: {args.checkpoint}", level='info', logger=_logger)
+        log_step("Checkpoint resuming is not currently implemented in the CLI", level='info', logger=_logger)
 
     # Initialize model
-    _log_step("Initializing model from config")
+    log_step("Initializing model from config", level='info', logger=_logger)
     from beast.api.model import Model
     model = Model.from_config(config)
-    _log_step("Model initialized")
+    log_step("Model initialized", level='info', logger=_logger)
 
     # if args.resume:
     #     train_kwargs['resume_from_checkpoint'] = args.resume
@@ -133,9 +128,9 @@ def handle(args):
     _logger.info(f'Output directory: {args.output}')
 
     # Run training
-    _log_step("About to call model.train()")
+    log_step("About to call model.train()", level='info', logger=_logger)
     model.train(output_dir=args.output)
-    _log_step("model.train() completed")
+    log_step("model.train() completed", level='info', logger=_logger)
 
     _logger.info(f'Training complete. Model saved to {args.output}')
 

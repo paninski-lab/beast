@@ -10,13 +10,8 @@ from PIL import Image
 from torchvision import transforms
 from typeguard import typechecked
 
+from beast import log_step
 from beast.data.types import ExampleDict
-
-
-def _debug_log(msg: str, flush: bool = True):
-    """Debug logging function with timestamp."""
-    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    print(f"[{timestamp}] DATASET DEBUG: {msg}", flush=flush)
 
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
@@ -35,26 +30,26 @@ class BaseDataset(torch.utils.data.Dataset):
         imgaug_transform: imgaug transform pipeline to apply to images
 
         """
-        _debug_log(f"BaseDataset.__init__ called with data_dir: {data_dir}")
+        log_step(f"BaseDataset.__init__ called with data_dir: {data_dir}", level='debug')
         self.data_dir = Path(data_dir)
         if not self.data_dir.is_dir():
             raise ValueError(f'{self.data_dir} is not a directory')
-        _debug_log(f"Data directory exists: {self.data_dir}")
+        log_step(f"Data directory exists: {self.data_dir}", level='debug')
 
         self.imgaug_pipeline = imgaug_pipeline
         # collect ALL png files in data_dir
-        _debug_log(f"Starting to scan for PNG files in {self.data_dir} (this may take a while for large directories)...")
+        log_step(f"Starting to scan for PNG files in {self.data_dir} (this may take a while for large directories)...", level='debug')
         scan_start = time.time()
         try:
             self.image_list = sorted(list(self.data_dir.rglob('*.png')))
             scan_duration = time.time() - scan_start
-            _debug_log(f"Finished scanning. Found {len(self.image_list)} PNG files in {scan_duration:.2f} seconds")
+            log_step(f"Finished scanning. Found {len(self.image_list)} PNG files in {scan_duration:.2f} seconds", level='debug')
         except Exception as e:
-            _debug_log(f"ERROR during file scanning: {e}")
+            log_step(f"ERROR during file scanning: {e}", level='debug')
             raise
         if len(self.image_list) == 0:
             raise ValueError(f'{self.data_dir} does not contain image data in png format')
-        _debug_log(f"BaseDataset initialization complete with {len(self.image_list)} images")
+        log_step(f"BaseDataset initialization complete with {len(self.image_list)} images", level='debug')
 
         # send image to tensor, resize to canonical dimensions, and normalize
         pytorch_transform_list = [

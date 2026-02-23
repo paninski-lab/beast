@@ -14,14 +14,9 @@ from transformers import (
 )
 from typeguard import typechecked
 
+from beast import log_step
 from beast.models.base import BaseLightningModel
 from beast.models.perceptual import AlexPerceptual
-
-
-def _debug_log(msg: str, flush: bool = True):
-    """Debug logging function with timestamp."""
-    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    print(f"[{timestamp}] VIT DEBUG: {msg}", flush=flush)
 
 
 class BatchNormProjector(nn.Module):
@@ -50,9 +45,9 @@ class VisionTransformer(BaseLightningModel):
     def __init__(self, config):
         super().__init__(config)
         # Set up ViT architecture
-        _debug_log("Creating ViTMAEConfig")
+        log_step("Creating ViTMAEConfig", level='debug')
         vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
-        _debug_log("ViTMAEConfig created")
+        log_step("ViTMAEConfig created", level='debug')
         
         # Get perceptual loss parameters from config
         use_perceptual_loss = config['model']['model_params'].get('use_perceptual_loss', False)
@@ -60,14 +55,14 @@ class VisionTransformer(BaseLightningModel):
         device = config['model']['model_params'].get('device', 'cuda')
         
         if use_perceptual_loss:
-            _debug_log(f"Perceptual loss enabled with lambda={lambda_perceptual}")
+            log_step(f"Perceptual loss enabled with lambda={lambda_perceptual}", level='debug')
         
         # Check if we should use pretrained weights or random initialization
         use_pretrained = not config['model']['model_params'].get('random_init', False)
         
         if use_pretrained:
-            _debug_log("Loading pretrained model from 'facebook/vit-mae-base' (this may take several minutes if downloading)...")
-            _debug_log("Note: Model will be cached locally after first download")
+            log_step("Loading pretrained model from 'facebook/vit-mae-base' (this may take several minutes if downloading)...", level='debug')
+            log_step("Note: Model will be cached locally after first download", level='debug')
             load_start = time.time()
             # Load pretrained weights first (from_pretrained creates a new instance)
             self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
@@ -81,26 +76,26 @@ class VisionTransformer(BaseLightningModel):
                     criterion=nn.MSELoss()
                 )
             load_duration = time.time() - load_start
-            _debug_log(f"Pretrained model loaded in {load_duration:.2f} seconds")
+            log_step(f"Pretrained model loaded in {load_duration:.2f} seconds", level='debug')
         else:
-            _debug_log("Using random initialization (random_init=True)")
+            log_step("Using random initialization (random_init=True)", level='debug')
             self.vit_mae = ViTMAE(
                 vit_mae_config,
                 use_perceptual_loss=use_perceptual_loss,
                 lambda_perceptual=lambda_perceptual,
                 device=device
             )
-            _debug_log("Randomly initialized model created")
+            log_step("Randomly initialized model created", level='debug')
         
         self.mask_ratio = config['model']['model_params']['mask_ratio']
         # contrastive loss
         if config['model']['model_params']['use_infoNCE']:
-            _debug_log("Setting up InfoNCE projection layer")
+            log_step("Setting up InfoNCE projection layer", level='debug')
             self.proj = BatchNormProjector(vit_mae_config)
             if self.config['model']['model_params']['temp_scale']:
                 self.temperature = nn.Parameter(torch.ones([]) * np.log(1))
-            _debug_log("InfoNCE projection layer created")
-        _debug_log("VisionTransformer initialization complete")
+            log_step("InfoNCE projection layer created", level='debug')
+        log_step("VisionTransformer initialization complete", level='debug')
 
     def forward(
         self,
