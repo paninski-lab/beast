@@ -38,9 +38,9 @@ class BaseDataset(torch.utils.data.Dataset):
 
         self.imgaug_pipeline = imgaug_pipeline
         # collect ALL png files in data_dir
-        log_step(f"Starting to scan for PNG files in {self.data_dir} (this may take a while for large directories)...", level='debug')
         scan_start = time.time()
         try:
+            log_step(f"Starting to scan for PNG files in {self.data_dir} (this may take a while for large directories)...", level='debug')
             self.image_list = sorted(list(self.data_dir.rglob('*.png')))
             scan_duration = time.time() - scan_start
             log_step(f"Finished scanning. Found {len(self.image_list)} PNG files in {scan_duration:.2f} seconds", level='debug')
