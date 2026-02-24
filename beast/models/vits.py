@@ -141,25 +141,15 @@ class VisionTransformer(BaseLightningModel):
         
         # Always log perceptual loss if it's enabled in config
         if self.config['model']['model_params'].get('use_perceptual_loss', False):
-            if 'perceptual_loss' in kwargs:
-                perceptual_loss = kwargs['perceptual_loss']
-                # Ensure it's a tensor and on the correct device
-                if not isinstance(perceptual_loss, torch.Tensor):
-                    perceptual_loss = torch.tensor(perceptual_loss, device=loss.device, dtype=loss.dtype)
-                log_list.append({
-                    'name': f'{stage}_perceptual', 
-                    'value': perceptual_loss.detach().clone(), 
-                    'prog_bar': True
-                })
-            else:
-                # This shouldn't happen if perceptual loss is properly initialized
-                # Log 0 as fallback (shouldn't occur with the fix above)
-                perceptual_loss_value = torch.tensor(0.0, device=loss.device, dtype=loss.dtype)
-                log_list.append({
-                    'name': f'{stage}_perceptual', 
-                    'value': perceptual_loss_value, 
-                    'prog_bar': True
-                })
+            assert 'perceptual_loss' in kwargs, (
+                "perceptual_loss must be in model outputs when use_perceptual_loss is enabled"
+            )
+            perceptual_loss = kwargs['perceptual_loss']
+            log_list.append({
+                'name': f'{stage}_perceptual',
+                'value': perceptual_loss.detach().clone(),
+                'prog_bar': True
+            })
         
         if self.config['model']['model_params']['use_infoNCE']:
             z = kwargs['z']
