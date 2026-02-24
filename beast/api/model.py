@@ -1,5 +1,6 @@
 import contextlib
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -112,8 +113,6 @@ class Model:
             raise ValueError(f'Unknown model type: {model_type}')
 
         # Initialize the LightningModule
-        import time
-
         model_class = cls.MODEL_REGISTRY[model_type]
         beast.log_step(f"Creating {model_type} model instance", level='debug')
         beast.log_step(
