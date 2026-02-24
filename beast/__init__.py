@@ -58,17 +58,14 @@ def __get_package_version() -> str:
         # Fall back on getting it from a local pyproject.toml.
         # This works in a development environment where the
         # package has not been installed from a distribution.
-        try:
-            import warnings
-            import toml
+        import warnings
 
-            warnings.warn('beast not pip-installed, getting version from pyproject.toml.')
+        import toml
 
-            pyproject_toml_file = Path(__file__).parent.parent / 'pyproject.toml'
-            __package_version = toml.load(pyproject_toml_file)['project']['version']
-        except (ImportError, FileNotFoundError, KeyError):
-            # If toml is not available or file doesn't exist, use a default version
-            __package_version = "dev"
+        warnings.warn('beast not pip-installed, getting version from pyproject.toml.')
+
+        pyproject_toml_file = Path(__file__).parent.parent / 'pyproject.toml'
+        __package_version = toml.load(pyproject_toml_file)['project']['version']
 
     return __package_version
 
