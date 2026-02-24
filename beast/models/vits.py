@@ -70,31 +70,25 @@ class VisionTransformer(BaseLightningModel):
             log_step("Loading pretrained model from 'facebook/vit-mae-base' (this may take several minutes if downloading)...", level='debug')
             log_step("Note: Model will be cached locally after first download", level='debug')
             load_start = time.time()
-            # Load pretrained weights first (from_pretrained creates a new instance)
             self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
-            # Set perceptual loss settings after loading (from_pretrained doesn't preserve custom init params)
-            self.vit_mae.use_perceptual_loss = use_perceptual_loss
-            self.vit_mae.lambda_perceptual = lambda_perceptual
-            if use_perceptual_loss:
-                # Initialize perceptual loss module on the correct device
-                self.vit_mae.perceptual_loss = AlexPerceptual(
-                    device=self.device,
-                    criterion=nn.MSELoss()
-                )
             load_duration = time.time() - load_start
             log_step(f"Pretrained model loaded in {load_duration:.2f} seconds", level='debug')
         else:
             log_step("Using random initialization (random_init=True)", level='debug')
-            self.vit_mae = ViTMAE(
-                vit_mae_config,
-                use_perceptual_loss=use_perceptual_loss,
-                lambda_perceptual=lambda_perceptual,
-                device=self.device
-            )
+            self.vit_mae = ViTMAE(vit_mae_config)
             log_step("Randomly initialized model created", level='debug')
-        
+
         self.mask_ratio = config['model']['model_params']['mask_ratio']
-        # contrastive loss
+        self.use_perceptual_loss = use_perceptual_loss
+        self.lambda_perceptual = lambda_perceptual
+        if use_perceptual_loss:
+            log_step("Setting up perceptual loss (AlexNet features)", level='debug')
+            self.perceptual_loss = AlexPerceptual(
+                device=self.device,
+                criterion=nn.MSELoss()
+            )
+            log_step("Perceptual loss created", level='debug')
+
         if use_infoNCE:
             log_step("Setting up InfoNCE projection layer", level='debug')
             self.proj = BatchNormProjector(vit_mae_config)
@@ -108,6 +102,11 @@ class VisionTransformer(BaseLightningModel):
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
     ) -> Dict[str, torch.Tensor]:
         results_dict = self.vit_mae(pixel_values=x, return_recon=True)
+
+        if self.config['model']['model_params']['use_perceptual_loss']:
+            reconstructions = results_dict['reconstructions']
+            results_dict['perceptual_loss'] = self.perceptual_loss(reconstructions, x)
+
         if self.config['model']['model_params']['use_infoNCE']:
             cls_token = results_dict['latents'][:, 0, :]
             proj_hidden = self.proj(cls_token)
@@ -139,12 +138,12 @@ class VisionTransformer(BaseLightningModel):
             {'name': f'{stage}_mse', 'value': mse_loss.detach().clone(), 'prog_bar': True},
         ]
         
-        # Always log perceptual loss if it's enabled in config
-        if self.config['model']['model_params'].get('use_perceptual_loss', False):
+        if self.config['model']['model_params']['use_perceptual_loss']:
             assert 'perceptual_loss' in kwargs, (
                 "perceptual_loss must be in model outputs when use_perceptual_loss is enabled"
             )
             perceptual_loss = kwargs['perceptual_loss']
+            loss = loss + self.lambda_perceptual * perceptual_loss
             log_list.append({
                 'name': f'{stage}_perceptual',
                 'value': perceptual_loss.detach().clone(),
@@ -187,20 +186,8 @@ class VisionTransformer(BaseLightningModel):
 
 
 class ViTMAE(ViTMAEForPreTraining):
-    # Overriding the forward method to return the latent and loss
-    # This is used for training and inference
-    # Huggingface Transformer library
-    def __init__(self, config, use_perceptual_loss: bool = False, lambda_perceptual: float = 1.0, device='cuda'):
-        super().__init__(config)
-        self.use_perceptual_loss = use_perceptual_loss
-        self.lambda_perceptual = lambda_perceptual
-        if use_perceptual_loss:
-            # Initialize AlexPerceptual with MSE criterion
-            self.perceptual_loss = AlexPerceptual(
-                device=device,
-                criterion=nn.MSELoss()
-            )
-    
+    """ViT-MAE for masked autoencoding. Returns latents, reconstructions, and MSE loss."""
+
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -212,7 +199,6 @@ class ViTMAE(ViTMAEForPreTraining):
         return_latent: bool = False,
         return_recon: bool = False,
     ) -> Dict[str, torch.Tensor]:
-        # Setting default for return_dict based on the configuration
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if (self.training or self.config.mask_ratio > 0) or return_recon:
             outputs = self.vit(
@@ -225,16 +211,12 @@ class ViTMAE(ViTMAEForPreTraining):
             )
             latent = outputs.last_hidden_state
         else:
-            # use for fine-tuning, or inference
-            # mask_ratio = 0
             embedding_output, mask, ids_restore = self.vit.embeddings(pixel_values)
-            embedding_output_ = embedding_output[:, 1:, :]  # no cls token
-            # unshuffle the embedding output
+            embedding_output_ = embedding_output[:, 1:, :]
             index = ids_restore.unsqueeze(-1).repeat(
                 1, 1, embedding_output_.shape[2]
             ).to(embedding_output_.device)
             embedding_output_ = torch.gather(embedding_output_, dim=1, index=index)
-            # add cls token back
             embedding_output = torch.cat((embedding_output[:, :1, :], embedding_output_), dim=1)
             encoder_outputs = self.vit.encoder(
                 embedding_output,
@@ -243,38 +225,24 @@ class ViTMAE(ViTMAEForPreTraining):
             sequence_output = encoder_outputs[0]
             latent = self.vit.layernorm(sequence_output)
             if not return_latent:
-                # return the cls token and 0 loss if not return_latent
                 return latent[:, 0], 0
         if return_latent:
             return latent
-        # extract cls latent
-        cls_latent = latent[:, 0]  # shape (batch_size, hidden_size)
+        cls_latent = latent[:, 0]
         ids_restore = outputs.ids_restore
         mask = outputs.mask
 
         decoder_outputs = self.decoder(latent, ids_restore)
         logits = decoder_outputs.logits
-        # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
-        mse_loss = self.forward_loss(pixel_values, logits, mask)
-        
-        # Compute perceptual loss if enabled and we have reconstructions
-        perceptual_loss_value = None
-        loss = mse_loss
-        if self.use_perceptual_loss and return_recon:
-            reconstructions = self.unpatchify(logits)
-            perceptual_loss_value = self.perceptual_loss(reconstructions, pixel_values)
-            loss = mse_loss + self.lambda_perceptual * perceptual_loss_value
-        
+        loss = self.forward_loss(pixel_values, logits, mask)
+
         if return_recon:
-            result = {
+            return {
                 'latents': latent,
                 'loss': loss,
-                'mse_loss': mse_loss,
+                'mse_loss': loss,
                 'reconstructions': self.unpatchify(logits),
             }
-            if perceptual_loss_value is not None:
-                result['perceptual_loss'] = perceptual_loss_value
-            return result
         return {
             'latents': cls_latent,
             'loss': loss,
