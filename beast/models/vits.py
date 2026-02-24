@@ -52,7 +52,6 @@ class VisionTransformer(BaseLightningModel):
         # Get perceptual loss parameters from config
         use_perceptual_loss = config['model']['model_params'].get('use_perceptual_loss', False)
         lambda_perceptual = config['model']['model_params'].get('lambda_perceptual', 10.0)
-        device = config['model']['model_params'].get('device', 'cuda')
 
         # Get InfoNCE loss parameters from config
         use_infoNCE = config['model']['model_params'].get('use_infoNCE', False)
@@ -79,7 +78,7 @@ class VisionTransformer(BaseLightningModel):
             if use_perceptual_loss:
                 # Initialize perceptual loss module on the correct device
                 self.vit_mae.perceptual_loss = AlexPerceptual(
-                    device=device,
+                    device=self.device,
                     criterion=nn.MSELoss()
                 )
             load_duration = time.time() - load_start
@@ -90,7 +89,7 @@ class VisionTransformer(BaseLightningModel):
                 vit_mae_config,
                 use_perceptual_loss=use_perceptual_loss,
                 lambda_perceptual=lambda_perceptual,
-                device=device
+                device=self.device
             )
             log_step("Randomly initialized model created", level='debug')
         
