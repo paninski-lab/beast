@@ -18,15 +18,11 @@ def log_step(
 
     Parameters
     ----------
-    msg : str
-        Message to log.
-    level : Optional[str]
-        Log level: None (plain timestamp + msg), 'info', 'debug', or 'error'.
-    flush : bool
-        Whether to flush stdout after printing.
-    logger : Any
-        If provided and level is 'info', also call logger.info(msg).
-        If provided and level is 'error', also call logger.error(msg).
+    msg: message to log
+    level: None (plain timestamp + msg), 'info', 'debug', or 'error'
+    flush: whether to flush stdout after printing
+    logger: if provided and level is 'info', also call logger.info(msg);
+        if provided and level is 'error', also call logger.error(msg)
     """
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
     if level == 'info':
