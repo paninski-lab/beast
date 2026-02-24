@@ -45,7 +45,7 @@ class BaseDataset(torch.utils.data.Dataset):
             scan_duration = time.time() - scan_start
             log_step(f"Finished scanning. Found {len(self.image_list)} PNG files in {scan_duration:.2f} seconds", level='debug')
         except Exception as e:
-            log_step(f"ERROR during file scanning: {e}", level='debug')
+            log_step(f"ERROR during file scanning: {e}", level='error')
             raise
         if len(self.image_list) == 0:
             raise ValueError(f'{self.data_dir} does not contain image data in png format')
