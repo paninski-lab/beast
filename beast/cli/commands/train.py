@@ -122,17 +122,15 @@ def handle(args):
 
     # if args.resume:
     #     train_kwargs['resume_from_checkpoint'] = args.resume
-
-    _logger.info(f'Training {type(model.model)} model')
-    _logger.info(f'Data directory: {args.data}')
-    _logger.info(f'Output directory: {args.output}')
+    log_step(f'Training {type(model.model)} model', level='info', logger=_logger)
+    log_step(f'Data directory: {args.data}', level='info', logger=_logger)
+    log_step(f'Output directory: {args.output}', level='info', logger=_logger)
 
     # Run training
     log_step("About to call model.train()", level='info', logger=_logger)
     model.train(output_dir=args.output)
     log_step("model.train() completed", level='info', logger=_logger)
-
-    _logger.info(f'Training complete. Model saved to {args.output}')
+    log_step(f'Training complete. Model saved to {args.output}', level='info', logger=_logger)
 
     # except Exception as e:
 
