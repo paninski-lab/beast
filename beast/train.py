@@ -83,15 +83,10 @@ def train(config: dict, model, output_dir: str | Path):
         log_step("Imgaug pipeline created", level='debug')
 
     # dataset
-    if rank_zero_only.rank == 0:
-        log_step(f"Creating BaseDataset with data_dir: {config['data']['data_dir']}", level='debug')
-        log_step("WARNING: This may take a long time if data directory is large (scanning for PNG files)", level='debug')
     dataset = BaseDataset(
         data_dir=config['data']['data_dir'],
         imgaug_pipeline=imgaug_pipeline_,
     )
-    if rank_zero_only.rank == 0:
-        log_step(f"BaseDataset created. Found {len(dataset)} images", level='debug')
 
     # datamodule; breaks up dataset into train/val/test
     if rank_zero_only.rank == 0:
