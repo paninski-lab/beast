@@ -131,19 +131,10 @@ class VisionTransformer(BaseLightningModel):
         **kwargs,
     ) -> tuple[torch.tensor, list[dict]]:
         assert 'loss' in kwargs, "Loss is not in the kwargs"
+        assert 'mse_loss' in kwargs, "mse_loss must be provided by model outputs for logging"
         loss = kwargs['loss']
-        # add all losses here for logging
-        # Get MSE loss directly from model output if available, otherwise use combined loss
-        if 'mse_loss' in kwargs:
-            mse_loss = kwargs['mse_loss']
-        else:
-            # Fallback: if perceptual loss is available, extract MSE by subtraction
-            if 'perceptual_loss' in kwargs:
-                perceptual_loss = kwargs['perceptual_loss']
-                mse_loss = loss - self.vit_mae.lambda_perceptual * perceptual_loss
-            else:
-                mse_loss = loss
-        
+        mse_loss = kwargs['mse_loss']
+
         log_list = [
             {'name': f'{stage}_mse', 'value': mse_loss.detach().clone(), 'prog_bar': True},
         ]
