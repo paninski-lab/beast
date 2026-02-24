@@ -51,12 +51,19 @@ class VisionTransformer(BaseLightningModel):
         
         # Get perceptual loss parameters from config
         use_perceptual_loss = config['model']['model_params'].get('use_perceptual_loss', False)
-        lambda_perceptual = config['model']['model_params'].get('lambda_perceptual', 1.0)
+        lambda_perceptual = config['model']['model_params'].get('lambda_perceptual', 10.0)
         device = config['model']['model_params'].get('device', 'cuda')
-        
+
+        # Get InfoNCE loss parameters from config
+        use_infoNCE = config['model']['model_params'].get('use_infoNCE', False)
+        temp_scale = config['model']['model_params'].get('temp_scale', False)
+
         if use_perceptual_loss:
             log_step(f"Perceptual loss enabled with lambda={lambda_perceptual}", level='debug')
-        
+
+        if use_infoNCE:
+            log_step(f"InfoNCE loss enabled with temp_scale={temp_scale}", level='debug')
+
         # Check if we should use pretrained weights or random initialization
         use_pretrained = not config['model']['model_params'].get('random_init', False)
         
@@ -89,10 +96,10 @@ class VisionTransformer(BaseLightningModel):
         
         self.mask_ratio = config['model']['model_params']['mask_ratio']
         # contrastive loss
-        if config['model']['model_params']['use_infoNCE']:
+        if use_infoNCE:
             log_step("Setting up InfoNCE projection layer", level='debug')
             self.proj = BatchNormProjector(vit_mae_config)
-            if self.config['model']['model_params']['temp_scale']:
+            if temp_scale:
                 self.temperature = nn.Parameter(torch.ones([]) * np.log(1))
             log_step("InfoNCE projection layer created", level='debug')
         log_step("VisionTransformer initialization complete", level='debug')
