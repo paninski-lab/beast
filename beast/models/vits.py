@@ -152,6 +152,7 @@ class ViTMAE(ViTMAEForPreTraining):
         return_latent: bool = False,
         return_recon: bool = False,
     ) -> Dict[str, torch.Tensor]:
+        # Setting default for return_dict based on the configuration
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if (self.training or self.config.mask_ratio > 0) or return_recon:
             outputs = self.vit(
@@ -164,12 +165,16 @@ class ViTMAE(ViTMAEForPreTraining):
             )
             latent = outputs.last_hidden_state
         else:
+            # use for fine-tuning, or inference
+            # mask_ratio = 0
             embedding_output, mask, ids_restore = self.vit.embeddings(pixel_values)
-            embedding_output_ = embedding_output[:, 1:, :]
+            embedding_output_ = embedding_output[:, 1:, :]  # no cls token
+            # unshuffle the embedding output
             index = ids_restore.unsqueeze(-1).repeat(
                 1, 1, embedding_output_.shape[2]
             ).to(embedding_output_.device)
             embedding_output_ = torch.gather(embedding_output_, dim=1, index=index)
+            # add cls token back
             embedding_output = torch.cat((embedding_output[:, :1, :], embedding_output_), dim=1)
             encoder_outputs = self.vit.encoder(
                 embedding_output,
@@ -178,15 +183,18 @@ class ViTMAE(ViTMAEForPreTraining):
             sequence_output = encoder_outputs[0]
             latent = self.vit.layernorm(sequence_output)
             if not return_latent:
+                # return the cls token and 0 loss if not return_latent
                 return latent[:, 0], 0
         if return_latent:
             return latent
-        cls_latent = latent[:, 0]
+        # extract cls latent
+        cls_latent = latent[:, 0]  # shape (batch_size, hidden_size)
         ids_restore = outputs.ids_restore
         mask = outputs.mask
 
         decoder_outputs = self.decoder(latent, ids_restore)
         logits = decoder_outputs.logits
+        # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
         loss = self.forward_loss(pixel_values, logits, mask)
 
         if return_recon:
