@@ -1,6 +1,5 @@
 """Vision transformer autoencoder implementation."""
 
-import time
 from typing import Dict, Optional
 
 import numpy as np
@@ -14,7 +13,6 @@ from transformers import (
 )
 from typeguard import typechecked
 
-from beast import log_step
 from beast.models.base import BaseLightningModel
 from beast.models.perceptual import AlexPerceptual
 
@@ -45,69 +43,31 @@ class VisionTransformer(BaseLightningModel):
     def __init__(self, config):
         super().__init__(config)
         # Set up ViT architecture
-        log_step("Creating ViTMAEConfig", level='debug')
         vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
-        log_step("ViTMAEConfig created", level='debug')
-        
-        # Get perceptual loss parameters from config
-        use_perceptual_loss = config['model']['model_params'].get('use_perceptual_loss', False)
-        lambda_perceptual = config['model']['model_params'].get('lambda_perceptual', 10.0)
-
-        # Get InfoNCE loss parameters from config
-        use_infoNCE = config['model']['model_params'].get('use_infoNCE', False)
-        temp_scale = config['model']['model_params'].get('temp_scale', False)
-
-        if use_perceptual_loss:
-            log_step(f"Perceptual loss enabled with lambda={lambda_perceptual}", level='debug')
-
-        if use_infoNCE:
-            log_step(f"InfoNCE loss enabled with temp_scale={temp_scale}", level='debug')
-
-        # Check if we should use pretrained weights or random initialization
-        use_pretrained = not config['model']['model_params'].get('random_init', False)
-        
-        if use_pretrained:
-            log_step("Loading pretrained model from 'facebook/vit-mae-base' (this may take several minutes if downloading)...", level='debug')
-            log_step("Note: Model will be cached locally after first download", level='debug')
-            load_start = time.time()
-            self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
-            load_duration = time.time() - load_start
-            log_step(f"Pretrained model loaded in {load_duration:.2f} seconds", level='debug')
-        else:
-            log_step("Using random initialization (random_init=True)", level='debug')
-            self.vit_mae = ViTMAE(vit_mae_config)
-            log_step("Randomly initialized model created", level='debug')
-
+        self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
         self.mask_ratio = config['model']['model_params']['mask_ratio']
-        self.use_perceptual_loss = use_perceptual_loss
-        self.lambda_perceptual = lambda_perceptual
-        if use_perceptual_loss:
-            log_step("Setting up perceptual loss (AlexNet features)", level='debug')
+        # perceptual loss
+        if config['model']['model_params'].get('use_perceptual_loss', False):
             self.perceptual_loss = AlexPerceptual(
                 device=self.device,
                 criterion=nn.MSELoss()
             )
-            log_step("Perceptual loss created", level='debug')
-
-        if use_infoNCE:
-            log_step("Setting up InfoNCE projection layer", level='debug')
+        # contrastive loss
+        if config['model']['model_params'].get('use_infoNCE', False):
             self.proj = BatchNormProjector(vit_mae_config)
-            if temp_scale:
+            if config['model']['model_params'].get('temp_scale', False):
                 self.temperature = nn.Parameter(torch.ones([]) * np.log(1))
-            log_step("InfoNCE projection layer created", level='debug')
-        log_step("VisionTransformer initialization complete", level='debug')
 
     def forward(
         self,
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
     ) -> Dict[str, torch.Tensor]:
         results_dict = self.vit_mae(pixel_values=x, return_recon=True)
-
-        if self.config['model']['model_params']['use_perceptual_loss']:
-            reconstructions = results_dict['reconstructions']
-            results_dict['perceptual_loss'] = self.perceptual_loss(reconstructions, x)
-
-        if self.config['model']['model_params']['use_infoNCE']:
+        if self.config['model']['model_params'].get('use_perceptual_loss', False):
+            results_dict['perceptual_loss'] = self.perceptual_loss(
+                results_dict['reconstructions'], x
+            )
+        if self.config['model']['model_params'].get('use_infoNCE', False):
             cls_token = results_dict['latents'][:, 0, :]
             proj_hidden = self.proj(cls_token)
             # normalize projection
@@ -130,42 +90,35 @@ class VisionTransformer(BaseLightningModel):
         **kwargs,
     ) -> tuple[torch.tensor, list[dict]]:
         assert 'loss' in kwargs, "Loss is not in the kwargs"
-        assert 'mse_loss' in kwargs, "mse_loss must be provided by model outputs for logging"
-        loss = kwargs['loss']
-        mse_loss = kwargs['mse_loss']
-
+        mse_loss = kwargs['loss']
+        # add all losses here for logging
         log_list = [
-            {'name': f'{stage}_mse', 'value': mse_loss.detach().clone(), 'prog_bar': True},
+            {'name': f'{stage}_mse', 'value': mse_loss.clone()}
         ]
-        
-        if self.config['model']['model_params']['use_perceptual_loss']:
-            assert 'perceptual_loss' in kwargs, (
-                "perceptual_loss must be in model outputs when use_perceptual_loss is enabled"
-            )
+        loss = mse_loss
+        if self.config['model']['model_params'].get('use_perceptual_loss', False):
             perceptual_loss = kwargs['perceptual_loss']
-            loss = loss + self.lambda_perceptual * perceptual_loss
             log_list.append({
                 'name': f'{stage}_perceptual',
-                'value': perceptual_loss.detach().clone(),
-                'prog_bar': True
+                'value': perceptual_loss.clone()
             })
-        
-        if self.config['model']['model_params']['use_infoNCE']:
+            loss += self.config['model']['model_params'].get(
+                'lambda_perceptual', 10.0
+            ) * perceptual_loss
+        if self.config['model']['model_params'].get('use_infoNCE', False):
             z = kwargs['z']
             sim_matrix = z @ z.T
-            if self.config['model']['model_params']['temp_scale']:
+            if self.config['model']['model_params'].get('temp_scale', False):
                 sim_matrix /= self.temperature.exp()
             loss_dict = batch_wise_contrastive_loss(sim_matrix)
             loss_dict['infoNCE_loss'] *= self.config['model']['model_params']['infoNCE_weight']
             log_list.append({
                 'name': f'{stage}_infoNCE',
-                'value': loss_dict['infoNCE_loss'].detach().clone(),
-                'prog_bar': True
+                'value': loss_dict['infoNCE_loss']
             })
             log_list.append({
                 'name': f'{stage}_infoNCE_percent_correct',
-                'value': loss_dict['percent_correct'].detach().clone(),
-                'prog_bar': False
+                'value': loss_dict['percent_correct']
             })
             loss += loss_dict['infoNCE_loss']
         return loss, log_list
