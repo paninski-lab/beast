@@ -15,6 +15,7 @@ from typeguard import typechecked
 
 from beast.models.base import BaseLightningModel
 from beast.models.perceptual import AlexPerceptual
+from beast import log_step
 
 
 class BatchNormProjector(nn.Module):
@@ -44,7 +45,18 @@ class VisionTransformer(BaseLightningModel):
         super().__init__(config)
         # Set up ViT architecture
         vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
-        self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
+        
+        # Check if we should use pretrained weights or random initialization
+        use_pretrained = not config['model']['model_params'].get('random_init', False)
+        if use_pretrained:
+            log_step("Loading pretrained model from 'facebook/vit-mae-base' (this may take several minutes if downloading)...", level='debug')
+            log_step("Note: Model will be cached locally after first download", level='debug')
+            self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
+        else:
+            log_step("Using random initialization (random_init=True)", level='debug')
+            self.vit_mae = ViTMAE(vit_mae_config)
+            log_step("Randomly initialized model created", level='debug')
+            
         self.mask_ratio = config['model']['model_params']['mask_ratio']
         # perceptual loss
         if config['model']['model_params'].get('use_perceptual_loss', False):
