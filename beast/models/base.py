@@ -117,9 +117,9 @@ class BaseLightningModel(pl.LightningModule):
             on_step = (stage == 'train')
             on_epoch = True  # Always log on epoch for both train and val
             self.log(
-                f'{stage}_loss', 
-                loss, 
-                prog_bar=True, 
+                f'{stage}_loss',
+                loss,
+                prog_bar=True,
                 sync_dist=True,
                 on_step=on_step,
                 on_epoch=on_epoch

@@ -15,8 +15,8 @@ def test_perceptual_forward():
     x = torch.randn((5, 3, 224, 224))
     loss = perceptual(x_hat, x)
     assert isinstance(loss, torch.Tensor)
-    assert loss.ndim == 0  
-    assert loss.item() >= 0  
+    assert loss.ndim == 0
+    assert loss.item() >= 0
 
 
 def test_alex_perceptual_forward():
@@ -28,8 +28,8 @@ def test_alex_perceptual_forward():
     x = torch.randn((5, 3, 224, 224), device=device)
     loss = perceptual(x_hat, x)
     assert isinstance(loss, torch.Tensor)
-    assert loss.ndim == 0  
-    assert loss.item() >= 0  
+    assert loss.ndim == 0
+    assert loss.item() >= 0
 
 
 def test_alex_perceptual_different_inputs_produce_different_loss():
@@ -39,7 +39,7 @@ def test_alex_perceptual_different_inputs_produce_different_loss():
     perceptual = AlexPerceptual(device=device, criterion=criterion)
     x = torch.randn((2, 3, 224, 224), device=device)
     loss_same = perceptual(x, x)
-    assert loss_same.item() < 1e-5 
+    assert loss_same.item() < 1e-5
     x_hat = torch.randn((2, 3, 224, 224), device=device)
     loss_diff = perceptual(x_hat, x)
     assert loss_diff.item() > 0

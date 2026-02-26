@@ -111,8 +111,10 @@ def handle(args):
 
     # Check for unsupported --checkpoint argument
     if hasattr(args, 'checkpoint') and args.checkpoint:
-        log_step(f"WARNING: --checkpoint argument provided but not supported: {args.checkpoint}", level='info', logger=_logger)
-        log_step("Checkpoint resuming is not currently implemented in the CLI", level='info', logger=_logger)
+        log_step(
+            f"WARNING: --checkpoint argument provided but not supported: {args.checkpoint}", level='info', logger=_logger)
+        log_step("Checkpoint resuming is not currently implemented in the CLI",
+                 level='info', logger=_logger)
 
     # Initialize model
     log_step("Initializing model from config", level='info', logger=_logger)

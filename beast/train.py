@@ -118,7 +118,8 @@ def train(config: dict, model, output_dir: str | Path):
     model.config['optimizer']['steps_per_epoch'] = steps_per_epoch
     model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
     if rank_zero_only.rank == 0:
-        log_step(f"Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs", level='debug')
+        log_step(
+            f"Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs", level='debug')
 
     # ----------------------------------------------------------------------------------
     # Save configuration in output directory

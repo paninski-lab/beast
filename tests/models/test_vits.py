@@ -40,6 +40,7 @@ def test_vit_autoencoder_contrastive_integration(config_vit, run_model_test):
     config['model']['model_params']['use_infoNCE'] = True
     run_model_test(config=config)
 
+
 def test_alex_perceptual_integration(config_vit, run_model_test):
     """Test ViT autoencoder with AlexNet perceptual loss enabled."""
     config = copy.deepcopy(config_vit)
