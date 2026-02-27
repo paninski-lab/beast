@@ -4,6 +4,7 @@ import datetime
 import logging
 from pathlib import Path
 
+from beast import log_step
 from beast.cli.types import config_file, output_dir
 
 _logger = logging.getLogger('BEAST.CLI.TRAIN')
@@ -65,50 +66,73 @@ def register_parser(subparsers):
 def handle(args):
     """Handle the train command execution."""
 
+    log_step("Starting train command handler", level='info', logger=_logger)
+
     # Determine output directory
+    log_step("Determining output directory", level='info', logger=_logger)
     if not args.output:
         now = datetime.datetime.now()
         args.output = Path('runs').resolve() / now.strftime('%Y-%m-%d') / now.strftime('%H-%M-%S')
 
     args.output.mkdir(parents=True, exist_ok=True)
+    log_step(f"Output directory: {args.output}", level='info', logger=_logger)
 
     # Set up logging to the model directory
+    log_step("Setting up model logging", level='info', logger=_logger)
     model_log_handler = _setup_model_logging(args.output)
+    log_step("Model logging set up", level='info', logger=_logger)
 
     # try:
 
     # Load config
+    log_step(f"Loading config from: {args.config}", level='info', logger=_logger)
     from beast.io import load_config
     config = load_config(args.config)
+    log_step("Config loaded", level='info', logger=_logger)
 
     # Apply overrides
     if args.overrides:
+        log_step("Applying config overrides", level='info', logger=_logger)
         from beast.io import apply_config_overrides
         config = apply_config_overrides(config, args.overrides)
+        log_step("Config overrides applied", level='info', logger=_logger)
 
     # Override specific values from command line
+    log_step("Applying command line overrides", level='info', logger=_logger)
     if args.data:
         config['data']['data_dir'] = str(args.data)
+        log_step(f"Data directory overridden to: {args.data}", level='info', logger=_logger)
     if args.gpus is not None:
         config['training']['num_gpus'] = args.gpus
+        log_step(f"Number of GPUs overridden to: {args.gpus}", level='info', logger=_logger)
     if args.nodes is not None:
         config['training']['num_nodes'] = args.nodes
+        log_step(f"Number of nodes overridden to: {args.nodes}", level='info', logger=_logger)
+
+    # Check for unsupported --checkpoint argument
+    if hasattr(args, 'checkpoint') and args.checkpoint:
+        log_step(
+            f"WARNING: --checkpoint argument provided but not supported: {args.checkpoint}", level='info', logger=_logger)
+        log_step("Checkpoint resuming is not currently implemented in the CLI",
+                 level='info', logger=_logger)
 
     # Initialize model
+    log_step("Initializing model from config", level='info', logger=_logger)
     from beast.api.model import Model
     model = Model.from_config(config)
+    log_step("Model initialized", level='info', logger=_logger)
 
     # if args.resume:
     #     train_kwargs['resume_from_checkpoint'] = args.resume
-
-    _logger.info(f'Training {type(model.model)} model')
-    _logger.info(f'Data directory: {args.data}')
-    _logger.info(f'Output directory: {args.output}')
+    log_step(f'Training {type(model.model)} model', level='info', logger=_logger)
+    log_step(f'Data directory: {args.data}', level='info', logger=_logger)
+    log_step(f'Output directory: {args.output}', level='info', logger=_logger)
 
     # Run training
+    log_step("About to call model.train()", level='info', logger=_logger)
     model.train(output_dir=args.output)
-
-    _logger.info(f'Training complete. Model saved to {args.output}')
+    log_step("model.train() completed", level='info', logger=_logger)
+    log_step(f'Training complete. Model saved to {args.output}', level='info', logger=_logger)
 
     # except Exception as e:
 

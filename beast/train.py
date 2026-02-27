@@ -12,6 +12,7 @@ from typeguard import typechecked
 
 import beast
 from beast.data.augmentations import imgaug_pipeline
+from beast import log_step
 from beast.data.datamodules import BaseDataModule
 from beast.data.datasets import BaseDataset
 
@@ -48,15 +49,22 @@ def train(config: dict, model, output_dir: str | Path):
 
     # Only print from rank 0
     if rank_zero_only.rank == 0:
+        log_step("Entering train() function", level='debug')
         print(f'output directory: {output_dir}')
         print(f'model type: {type(model)}')
 
     # reset all seeds
+    if rank_zero_only.rank == 0:
+        log_step("Resetting seeds", level='debug')
     reset_seeds(seed=0)
 
     # record beast version
+    if rank_zero_only.rank == 0:
+        log_step("Recording beast version", level='debug')
     config['model']['beast_version'] = beast.version
 
+    if rank_zero_only.rank == 0:
+        log_step("Printing config", level='debug')
     pretty_print_config(config)
 
     # ----------------------------------------------------------------------------------
@@ -64,11 +72,15 @@ def train(config: dict, model, output_dir: str | Path):
     # ----------------------------------------------------------------------------------
 
     # imgaug transform
+    if rank_zero_only.rank == 0:
+        log_step("Setting up imgaug pipeline", level='debug')
     pipe_params = config.get('training', {}).get('imgaug', 'none')
     if isinstance(pipe_params, str):
         from beast.data.augmentations import expand_imgaug_str_to_dict
         pipe_params = expand_imgaug_str_to_dict(pipe_params)
     imgaug_pipeline_ = imgaug_pipeline(pipe_params)
+    if rank_zero_only.rank == 0:
+        log_step("Imgaug pipeline created", level='debug')
 
     # dataset
     dataset = BaseDataset(
@@ -77,6 +89,8 @@ def train(config: dict, model, output_dir: str | Path):
     )
 
     # datamodule; breaks up dataset into train/val/test
+    if rank_zero_only.rank == 0:
+        log_step("Creating BaseDataModule", level='debug')
     datamodule = BaseDataModule(
         dataset=dataset,
         train_batch_size=config['training']['train_batch_size'],
@@ -88,8 +102,12 @@ def train(config: dict, model, output_dir: str | Path):
         val_probability=config['training'].get('val_probability', 0.05),
         seed=config['training']['seed'],
     )
+    if rank_zero_only.rank == 0:
+        log_step("BaseDataModule created", level='debug')
 
     # update number of training steps (for learning rate scheduler with step information)
+    if rank_zero_only.rank == 0:
+        log_step("Calculating training steps", level='debug')
     num_epochs = config['training']['num_epochs']
     steps_per_epoch = int(np.ceil(
         len(datamodule.train_dataset)
@@ -99,6 +117,9 @@ def train(config: dict, model, output_dir: str | Path):
     ))
     model.config['optimizer']['steps_per_epoch'] = steps_per_epoch
     model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
+    if rank_zero_only.rank == 0:
+        log_step(
+            f"Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs", level='debug')
 
     # ----------------------------------------------------------------------------------
     # Save configuration in output directory
@@ -106,23 +127,35 @@ def train(config: dict, model, output_dir: str | Path):
     # Done before training; files will exist even if script dies prematurely.
 
     # save config file
+    if rank_zero_only.rank == 0:
+        log_step(f"Saving config to {output_dir}", level='debug')
     output_dir.mkdir(parents=True, exist_ok=True)
     dest_config_file = Path(output_dir) / 'config.yaml'
     with open(dest_config_file, 'w') as file:
         yaml.dump(config, file)
+    if rank_zero_only.rank == 0:
+        log_step("Config saved", level='debug')
 
     # ----------------------------------------------------------------------------------
     # Set up and run training
     # ----------------------------------------------------------------------------------
 
     # logger
+    if rank_zero_only.rank == 0:
+        log_step("Creating TensorBoardLogger", level='debug')
     logger = pl.loggers.TensorBoardLogger('tb_logs', name='')
+    if rank_zero_only.rank == 0:
+        log_step("TensorBoardLogger created", level='debug')
 
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
+    if rank_zero_only.rank == 0:
+        log_step("Setting up callbacks", level='debug')
     callbacks = get_callbacks(
         lr_monitor=True,
         ckpt_every_n_epochs=config['training'].get('ckpt_every_n_epochs', None),
     )
+    if rank_zero_only.rank == 0:
+        log_step(f"Callbacks created: {len(callbacks)} callbacks", level='debug')
 
     # initialize to Trainer defaults. Note max_steps defaults to -1.
     min_epochs = config['training']['num_epochs']
@@ -134,6 +167,12 @@ def train(config: dict, model, output_dir: str | Path):
     else:
         use_distributed_sampler = True
 
+    if rank_zero_only.rank == 0:
+        log_step("Creating PyTorch Lightning Trainer", level='debug')
+        log_step(f"  - accelerator: gpu", level='debug')
+        log_step(f"  - devices: {config['training']['num_gpus']}", level='debug')
+        log_step(f"  - num_nodes: {config['training']['num_nodes']}", level='debug')
+        log_step(f"  - max_epochs: {max_epochs}", level='debug')
     trainer = pl.Trainer(
         accelerator='gpu',
         devices=config['training']['num_gpus'],
@@ -148,9 +187,15 @@ def train(config: dict, model, output_dir: str | Path):
         sync_batchnorm=True,
         use_distributed_sampler=use_distributed_sampler,
     )
+    if rank_zero_only.rank == 0:
+        log_step("Trainer created", level='debug')
 
     # train model!
+    if rank_zero_only.rank == 0:
+        log_step("About to call trainer.fit() - this may hang here if there are issues with data loading or GPU setup", level='debug')
     trainer.fit(model=model, datamodule=datamodule)
+    if rank_zero_only.rank == 0:
+        log_step("trainer.fit() completed", level='debug')
 
     # when devices > 0, lightning creates a process per device.
     # kill processes other than the main process, otherwise they all go forward.

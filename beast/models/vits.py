@@ -14,6 +14,8 @@ from transformers import (
 from typeguard import typechecked
 
 from beast.models.base import BaseLightningModel
+from beast.models.perceptual import AlexPerceptual
+from beast import log_step
 
 
 class BatchNormProjector(nn.Module):
@@ -43,12 +45,30 @@ class VisionTransformer(BaseLightningModel):
         super().__init__(config)
         # Set up ViT architecture
         vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
-        self.vit_mae = ViTMAE(vit_mae_config).from_pretrained("facebook/vit-mae-base")
+
+        # Check if we should use pretrained weights or random initialization
+        use_pretrained = not config['model']['model_params'].get('random_init', False)
+        if use_pretrained:
+            log_step(
+                "Loading pretrained model from 'facebook/vit-mae-base' (this may take several minutes if downloading)...", level='debug')
+            log_step("Note: Model will be cached locally after first download", level='debug')
+            self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
+        else:
+            log_step("Using random initialization (random_init=True)", level='debug')
+            self.vit_mae = ViTMAE(vit_mae_config)
+            log_step("Randomly initialized model created", level='debug')
+
         self.mask_ratio = config['model']['model_params']['mask_ratio']
+        # perceptual loss
+        if config['model']['model_params'].get('use_perceptual_loss', False):
+            self.perceptual_loss = AlexPerceptual(
+                device=self.device,
+                criterion=nn.MSELoss()
+            )
         # contrastive loss
-        if config['model']['model_params']['use_infoNCE']:
+        if config['model']['model_params'].get('use_infoNCE', False):
             self.proj = BatchNormProjector(vit_mae_config)
-            if self.config['model']['model_params']['temp_scale']:
+            if config['model']['model_params'].get('temp_scale', False):
                 self.temperature = nn.Parameter(torch.ones([]) * np.log(1))
 
     def forward(
@@ -56,7 +76,11 @@ class VisionTransformer(BaseLightningModel):
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
     ) -> Dict[str, torch.Tensor]:
         results_dict = self.vit_mae(pixel_values=x, return_recon=True)
-        if self.config['model']['model_params']['use_infoNCE']:
+        if self.config['model']['model_params'].get('use_perceptual_loss', False):
+            results_dict['perceptual_loss'] = self.perceptual_loss(
+                results_dict['reconstructions'], x
+            )
+        if self.config['model']['model_params'].get('use_infoNCE', False):
             cls_token = results_dict['latents'][:, 0, :]
             proj_hidden = self.proj(cls_token)
             # normalize projection
@@ -85,10 +109,19 @@ class VisionTransformer(BaseLightningModel):
             {'name': f'{stage}_mse', 'value': mse_loss.clone()}
         ]
         loss = mse_loss
-        if self.config['model']['model_params']['use_infoNCE']:
+        if self.config['model']['model_params'].get('use_perceptual_loss', False):
+            perceptual_loss = kwargs['perceptual_loss']
+            log_list.append({
+                'name': f'{stage}_perceptual',
+                'value': perceptual_loss.clone()
+            })
+            loss += self.config['model']['model_params'].get(
+                'lambda_perceptual', 10.0
+            ) * perceptual_loss
+        if self.config['model']['model_params'].get('use_infoNCE', False):
             z = kwargs['z']
             sim_matrix = z @ z.T
-            if self.config['model']['model_params']['temp_scale']:
+            if self.config['model']['model_params'].get('temp_scale', False):
                 sim_matrix /= self.temperature.exp()
             loss_dict = batch_wise_contrastive_loss(sim_matrix)
             loss_dict['infoNCE_loss'] *= self.config['model']['model_params']['infoNCE_weight']
@@ -119,9 +152,8 @@ class VisionTransformer(BaseLightningModel):
 
 
 class ViTMAE(ViTMAEForPreTraining):
-    # Overriding the forward method to return the latent and loss
-    # This is used for training and inference
-    # Huggingface Transformer library
+    """ViT-MAE for masked autoencoding. Returns latents, reconstructions, and MSE loss."""
+
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -177,10 +209,12 @@ class ViTMAE(ViTMAEForPreTraining):
         logits = decoder_outputs.logits
         # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
         loss = self.forward_loss(pixel_values, logits, mask)
+
         if return_recon:
             return {
                 'latents': latent,
                 'loss': loss,
+                'mse_loss': loss,
                 'reconstructions': self.unpatchify(logits),
             }
         return {

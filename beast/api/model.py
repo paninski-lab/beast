@@ -1,5 +1,6 @@
 import contextlib
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from beast.models.base import BaseLightningModel
 from beast.models.resnets import ResnetAutoencoder
 from beast.models.vits import VisionTransformer
 from beast.train import train
+from beast import log_step
 
 
 # TODO: Replace with contextlib.chdir in python 3.11.
@@ -112,7 +114,15 @@ class Model:
 
         # Initialize the LightningModule
         model_class = cls.MODEL_REGISTRY[model_type]
+        log_step(f"Creating {model_type} model instance", level='debug')
+        log_step(
+            f"About to call {model_class.__name__}.__init__() - this may take several minutes if downloading pretrained weights",
+            level='debug',
+        )
+        init_start = time.time()
         model = model_class(config)
+        init_duration = time.time() - init_start
+        log_step(f"Model initialization completed in {init_duration:.2f} seconds", level='debug')
 
         print(f'Initialized a {model_class} model')
 
