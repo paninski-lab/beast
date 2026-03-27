@@ -179,11 +179,23 @@ def train(config: dict, model, output_dir: str | Path):
         num_nodes=config['training']['num_nodes'],
         max_epochs=max_epochs,
         min_epochs=min_epochs,
-        check_val_every_n_epoch=config['training'].get('check_val_every_n_epoch', 1),
+        # With use_distributed_sampler=False, Lightning can't determine epoch
+        # length from the DataLoader, so epoch-boundary validation never fires.
+        # Workaround: use step-based val_check_interval instead.
+        check_val_every_n_epoch=(
+            None if not use_distributed_sampler
+            else config['training'].get('check_val_every_n_epoch', 1)
+        ),
+        val_check_interval=(
+            len(datamodule.train_dataloader()) * config['training'].get('check_val_every_n_epoch', 1)
+            if not use_distributed_sampler
+            else 1.0
+        ),
         log_every_n_steps=config['training'].get('log_every_n_steps', 10),
         callbacks=callbacks,
         logger=logger,
         accumulate_grad_batches=config['optimizer'].get('accumulate_grad_batches', 1),
+        num_sanity_val_steps=config['training'].get('num_sanity_val_steps', 2),
         sync_batchnorm=True,
         use_distributed_sampler=use_distributed_sampler,
     )
@@ -225,6 +237,7 @@ def get_callbacks(
             monitor='val_loss',
             mode='min',
             filename='{epoch}-{step}-best',
+            save_last=True,
         )
         callbacks.append(ckpt_best_callback)
 

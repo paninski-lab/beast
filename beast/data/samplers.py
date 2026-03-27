@@ -172,9 +172,11 @@ class ContrastBatchSampler(Sampler):
                 i = anchor_indices[idx_cursor]
 
                 # Find valid positive indices
+                # pos_indices values are local (subset) indices from extract_anchor_indices,
+                # so they are always valid within the subset — only filter by used.
                 valid_positives = [
                     p for p in self.pos_indices[i]
-                    if p in self.dataset_indices and p not in used
+                    if p not in used
                 ]
 
                 if not valid_positives:

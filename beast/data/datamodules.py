@@ -145,35 +145,58 @@ class BaseDataModule(pl.LightningDataModule):
         return train_split, val_split, test_split
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
+        common_kwargs = dict(
+            num_workers=self.num_workers,
+            persistent_workers=True if self.num_workers > 0 else False,
+            pin_memory=True,
+            multiprocessing_context=multiprocessing.get_context(
+                'spawn') if self.num_workers > 0 else None,
+        )
         if self.use_sampler:
             self.sampler = ContrastBatchSampler(
                 dataset=self.train_dataset,
                 batch_size=self.train_batch_size,
                 seed=self.seed,
             )
+            return DataLoader(
+                self.train_dataset,
+                batch_sampler=self.sampler,
+                collate_fn=contrastive_collate_fn,
+                **common_kwargs,
+            )
         return DataLoader(
             self.train_dataset,
-            batch_size=None if self.use_sampler else self.train_batch_size,
-            num_workers=self.num_workers,
-            persistent_workers=True if self.num_workers > 0 else False,
-            pin_memory=True,  # Helps with GPU transfer
-            shuffle=True if not self.use_sampler else False,
-            sampler=self.sampler if self.use_sampler else None,
+            batch_size=self.train_batch_size,
+            shuffle=True,
             generator=torch.Generator().manual_seed(self.seed),
-            collate_fn=contrastive_collate_fn if self.use_sampler else None,
-            multiprocessing_context=multiprocessing.get_context(
-                'spawn') if self.num_workers > 0 else None,  # More stable on HPC
+            **common_kwargs,
         )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
-        return DataLoader(
-            self.val_dataset,
-            batch_size=self.val_batch_size,
+        common_kwargs = dict(
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
             pin_memory=True,
             multiprocessing_context=multiprocessing.get_context(
                 'spawn') if self.num_workers > 0 else None,
+        )
+        if self.use_sampler:
+            val_sampler = ContrastBatchSampler(
+                dataset=self.val_dataset,
+                batch_size=self.val_batch_size,
+                seed=self.seed,
+                shuffle=False,
+            )
+            return DataLoader(
+                self.val_dataset,
+                batch_sampler=val_sampler,
+                collate_fn=contrastive_collate_fn,
+                **common_kwargs,
+            )
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.val_batch_size,
+            **common_kwargs,
         )
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
