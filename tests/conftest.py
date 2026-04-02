@@ -131,9 +131,9 @@ def config_vit(config_vit_path, data_dir) -> dict:
     from beast.io import load_config
     config = load_config(config_vit_path)
     config['data']['data_dir'] = data_dir
-    config['training']['train_batch_size'] = 8
-    config['training']['val_batch_size'] = 8
-    config['training']['test_batch_size'] = 8
+    config['training']['train_batch_size'] = 4
+    config['training']['val_batch_size'] = 4
+    config['training']['test_batch_size'] = 4
     config['model']['model_params']['use_infoNCE'] = False
     return config
 
@@ -198,6 +198,8 @@ def run_model_test(tmp_path, data_dir) -> Callable:
             model.train(tmp_path)
             # run inference on labeled data
             model.predict_images(image_dir=data_dir)
+            # ensure model checkpoint saved
+            assert len(list(model.model_dir.rglob('*.ckpt'))) == 1
         finally:
             # remove tensors from gpu
             del model

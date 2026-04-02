@@ -118,7 +118,7 @@ class VisionTransformer(BaseLightningModel):
             loss += self.config['model']['model_params'].get(
                 'lambda_perceptual', 10.0
             ) * perceptual_loss
-        if self.config['model']['model_params'].get('use_infoNCE', False):
+        if self.config['model']['model_params'].get('use_infoNCE', False) and stage == 'train':
             z = kwargs['z']
             sim_matrix = z @ z.T
             if self.config['model']['model_params'].get('temp_scale', False):

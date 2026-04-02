@@ -166,23 +166,13 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
-        if self.use_sampler:
-            self.sampler = ContrastBatchSampler(
-                dataset=self.val_dataset,
-                batch_size=self.val_batch_size,
-                seed=self.seed,
-                shuffle=False,
-            )
         return DataLoader(
             self.val_dataset,
-            batch_size=None if self.use_sampler else self.val_batch_size,
+            batch_size=self.val_batch_size,
             num_workers=self.num_workers,
             persistent_workers=True if self.num_workers > 0 else False,
             pin_memory=True,
             shuffle=False,
-            sampler=self.sampler if self.use_sampler else None,
-            generator=torch.Generator().manual_seed(self.seed),
-            collate_fn=contrastive_collate_fn if self.use_sampler else None,
             multiprocessing_context=multiprocessing.get_context(
                 'spawn') if self.num_workers > 0 else None,
         )
