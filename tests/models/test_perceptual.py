@@ -10,8 +10,13 @@ def test_perceptual_forward():
         torch.nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
         torch.nn.ReLU(inplace=True),
     )
+    with torch.no_grad():
+        # make weights small to avoid NaNs
+        mock_net[0].weight.fill_(0.01)
+        mock_net[0].bias.zero_()
     criterion = torch.nn.MSELoss()
     perceptual = Perceptual(network=mock_net, criterion=criterion)
+    torch.manual_seed(1)
     x_hat = torch.randn((5, 3, 224, 224))
     x = torch.randn((5, 3, 224, 224))
     loss = perceptual(x_hat, x)
