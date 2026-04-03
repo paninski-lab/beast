@@ -146,23 +146,23 @@ class BaseDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         if self.use_sampler:
-            self.sampler = ContrastBatchSampler(
+            return _make_contrastive_dataloader(
                 dataset=self.train_dataset,
                 batch_size=self.train_batch_size,
                 seed=self.seed,
+                num_workers=self.num_workers,
+                shuffle=True,
             )
         return DataLoader(
             self.train_dataset,
-            batch_size=None if self.use_sampler else self.train_batch_size,
+            batch_size=self.train_batch_size,
             num_workers=self.num_workers,
-            persistent_workers=True if self.num_workers > 0 else False,
-            pin_memory=True,  # Helps with GPU transfer
-            shuffle=True if not self.use_sampler else False,
-            sampler=self.sampler if self.use_sampler else None,
+            persistent_workers=self.num_workers > 0,
+            pin_memory=True,
+            shuffle=True,
             generator=torch.Generator().manual_seed(self.seed),
-            collate_fn=contrastive_collate_fn if self.use_sampler else None,
             multiprocessing_context=multiprocessing.get_context(
-                'spawn') if self.num_workers > 0 else None,  # More stable on HPC
+                'spawn') if self.num_workers > 0 else None,
         )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
@@ -170,7 +170,7 @@ class BaseDataModule(pl.LightningDataModule):
             self.val_dataset,
             batch_size=self.val_batch_size,
             num_workers=self.num_workers,
-            persistent_workers=True if self.num_workers > 0 else False,
+            persistent_workers=self.num_workers > 0,
             pin_memory=True,
             shuffle=False,
             multiprocessing_context=multiprocessing.get_context(
@@ -183,7 +183,9 @@ class BaseDataModule(pl.LightningDataModule):
             batch_size=self.test_batch_size,
             num_workers=self.num_workers,
             pin_memory=True,
-            multiprocessing_context='spawn' if self.num_workers > 0 else None,
+            shuffle=False,
+            multiprocessing_context=multiprocessing.get_context(
+                'spawn') if self.num_workers > 0 else None,
         )
 
     def full_labeled_dataloader(self) -> torch.utils.data.DataLoader:
@@ -192,6 +194,47 @@ class BaseDataModule(pl.LightningDataModule):
             batch_size=self.val_batch_size,
             num_workers=self.num_workers,
         )
+
+
+def _make_contrastive_dataloader(
+    dataset: torch.utils.data.Dataset,
+    batch_size: int,
+    seed: int,
+    num_workers: int,
+    shuffle: bool = True,
+) -> DataLoader:
+    """Create a DataLoader backed by ContrastBatchSampler for contrastive pair sampling.
+
+    IMPORTANT — why sampler= and not batch_sampler=:
+    PyTorch's DataLoader has two ways to plug in a custom batch sampler:
+      (a) batch_sampler=X  → PyTorch wraps it and sets dataloader.sampler = SequentialSampler(dataset)
+      (b) sampler=X, batch_size=None  → dataloader.sampler IS X
+
+    Lightning computes val_check_batch from len(dataloader.sampler).
+    With (a), that length is len(dataset) which is far larger than the batches ContrastBatchSampler
+    actually yields, so "end of epoch" trigger is never reached and validation silently never runs.
+    With (b), len(dataloader.sampler) == ContrastBatchSampler.__len__(), which is the correct
+    (conservative) number of batches.
+
+    Do NOT change sampler= to batch_sampler= here.
+    """
+    sampler = ContrastBatchSampler(
+        dataset=dataset,
+        batch_size=batch_size,
+        seed=seed,
+        shuffle=shuffle,
+    )
+    return DataLoader(
+        dataset,
+        batch_size=None,  # ContrastBatchSampler yields full batches; do NOT use batch_sampler=
+        sampler=sampler,
+        collate_fn=contrastive_collate_fn,
+        num_workers=num_workers,
+        persistent_workers=num_workers > 0,
+        pin_memory=True,
+        generator=torch.Generator().manual_seed(seed),
+        multiprocessing_context=multiprocessing.get_context('spawn') if num_workers > 0 else None,
+    )
 
 
 @typechecked
