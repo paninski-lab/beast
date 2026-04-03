@@ -18,8 +18,8 @@ def test_perceptual_forward():
     criterion = torch.nn.MSELoss()
     perceptual = Perceptual(network=mock_net, criterion=criterion)
     torch.manual_seed(1)
-    x_hat = torch.randn((5, 3, 224, 224))
-    x = torch.randn((5, 3, 224, 224))
+    x_hat = 0.01 * torch.randn((5, 3, 224, 224))
+    x = 0.01 * torch.randn((5, 3, 224, 224))
     loss = perceptual(x_hat, x)
     assert isinstance(loss, torch.Tensor)
     assert loss.ndim == 0
