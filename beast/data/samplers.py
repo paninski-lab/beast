@@ -80,6 +80,21 @@ class ContrastBatchSampler(Sampler):
         (and skip if none are valid).
       - The rest of the clips in that batch are chosen from "far away" indices.
     The __len__ of this sampler is #batches, i.e. total_clips // batch_size.
+
+    Distributed training notes:
+      This sampler is used with ``use_distributed_sampler=False`` in the Lightning Trainer,
+      which means Lightning will NOT wrap it with a DistributedSampler. As a consequence:
+
+      - The ``dataset`` passed in is always the full (unsharded) train dataset — every DDP
+        process receives a complete copy of it.
+      - This sampler is responsible for all rank-aware partitioning. On each DDP process,
+        ``__init__`` reads ``torch.distributed.get_world_size()`` and
+        ``torch.distributed.get_rank()`` (falling back to 1/0 when not initialized) to
+        determine its slice of the anchor index pool, and ``__iter__`` only yields batches
+        from that slice.
+      - Because Lightning calls ``train_dataloader()`` on each DDP process *after*
+        ``torch.distributed.init_process_group()`` has run, the rank/world_size values
+        seen in ``__init__`` are always correct at the time of construction.
     """
 
     def __init__(self, dataset, batch_size, idx_offset=1, shuffle=True, seed=42):

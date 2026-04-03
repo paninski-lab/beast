@@ -109,8 +109,9 @@ def train(config: dict, model, output_dir: str | Path):
     if rank_zero_only.rank == 0:
         log_step("Calculating training steps", level='debug')
     num_epochs = config['training']['num_epochs']
+    train_size = int(np.floor(config['training'].get('train_probability', 0.95) * len(dataset)))
     steps_per_epoch = int(np.ceil(
-        len(datamodule.train_dataset)
+        train_size
         / config['training']['train_batch_size']
         / config['training']['num_gpus']
         / config['training']['num_nodes']

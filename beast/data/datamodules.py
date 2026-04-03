@@ -73,7 +73,6 @@ class BaseDataModule(pl.LightningDataModule):
         self.test_dataset = None  # populated by self.setup()
         self.seed = seed
         self.sampler = None
-        self.setup()
 
     def setup(self, stage: str = None) -> None:
 

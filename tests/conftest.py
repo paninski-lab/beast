@@ -162,6 +162,7 @@ def base_datamodule(base_dataset) -> BaseDataModule:
         val_probability=0.1,
         test_probability=0.1,
     )
+    datamodule.setup()
     return datamodule
 
 
@@ -178,6 +179,7 @@ def base_datamodule_contrastive(base_dataset) -> BaseDataModule:
         test_probability=0.05,
         use_sampler=True,  # Enable contrastive sampler
     )
+    datamodule.setup()
     return datamodule
 
 
