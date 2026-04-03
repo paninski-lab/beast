@@ -11,8 +11,8 @@ from lightning.pytorch.utilities import rank_zero_only
 from typeguard import typechecked
 
 import beast
-from beast.data.augmentations import imgaug_pipeline
 from beast import log_step
+from beast.data.augmentations import imgaug_pipeline
 from beast.data.datamodules import BaseDataModule
 from beast.data.datasets import BaseDataset
 

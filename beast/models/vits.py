@@ -13,9 +13,9 @@ from transformers import (
 )
 from typeguard import typechecked
 
+from beast import log_step
 from beast.models.base import BaseLightningModel
 from beast.models.perceptual import AlexPerceptual
-from beast import log_step
 
 
 class BatchNormProjector(nn.Module):

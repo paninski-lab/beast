@@ -1,4 +1,5 @@
 import torch
+
 from beast.models.perceptual import AlexPerceptual, Perceptual
 
 
