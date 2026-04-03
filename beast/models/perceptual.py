@@ -1,7 +1,9 @@
+from typing import Any
+
 import torch
 import torchvision
 from torch import nn
-from typing import Any
+
 # https://github.com/MLReproHub/SMAE/blob/main/src/loss/perceptual.py
 
 

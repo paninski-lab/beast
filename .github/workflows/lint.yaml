@@ -22,7 +22,11 @@ jobs:
           python-version: '3.10'
 
       - name: Install linters
-        run: pip install autopep8 flake8
+        run: pip install autopep8 flake8 isort
+
+      - name: Check import sorting with isort
+        run: isort --check-only --diff beast tests
+        # Reads config from [tool.isort] in pyproject.toml
 
       - name: Check formatting with autopep8
         run: autopep8 --diff --recursive --exit-code beast tests
@@ -31,6 +35,10 @@ jobs:
       - name: Lint with flake8 (critical errors only)
         run: flake8 beast tests --select=E9,F63,F7,F82
         # Reads config from .flake8 file
+        # F9: syntax errors, can't parse file
+        # F63: invalid ** use in `assert` or `raise`
+        # F7: syntax errors in type annotations
+        # F82: undefined names (var or function that was never imported)
 
       - name: Show fix instructions if formatting needed
         if: failure()
@@ -40,6 +48,7 @@ jobs:
           echo ""
           echo "To fix formatting issues locally, run:"
           echo "  autopep8 --in-place --recursive beast tests"
+          echo "  isort beast tests"
           echo ""
           echo "To check for flake8 errors locally, run:"
           echo "  flake8 beast tests --select=E9,F63,F7,F82"

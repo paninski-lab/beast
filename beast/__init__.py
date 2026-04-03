@@ -26,15 +26,20 @@ def log_step(
     """
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
     if level == 'info':
-        print(f"[{timestamp}] INFO: {msg}", flush=flush)
         if logger is not None:
             logger.info(msg)
+        else:
+            print(f"[{timestamp}] INFO: {msg}", flush=flush)
     elif level == 'debug':
-        print(f"[{timestamp}] DEBUG: {msg}", flush=flush)
+        if logger is not None:
+            logger.debug(msg)
+        else:
+            print(f"[{timestamp}] DEBUG: {msg}", flush=flush)
     elif level == 'error':
-        print(f"[{timestamp}] ERROR: {msg}", flush=flush)
         if logger is not None:
             logger.error(msg)
+        else:
+            print(f"[{timestamp}] ERROR: {msg}", flush=flush)
     else:
         print(f"[{timestamp}] {msg}", flush=flush)
 

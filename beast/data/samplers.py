@@ -80,6 +80,21 @@ class ContrastBatchSampler(Sampler):
         (and skip if none are valid).
       - The rest of the clips in that batch are chosen from "far away" indices.
     The __len__ of this sampler is #batches, i.e. total_clips // batch_size.
+
+    Distributed training notes:
+      This sampler is used with ``use_distributed_sampler=False`` in the Lightning Trainer,
+      which means Lightning will NOT wrap it with a DistributedSampler. As a consequence:
+
+      - The ``dataset`` passed in is always the full (unsharded) train dataset — every DDP
+        process receives a complete copy of it.
+      - This sampler is responsible for all rank-aware partitioning. On each DDP process,
+        ``__init__`` reads ``torch.distributed.get_world_size()`` and
+        ``torch.distributed.get_rank()`` (falling back to 1/0 when not initialized) to
+        determine its slice of the anchor index pool, and ``__iter__`` only yields batches
+        from that slice.
+      - Because Lightning calls ``train_dataloader()`` on each DDP process *after*
+        ``torch.distributed.init_process_group()`` has run, the rank/world_size values
+        seen in ``__init__`` are always correct at the time of construction.
     """
 
     def __init__(self, dataset, batch_size, idx_offset=1, shuffle=True, seed=42):
@@ -104,13 +119,6 @@ class ContrastBatchSampler(Sampler):
         self.shuffle = shuffle
         self.num_samples = len(dataset)  # total number of clips
 
-        # Calculate samples per replica
-        self.samples_per_replica = self.num_samples // self.num_replicas
-        self.total_samples = self.samples_per_replica * self.num_replicas
-
-        # Calculate batches for this replica
-        self.num_batches = self.samples_per_replica // self.batch_size
-
         # Extract anchors only from the subset's image list (subset = train/val/test)
         self.dataset_indices = sorted(dataset.indices)
         subset_image_list = [dataset.dataset.image_list[i] for i in self.dataset_indices]
@@ -119,8 +127,12 @@ class ContrastBatchSampler(Sampler):
         )
         self.anchor_indices = None  # assigned in __iter__
 
-        # Store the original anchor indices - don't split them yet!
-        # We'll redistribute them in __iter__ for each epoch
+        # Each selected pair marks the anchor + all its neighbors as used (~3 frames
+        # consumed per pair). Dividing by batch_size (not batch_size // 2) provides
+        # the extra margin needed so __len__ is guaranteed <= actual batches produced
+        # by __iter__, which is required for Lightning to trigger is_last_batch.
+        anchors_per_replica = len(self.all_anchor_indices) // self.num_replicas
+        self.num_batches = anchors_per_replica // 3 // self.batch_size
 
         self.epoch = 0
         self.seed = seed

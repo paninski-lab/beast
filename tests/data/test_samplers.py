@@ -60,12 +60,11 @@ class TestContrastBatchSampler:
         dataset.indices = list(range(100))
         dataset.dataset = subdataset
 
-        sampler = ContrastBatchSampler(dataset, batch_size=8, idx_offset=2)
-
+        sampler = ContrastBatchSampler(dataset, batch_size=8, idx_offset=1)
         assert sampler.batch_size == 8
-        assert sampler.idx_offset == 2
+        assert sampler.idx_offset == 1
         assert sampler.num_samples == 100
-        assert sampler.num_batches == 12  # 100 // 8
+        assert sampler.num_batches == 4  # anchors // 3 // batch_size = 100 // 3 // 8
 
     def test_init_odd_batch_size_error(self):
         """Test that odd batch size raises error."""
@@ -89,7 +88,36 @@ class TestContrastBatchSampler:
 
         sampler = ContrastBatchSampler(dataset, batch_size=8)
 
-        assert len(sampler) == 12  # 100 // 8
+        assert len(sampler) == 4  # anchors // 3 // batch_size = 100 // 3 // 8
+
+    def test_len_does_not_exceed_actual_batches(self):
+        """__len__ must be <= batches actually produced by __iter__ under shuffled ordering.
+
+        When all frames are valid anchors (dense sequential frames), each pair selection
+        marks the anchor + all its neighbors as used, consuming ~3 frames per pair. The
+        old formula (n // batch_size) assumed 2 frames per pair and overcounted, so
+        Lightning's is_last_batch trigger (set at __len__ - 1) was never reached and
+        validation silently never ran.
+        """
+        n_frames = 100
+        batch_size = 8
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=n_frames)
+        subdataset = Mock()
+        subdataset.image_list = [f"video1/frame_{i:03d}.png" for i in range(n_frames)]
+        dataset.indices = list(range(n_frames))
+        dataset.dataset = subdataset
+
+        sampler = ContrastBatchSampler(dataset, batch_size=batch_size, shuffle=True, seed=0)
+
+        declared_len = len(sampler)
+        actual_batches = len(list(sampler))
+
+        assert declared_len <= actual_batches, (
+            f"__len__ ({declared_len}) exceeds actual batches produced ({actual_batches}). "
+            f"Lightning uses __len__ to place is_last_batch, so if __len__ > actual, "
+            f"the epoch never 'ends' from Lightning's perspective and validation never runs."
+        )
 
     def test_iter_basic(self):
         """Test basic iteration behavior."""
@@ -164,10 +192,10 @@ class TestContrastBatchSampler:
     def test_iter_drop_last_true(self):
         """Test iteration with drop_last=True."""
         dataset = Mock()
-        dataset.__len__ = Mock(return_value=10)
+        dataset.__len__ = Mock(return_value=100)
         subdataset = Mock()
-        subdataset.image_list = [f"path_{i}" for i in range(10)]
-        dataset.indices = list(range(10))
+        subdataset.image_list = [f"path_{i}" for i in range(100)]
+        dataset.indices = list(range(100))
         dataset.dataset = subdataset
 
         sampler = ContrastBatchSampler(dataset, batch_size=4)

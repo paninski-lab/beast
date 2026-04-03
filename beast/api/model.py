@@ -8,12 +8,12 @@ import torch
 import yaml
 from typeguard import typechecked
 
+from beast import log_step
 from beast.inference import predict_images, predict_video
 from beast.models.base import BaseLightningModel
 from beast.models.resnets import ResnetAutoencoder
 from beast.models.vits import VisionTransformer
 from beast.train import train
-from beast import log_step
 
 
 # TODO: Replace with contextlib.chdir in python 3.11.
