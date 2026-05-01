@@ -8,7 +8,7 @@
 `beast` is a package for pretraining vision transformers on unlabeled data to provide backbones 
 for downstream tasks like pose estimation, action segmentation, and neural encoding.
 
-See the preprint [here](https://arxiv.org/pdf/2507.09513). 
+See the ICLR paper [here](https://openreview.net/pdf?id=AeqPIRKUni). 
 
 ## Installation
 
