@@ -30,7 +30,7 @@ classifiers = [
 dependencies = [
     "imgaug",
     "jaxtyping",
-    "lightning",
+    "lightning (~=2.5)",
     "numpy (<2.0.0)",
     "opencv-python-headless",
     "pillow",
