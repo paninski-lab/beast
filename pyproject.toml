@@ -66,6 +66,7 @@ dev = [
     "isort",
     "pytest",
     "pytest-html",
+    "urllib3 (>=2.7.0)",  # harder requirement than "requests" to address security vulnerability
     "requests",
 ]
 
