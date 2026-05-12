@@ -156,6 +156,11 @@ class VisionTransformer(BaseLightningModel):
         )
         # reset mask_ratio to the original value
         self.vit_mae.config.mask_ratio = self.mask_ratio
+        # just extract CLS tokens
+        cls_tokens = results_dict['latents'][:, 0, :].clone()
+        del results_dict['latents']
+        results_dict['latents'] = cls_tokens
+        # save metadata
         results_dict['metadata'] = {
             'video': batch_dict['video'],
             'idx': batch_dict['idx'],
