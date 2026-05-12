@@ -31,6 +31,8 @@ echo "Setting up environment..."
 source ~/.bashrc
 ml Miniforge-24.7.1-2
 conda activate $CONDA_ENV
+ml gcc/14.1                        # satisfies NumPy >= 2 requirement
+export LD_PRELOAD=/home/$(whoami)/.conda/envs/$CONDA_ENV/lib/libstdc++.so.6
 echo "Active conda environment: $CONDA_ENV"
 echo "Python location: $(which python)"
 echo "Pip location $(which pip)"
@@ -57,8 +59,7 @@ git checkout FETCH_HEAD
 pip install -e .
 echo "Pip install exit code: $?"
 pip show beast
-python -c "import sys; print('Python path:'); [print(p) for p in sys.path]"
-python -c "import beast; print('Beast import successful')"
+python -c "import beast; print('Beast location:', beast.__file__); print('Beast import successful')"
 
 # Run with html reporting.
 pytest --html=report.html --self-contained-html
