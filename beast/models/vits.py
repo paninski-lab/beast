@@ -138,7 +138,7 @@ class VisionTransformer(BaseLightningModel):
 
     def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
         # set mask_ratio to 0 for inference
-        self.vit_mae.config.mask_ratio = 0
+        self.vit_mae.config.mask_ratio = 0.0
         # get model outputs
         results_dict = self.get_model_outputs(batch_dict, return_images=False)
         # reset mask_ratio to the original value

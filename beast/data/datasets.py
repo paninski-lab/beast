@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
+import imgaug.augmenters.size as _iaa_size
 import numpy as np
 import torch
 from PIL import Image
@@ -15,6 +16,17 @@ from beast.data.types import ExampleDict
 
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
+
+#  monkey patch to fix imaug 0.4.2 compatability issue with numpy 2.x
+def _patched_prevent(axis_size, crop_start, crop_end):
+    result = _iaa_size._prevent_zero_sizes_after_crops_(
+        np.array([axis_size], dtype=np.int32),
+        np.array([crop_start], dtype=np.int32),
+        np.array([crop_end], dtype=np.int32),
+    )
+    return tuple(int(np.asarray(v).flat[0]) for v in result)
+
+_iaa_size._prevent_zero_size_after_crop_ = _patched_prevent
 
 
 @typechecked
