@@ -1,5 +1,5 @@
 # See documentation in scripts/buildbot/README
-name: Run tests
+name: Run Tests
 
 on:
   pull_request_target:
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Add SSH key to agent
