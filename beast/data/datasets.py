@@ -36,15 +36,25 @@ _iaa_size._prevent_zero_size_after_crop_ = _patched_prevent
 class BaseDataset(torch.utils.data.Dataset):
     """Base dataset that contains images."""
 
-    def __init__(self, data_dir: str | Path, imgaug_pipeline: Callable | None) -> None:
+    def __init__(
+        self,
+        data_dir: str | Path,
+        imgaug_pipeline: Callable | None,
+        num_channels: int = 3,
+    ) -> None:
         """Initialize a dataset for autoencoder models.
 
         Parameters
         ----------
         data_dir: absolute path to data directory
         imgaug_transform: imgaug transform pipeline to apply to images
+        num_channels: number of output channels; 1 loads as grayscale then converts to RGB,
+            3 loads directly as RGB
 
         """
+        if num_channels not in (1, 3):
+            raise ValueError(f'num_channels must be 1 or 3, got {num_channels}')
+        self.num_channels = num_channels
         log_step(f"BaseDataset.__init__ called with data_dir: {data_dir}", level='debug')
         self.data_dir = Path(data_dir)
         if not self.data_dir.is_dir():
@@ -104,8 +114,10 @@ class BaseDataset(torch.utils.data.Dataset):
         img_path = self.image_list[idx]
 
         # read image from file and apply transformations (if any)
-        # if 1 color channel, change to 3.
-        image = Image.open(img_path).convert('RGB')
+        if self.num_channels == 1:
+            image = Image.open(img_path).convert('L').convert('RGB')
+        else:
+            image = Image.open(img_path).convert('RGB')
         if self.imgaug_pipeline is not None:
             # expands add batch dim for imgaug
             transformed_images = self.imgaug_pipeline(images=np.expand_dims(image, axis=0))

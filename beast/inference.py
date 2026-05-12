@@ -333,10 +333,9 @@ class VideoPredictionHandler:
         save_latents: bool = True
     ) -> dict[str, Any]:
         """Process a batch of predictions."""
-        reconstructions = predictions['reconstructions']
-        latents = predictions['latents']
 
-        batch_size = reconstructions.shape[0]
+        latents = predictions['latents']
+        batch_size = latents.shape[0]
 
         # process each frame in the batch
         for i in range(batch_size):
@@ -348,6 +347,8 @@ class VideoPredictionHandler:
 
             # save reconstruction frame to video
             if save_reconstructions:
+                reconstructions = predictions['reconstructions']
+
                 if self.reconstruction_writer is None:
                     self._init_video_writer()
 
@@ -442,8 +443,9 @@ def predict_images(
     output_dir: str | Path,
     source_dir: str | Path,
     batch_size: int = 32,
-    save_latents: bool = False,
+    save_latents: bool = True,
     save_reconstructions: bool = True,
+    num_channels: int = 3,
 ) -> dict[str, Any]:
     """Run inference on images using a trained model and save results.
 
@@ -460,6 +462,8 @@ def predict_images(
     batch_size: number of images to process in each batch
     save_latents: whether to save latent representations as .npy files in a 'latents/' subdirectory
     save_reconstructions: whether to save reconstructed images as PNG files
+    num_channels: number of image channels; 1 loads as grayscale then converts to RGB, 3 loads
+        as RGB
 
     Returns
     -------
@@ -484,6 +488,7 @@ def predict_images(
     dataset = BaseDataset(
         data_dir=source_dir,
         imgaug_pipeline=None,
+        num_channels=num_channels,
     )
 
     # dataloader
@@ -493,6 +498,9 @@ def predict_images(
         num_workers=4,
         shuffle=False,
     )
+
+    # configure model predict behavior before handing off to trainer
+    model.return_reconstructions = save_reconstructions
 
     # run inference
     trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
@@ -514,7 +522,7 @@ def predict_video(
     output_dir: str | Path,
     video_file: str | Path,
     batch_size: int = 32,
-    save_latents: bool = False,
+    save_latents: bool = True,
     save_reconstructions: bool = True,
 ) -> None:
     """Run inference on video using a trained model and save results.
@@ -541,6 +549,9 @@ def predict_video(
         video_file=video_file,
         batch_size=batch_size,
     )
+
+    # configure model predict behavior before handing off to trainer
+    model.return_reconstructions = save_reconstructions
 
     # run inference
     trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)

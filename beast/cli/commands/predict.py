@@ -77,7 +77,7 @@ def handle(args):
             video_file=args.input,
             output_dir=args.output,
             batch_size=args.batch_size,
-            save_latents=True,
+            save_latents=args.save_latents,
             save_reconstructions=args.save_reconstructions,
         )
 
@@ -102,7 +102,7 @@ def handle(args):
                     video_file=video_file,
                     output_dir=args.output,
                     batch_size=args.batch_size,
-                    save_latents=True,
+                    save_latents=args.save_latents,
                     save_reconstructions=args.save_reconstructions,
                 )
         else:
