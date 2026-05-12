@@ -444,6 +444,7 @@ def predict_images(
     batch_size: int = 32,
     save_latents: bool = False,
     save_reconstructions: bool = True,
+    num_channels: int = 3,
 ) -> dict[str, Any]:
     """Run inference on images using a trained model and save results.
 
@@ -460,6 +461,8 @@ def predict_images(
     batch_size: number of images to process in each batch
     save_latents: whether to save latent representations as .npy files in a 'latents/' subdirectory
     save_reconstructions: whether to save reconstructed images as PNG files
+    num_channels: number of image channels; 1 loads as grayscale then converts to RGB, 3 loads
+        as RGB
 
     Returns
     -------
@@ -484,6 +487,7 @@ def predict_images(
     dataset = BaseDataset(
         data_dir=source_dir,
         imgaug_pipeline=None,
+        num_channels=num_channels,
     )
 
     # dataloader

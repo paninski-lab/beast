@@ -86,6 +86,7 @@ def train(config: dict, model, output_dir: str | Path):
     dataset = BaseDataset(
         data_dir=config['data']['data_dir'],
         imgaug_pipeline=imgaug_pipeline_,
+        num_channels=config['model']['model_params'].get('num_channels', 3),
     )
 
     # datamodule; breaks up dataset into train/val/test
