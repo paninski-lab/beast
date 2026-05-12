@@ -28,10 +28,10 @@ classifiers = [
 ]
 
 dependencies = [
-    "imgaug",
+    "imaug",
     "jaxtyping",
     "lightning (~=2.5)",
-    "numpy (<2.0.0)",
+    "numpy (>=2.0.0)",
     "opencv-python-headless",
     "pillow",
     "scikit-learn",

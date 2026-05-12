@@ -115,7 +115,7 @@ class BaseDataModule(pl.LightningDataModule):
 
         if rank_zero_only.rank == 0:
             print(
-                f'Number of images in the full dataset (train+val+test): {datalen}'
+                f'Number of images in the full dataset (train+val+test): {datalen}\n'
                 f'Dataset splits -- '
                 f'train: {len(self.train_dataset)}, '
                 f'val: {len(self.val_dataset)}, '
