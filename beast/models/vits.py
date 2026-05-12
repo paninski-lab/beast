@@ -214,8 +214,7 @@ class ViTMAE(ViTMAEForPreTraining):
             sequence_output = encoder_outputs[0]
             latent = self.vit.layernorm(sequence_output)
             if not return_latent:
-                # return the cls token and 0 loss if not return_latent
-                return latent[:, 0], 0
+                return {'latents': latent, 'loss': torch.zeros(1, device=latent.device)}
         if return_latent:
             return latent
         # extract cls latent
