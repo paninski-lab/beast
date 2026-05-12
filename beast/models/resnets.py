@@ -75,15 +75,21 @@ class ResnetAutoencoder(BaseLightningModel):
         xhat = self.decoder(features)
         return xhat, z
 
-    def get_model_outputs(self, batch_dict: dict, return_images: bool = True) -> dict:
+    def get_model_outputs(
+        self,
+        batch_dict: dict,
+        return_images: bool = True,
+        return_reconstructions: bool = True,
+    ) -> dict:
         x = batch_dict['image']
         xhat, z = self.forward(x)
         results_dict = {
-            'reconstructions': xhat,
             'latents': z,
         }
         if return_images:
             results_dict['images'] = x
+        if return_reconstructions:
+            results_dict['reconstructions'] = xhat
         return results_dict
 
     def compute_loss(
@@ -105,7 +111,11 @@ class ResnetAutoencoder(BaseLightningModel):
         return mse_loss, log_list
 
     def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
-        results_dict = self.get_model_outputs(batch_dict, return_images=False)
+        results_dict = self.get_model_outputs(
+            batch_dict,
+            return_images=False,
+            return_reconstructions=self.return_reconstructions,
+        )
         results_dict['metadata'] = {
             'video': batch_dict['video'],
             'idx': batch_dict['idx'],

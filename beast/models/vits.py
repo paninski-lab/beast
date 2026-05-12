@@ -74,9 +74,13 @@ class VisionTransformer(BaseLightningModel):
     def forward(
         self,
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
+        return_recon: bool = True,
     ) -> Dict[str, torch.Tensor]:
-        results_dict = self.vit_mae(pixel_values=x, return_recon=True)
-        if self.config['model']['model_params'].get('use_perceptual_loss', False):
+        results_dict = self.vit_mae(pixel_values=x, return_recon=return_recon)
+        if (
+            self.config['model']['model_params'].get('use_perceptual_loss', False)
+            and 'reconstructions' in results_dict
+        ):
             results_dict['perceptual_loss'] = self.perceptual_loss(
                 results_dict['reconstructions'], x
             )
@@ -90,9 +94,14 @@ class VisionTransformer(BaseLightningModel):
 
         return results_dict
 
-    def get_model_outputs(self, batch_dict: dict, return_images: bool = True) -> dict:
+    def get_model_outputs(
+        self,
+        batch_dict: dict,
+        return_images: bool = True,
+        return_reconstructions: bool = True,
+    ) -> dict:
         x = batch_dict['image']
-        results_dict = self.forward(x)
+        results_dict = self.forward(x, return_recon=return_reconstructions)
         if return_images:
             results_dict['images'] = x
         return results_dict
@@ -140,7 +149,11 @@ class VisionTransformer(BaseLightningModel):
         # set mask_ratio to 0 for inference
         self.vit_mae.config.mask_ratio = 0.0
         # get model outputs
-        results_dict = self.get_model_outputs(batch_dict, return_images=False)
+        results_dict = self.get_model_outputs(
+            batch_dict,
+            return_images=False,
+            return_reconstructions=self.return_reconstructions,
+        )
         # reset mask_ratio to the original value
         self.vit_mae.config.mask_ratio = self.mask_ratio
         results_dict['metadata'] = {
