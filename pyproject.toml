@@ -114,7 +114,8 @@ reportPrivateImportUsage = "none"
 [tool.coverage.run]
 # store paths relative to the repo root so that codecov can match coverage
 # data against source files in the github repo, regardless of where the tests
-# are run on the build machine.
+# are run on the build machine. omit non-source directories to keep the report
+## focused on beast/ only.
 relative_files = true
 omit = [
     "data/*",
@@ -122,7 +123,7 @@ omit = [
     "configs/*",
     "htmlcov/*",
     "scripts/*",
-    "tests/*",
+    "*/tests/*",
 ]
 
 [tool.coverage.report]
