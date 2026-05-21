@@ -1,3 +1,5 @@
+"""Video frame iterator for batched inference over video files."""
+
 from pathlib import Path
 
 import cv2

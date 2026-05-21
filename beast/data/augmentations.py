@@ -85,6 +85,22 @@ def imgaug_pipeline(params_dict: dict) -> Callable:
 
 
 def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
+    """Expand a named augmentation preset string into an imgaug params dict.
+
+    Parameters
+    ----------
+    params: preset name; one of 'none', 'default', or 'top-down'
+
+    Returns
+    -------
+    dict suitable for passing to imgaug_pipeline; empty dict for 'none'
+
+    Raises
+    ------
+    NotImplementedError
+        If params is not a recognized preset name
+
+    """
     params_dict = {}
     if params == 'none':
         pass  # no augmentations

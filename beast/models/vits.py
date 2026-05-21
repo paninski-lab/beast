@@ -17,7 +17,16 @@ from beast.models.perceptual import AlexPerceptual
 
 
 class BatchNormProjector(nn.Module):
+    """Three-layer MLP with batch normalization for projecting encoder representations."""
+
     def __init__(self, config: ViTMAEConfig) -> None:
+        """Build three-layer MLP projection head from ViTMAE config.
+
+        Parameters
+        ----------
+        config: ViTMAE model configuration specifying hidden_size and embed_size
+
+        """
         super().__init__()
         self.config = config
         self.proj = nn.Sequential(
@@ -31,6 +40,7 @@ class BatchNormProjector(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Project hidden representation through the MLP head."""
         proj_hidden = self.proj(x)
         return proj_hidden
 
@@ -39,6 +49,13 @@ class VisionTransformer(BaseLightningModel):
     """Vision Transformer implementation."""
 
     def __init__(self, config: dict) -> None:
+        """Initialize ViT-MAE model with optional pretrained weights and loss heads.
+
+        Parameters
+        ----------
+        config: model configuration dict
+
+        """
         super().__init__(config)
         # Set up ViT architecture
         vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
@@ -76,6 +93,19 @@ class VisionTransformer(BaseLightningModel):
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
         return_recon: bool = True,
     ) -> dict[str, torch.Tensor]:
+        """Run ViT-MAE forward pass with optional reconstruction and contrastive projection.
+
+        Parameters
+        ----------
+        x: input image batch of shape (batch, channels, height, width)
+        return_recon: whether to compute and return reconstructed images
+
+        Returns
+        -------
+        dict with 'latents' and 'loss', plus optional 'reconstructions',
+        'perceptual_loss', 'z', and 'cls_token'
+
+        """
         results_dict = self.vit_mae(pixel_values=x, return_recon=return_recon)
         if (
             self.config['model']['model_params'].get('use_perceptual_loss', False)
@@ -100,6 +130,19 @@ class VisionTransformer(BaseLightningModel):
         return_images: bool = True,
         return_reconstructions: bool = True,
     ) -> dict:
+        """Run forward pass and return results dict.
+
+        Parameters
+        ----------
+        batch_dict: dict containing 'image' tensor
+        return_images: whether to include input images in results
+        return_reconstructions: whether to compute and return reconstructed images
+
+        Returns
+        -------
+        dict with model outputs and optionally 'images'
+
+        """
         x = batch_dict['image']
         results_dict = self.forward(x, return_recon=return_reconstructions)
         if return_images:
@@ -111,6 +154,18 @@ class VisionTransformer(BaseLightningModel):
         stage: str | None,
         **kwargs,
     ) -> tuple[torch.Tensor, list[dict]]:
+        """Combine MSE, perceptual, and infoNCE losses for logging and optimization.
+
+        Parameters
+        ----------
+        stage: training stage ('train', 'val', 'test', or None)
+        **kwargs: model output dict entries (loss, perceptual_loss, z, etc.)
+
+        Returns
+        -------
+        tuple of (total loss tensor, list of logging dicts)
+
+        """
         assert 'loss' in kwargs, "Loss is not in the kwargs"
         mse_loss = kwargs['loss']
         # add all losses here for logging
@@ -146,6 +201,18 @@ class VisionTransformer(BaseLightningModel):
         return loss, log_list
 
     def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
+        """Run inference on a single batch, extracting CLS token latents.
+
+        Parameters
+        ----------
+        batch_dict: dict containing 'image', 'video', 'idx', 'image_path'
+        batch_idx: index of the current batch
+
+        Returns
+        -------
+        dict with 'latents' (CLS tokens), optional 'reconstructions', and 'metadata'
+
+        """
         # set mask_ratio to 0 for inference
         self.vit_mae.config.mask_ratio = 0.0
         # get model outputs
@@ -183,6 +250,24 @@ class ViTMAE(ViTMAEForPreTraining):
         return_latent: bool = False,
         return_recon: bool = False,
     ) -> dict[str, torch.Tensor]:
+        """Run masked autoencoder forward pass.
+
+        Parameters
+        ----------
+        pixel_values: input image batch
+        noise: optional noise tensor for reproducible masking
+        head_mask: optional mask for attention heads
+        output_attentions: whether to return attention weights
+        output_hidden_states: whether to return all hidden states
+        return_dict: whether to use return dict (defaults to config setting)
+        return_latent: if True, return only the raw latent tensor
+        return_recon: if True, run full decode and return reconstructions
+
+        Returns
+        -------
+        dict with 'latents' and 'loss', plus 'reconstructions' if return_recon is True
+
+        """
         # Setting default for return_dict based on the configuration
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if (self.training or self.config.mask_ratio > 0) or return_recon:
@@ -242,6 +327,19 @@ class ViTMAE(ViTMAEForPreTraining):
 
 
 def topk(similarities: torch.Tensor, labels: torch.Tensor, k: int = 5) -> torch.Tensor:
+    """Compute top-k accuracy as the fraction of samples whose true label is in the top-k.
+
+    Parameters
+    ----------
+    similarities: pairwise similarity matrix of shape (N, N-1) with diagonal removed
+    labels: ground-truth label indices of shape (N,)
+    k: number of top predictions to consider
+
+    Returns
+    -------
+    sum of per-rank hit rates from rank 1 to k
+
+    """
     if k > similarities.shape[0]:
         k = similarities.shape[0]
     topsum = torch.tensor(0.0, device=similarities.device)
@@ -251,6 +349,20 @@ def topk(similarities: torch.Tensor, labels: torch.Tensor, k: int = 5) -> torch.
 
 
 def batch_wise_contrastive_loss(sim_matrix: torch.Tensor) -> dict[str, torch.Tensor]:
+    """Compute batch-wise infoNCE loss for temporally adjacent frame pairs.
+
+    Assumes the first half of the batch contains reference frames and the second half
+    contains their corresponding positive (adjacent) frames.
+
+    Parameters
+    ----------
+    sim_matrix: pairwise cosine similarity matrix of shape (N, N)
+
+    Returns
+    -------
+    dict with 'infoNCE_loss' and 'percent_correct'
+
+    """
     N = sim_matrix.shape[0]
     # remove the diagonal from the sim_matrix
     mask = torch.eye(N, dtype=torch.bool, device=sim_matrix.device)

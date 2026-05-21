@@ -1,3 +1,5 @@
+"""Base Lightning module shared by all BEAST model architectures."""
+
 from collections.abc import Iterator
 from typing import Literal
 
@@ -29,6 +31,17 @@ class BaseLightningModel(pl.LightningModule):
         self,
         optimizer: torch.optim.Optimizer
     ) -> torch.optim.lr_scheduler.LRScheduler:
+        """Build and return the learning rate scheduler specified in config.
+
+        Parameters
+        ----------
+        optimizer: the optimizer to schedule
+
+        Returns
+        -------
+        configured learning rate scheduler
+
+        """
         scheduler = self.config['optimizer']['scheduler']
         if scheduler == 'step':
             # define a scheduler that reduces the base learning rate at predefined steps
@@ -63,6 +76,7 @@ class BaseLightningModel(pl.LightningModule):
         return scheduler
 
     def get_parameters(self) -> Iterator:
+        """Return an iterator over trainable model parameters."""
         params = filter(lambda p: p.requires_grad, self.parameters())
         return params
 
@@ -152,10 +166,45 @@ class BaseLightningModel(pl.LightningModule):
 
     # Required Lightning methods to be implemented by children
     def get_model_outputs(self, batch_dict: dict) -> dict:
+        """Run forward pass and return model outputs; implemented by subclasses.
+
+        Parameters
+        ----------
+        batch_dict: dict containing model inputs
+
+        Returns
+        -------
+        dict of model outputs
+
+        """
         raise NotImplementedError
 
     def compute_loss(self, stage: str | None, **kwargs) -> tuple[torch.Tensor, list[dict]]:
+        """Compute loss from model outputs; implemented by subclasses.
+
+        Parameters
+        ----------
+        stage: training stage ('train', 'val', 'test', or None)
+        **kwargs: model output dict entries
+
+        Returns
+        -------
+        tuple of (total loss tensor, list of logging dicts)
+
+        """
         raise NotImplementedError
 
     def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
+        """Run inference on a single batch; implemented by subclasses.
+
+        Parameters
+        ----------
+        batch_dict: dict containing model inputs
+        batch_idx: index of the current batch
+
+        Returns
+        -------
+        dict of predictions and metadata
+
+        """
         raise NotImplementedError

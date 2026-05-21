@@ -1,3 +1,5 @@
+"""Typed dictionaries for dataset item structures."""
+
 from typing import TypedDict
 
 from jaxtyping import Float

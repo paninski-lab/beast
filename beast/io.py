@@ -1,3 +1,5 @@
+"""Configuration file loading and override utilities."""
+
 from pathlib import Path
 
 import yaml

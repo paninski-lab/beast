@@ -1,3 +1,5 @@
+"""Custom batch samplers for contrastive learning with temporally adjacent frame pairs."""
+
 import re
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -12,14 +14,16 @@ def extract_anchor_indices(
     image_list: Sequence[str | Path],
     idx_offset: int = 1,
 ) -> tuple[list[int], dict[int, list[int]]]:
-    """
-    Extract anchor indices from image paths that have valid neighboring frames.
+    """Extract anchor indices from image paths that have valid neighboring frames.
 
     Args:
-        image_list: List of image paths
+        image_list: list of image paths
+        idx_offset: frame number offset used to define a valid neighbor
 
     Returns:
-        List of indices that can serve as anchors (have valid neighbors)
+        tuple of (anchor_indices, pos_indices) where anchor_indices is the list of dataset
+        indices that have at least one valid neighbor, and pos_indices maps each anchor index
+        to its list of valid neighbor indices
     """
     anchor_indices = []
     pos_indices = {}
@@ -109,7 +113,17 @@ class ContrastBatchSampler(Sampler):
         shuffle: bool = True,
         seed: int = 42,
     ) -> None:
+        """Initialize sampler and pre-compute valid anchor/positive index pairs.
 
+        Parameters
+        ----------
+        dataset: training dataset subset (must expose .indices and .dataset.image_list)
+        batch_size: number of samples per batch; must be even
+        idx_offset: frame number offset used to define valid positive pairs
+        shuffle: whether to shuffle anchor indices each epoch
+        seed: base random seed; combined with epoch number for per-epoch shuffling
+
+        """
         super().__init__()
 
         # Get distributed training info
@@ -149,7 +163,7 @@ class ContrastBatchSampler(Sampler):
         self.seed = seed
 
     def __iter__(self) -> Iterator[list[int]]:
-
+        """Yield batches of (reference, positive) index pairs for one epoch."""
         self.epoch += 1
 
         # Reshuffle ALL anchor indices with epoch-specific seed
@@ -225,20 +239,20 @@ class ContrastBatchSampler(Sampler):
             batches_returned += 1
 
     def __len__(self) -> int:
+        """Return the number of batches this sampler will yield per epoch."""
         return self.num_batches
 
 
 def contrastive_collate_fn(batch_of_dicts: list[dict]) -> dict[str, torch.Tensor]:
-    """
-    Splits a batch of dictionaries into separate lists for refs and pos.
+    """Collate a contrastive batch into a single dict of stacked tensors.
+
+    Assumes even-indexed items are reference frames and odd-indexed items are positives.
 
     Args:
-        batch_of_dicts (list): List of dictionaries returned by __getitem__.
+        batch_of_dicts: list of dicts returned by BaseDataset.__getitem__
 
     Returns:
-        refs_data (tensor): Tensor of shape (N, ...) containing N references.
-        pos_data (tensor): Tensor of shape (N, ...) containing N positives.
-    Batch size affects the sampling very little, as we always sample exactly
+        dict with keys 'image' (all frames stacked: refs then positives) and 'idx' (frame indices)
     """
     refs = []
     pos = []

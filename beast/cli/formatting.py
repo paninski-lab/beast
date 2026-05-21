@@ -10,6 +10,7 @@ class ArgumentParser(argparse.ArgumentParser):
     """Enhanced argument parser with better formatting."""
 
     def __init__(self, **kwargs: Any) -> None:
+        """Initialize parser with HelpFormatter as the default formatter class."""
         super().__init__(
             formatter_class=HelpFormatter,
             **kwargs
@@ -35,6 +36,7 @@ class SubArgumentParser(ArgumentParser):
     """Argument parser for subcommands."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize subcommand parser and mark it as a sub-parser."""
         super().__init__(*args, **kwargs)
         self.is_sub_parser = True
 

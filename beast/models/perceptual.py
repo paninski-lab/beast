@@ -1,3 +1,5 @@
+"""Perceptual loss modules using pretrained feature extractors."""
+
 from typing import Any
 
 import torch
@@ -8,6 +10,8 @@ from torch import nn
 
 
 class Perceptual(nn.Module):
+    """Base perceptual loss module that compares feature representations."""
+
     def __init__(self, *, network: nn.Module, criterion: nn.Module) -> None:
         """Initialize perceptual loss module.
 
@@ -22,6 +26,18 @@ class Perceptual(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x_hat: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        """Compute perceptual loss between reconstructed and target images.
+
+        Parameters
+        ----------
+        x_hat: reconstructed image batch
+        x: target image batch
+
+        Returns
+        -------
+        scalar loss tensor
+
+        """
         x_hat_features = self.sigmoid(self.net(x_hat))
         x_features = self.sigmoid(self.net(x))
         loss = self.criterion(x_hat_features, x_features)
@@ -29,6 +45,8 @@ class Perceptual(nn.Module):
 
 
 class AlexPerceptual(Perceptual):
+    """Perceptual loss using the first five layers of a pretrained AlexNet."""
+
     def __init__(self, *, device: str | torch.device, **kwargs: Any) -> None:
         """Perceptual loss using pretrained AlexNet features [Pihlgren et al. 2020].
 
