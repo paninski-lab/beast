@@ -116,10 +116,16 @@ reportPrivateImportUsage = "none"
 # data against source files in the github repo, regardless of where the tests
 # are run on the build machine.
 relative_files = true
-source = ["beast"]
+omit = [
+    "data/*",
+    "docs/*",
+    "configs/*",
+    "htmlcov/*",
+    "scripts/*",
+    "tests/*",
+]
 
 [tool.coverage.report]
-omit = ["*/tests/*"]
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
