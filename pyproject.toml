@@ -61,6 +61,7 @@ beast = "beast.cli.main:main"
 [project.optional-dependencies]
 dev = [
     "pre-commit",
+    "pyright",
     "pytest",
     "pytest-html",
     "urllib3 (>=2.7.0)",  # harder requirement than "requests" to address security vulnerability

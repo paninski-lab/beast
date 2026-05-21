@@ -157,5 +157,5 @@ class BaseLightningModel(pl.LightningModule):
     def compute_loss(self, stage: str | None, **kwargs) -> tuple[torch.Tensor, list[dict]]:
         raise NotImplementedError
 
-    def predict_step(self, batch_dict: dict, batch_idx: int) -> torch.Tensor:
+    def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
         raise NotImplementedError

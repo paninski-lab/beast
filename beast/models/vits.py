@@ -108,7 +108,7 @@ class VisionTransformer(BaseLightningModel):
 
     def compute_loss(
         self,
-        stage: str,
+        stage: str | None,
         **kwargs,
     ) -> tuple[torch.Tensor, list[dict]]:
         assert 'loss' in kwargs, "Loss is not in the kwargs"

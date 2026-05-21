@@ -89,7 +89,7 @@ class ResnetAutoencoder(BaseLightningModel):
 
     def compute_loss(
         self,
-        stage: str,
+        stage: str | None,
         images: Float[torch.Tensor, 'batch channels img_height img_width'],
         reconstructions: Float[torch.Tensor, 'batch channels img_height img_width'],
         latents: (
