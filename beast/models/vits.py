@@ -207,7 +207,7 @@ class ViTMAE(ViTMAEForPreTraining):
             embedding_output_ = torch.gather(embedding_output_, dim=1, index=index)
             # add cls token back
             embedding_output = torch.cat((embedding_output[:, :1, :], embedding_output_), dim=1)
-            encoder_outputs = self.vit.encoder(
+            encoder_outputs = self.vit.encoder(  # pyright: ignore[reportCallIssue]
                 embedding_output,
                 return_dict=return_dict,
             )
@@ -225,7 +225,7 @@ class ViTMAE(ViTMAEForPreTraining):
         decoder_outputs = self.decoder(latent, ids_restore)
         logits = decoder_outputs.logits
         # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
-        loss = self.forward_loss(pixel_values, logits, mask)
+        loss = self.forward_loss(pixel_values, logits, mask)  # pyright: ignore[reportCallIssue]
 
         if return_recon:
             return {
