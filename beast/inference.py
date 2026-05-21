@@ -19,6 +19,14 @@ class ImagePredictionHandler:
     """Handles saving predictions while preserving directory structure."""
 
     def __init__(self, output_dir: str | Path, source_dir: str | Path) -> None:
+        """Initialize handler with output and source directories.
+
+        Parameters
+        ----------
+        output_dir: directory where predictions will be saved
+        source_dir: root directory of source images, used to preserve directory structure
+
+        """
         self.output_dir = Path(output_dir)
         self.source_dir = Path(source_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)

@@ -72,7 +72,13 @@ class BaseDataModule(pl.LightningDataModule):
         self.sampler = None
 
     def setup(self, stage: str | None = None) -> None:
+        """Split dataset into train, val, and test subsets.
 
+        Parameters
+        ----------
+        stage: Lightning stage string (unused; splits are always computed)
+
+        """
         datalen = self.dataset.__len__()
 
         # split data based on provided probabilities
@@ -148,6 +154,7 @@ class BaseDataModule(pl.LightningDataModule):
         return idxs[:train_end], idxs[train_end:val_end], idxs[val_end:test_end]
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
+        """Return the training data loader."""
         assert self.train_dataset is not None, 'call setup() before train_dataloader()'
         if self.use_sampler:
             return _make_contrastive_dataloader(
@@ -170,6 +177,7 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
+        """Return the validation data loader."""
         assert self.val_dataset is not None, 'call setup() before val_dataloader()'
         return DataLoader(
             self.val_dataset,
@@ -183,6 +191,7 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
+        """Return the test data loader."""
         assert self.test_dataset is not None, 'call setup() before test_dataloader()'
         return DataLoader(
             self.test_dataset,
@@ -195,6 +204,7 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def full_labeled_dataloader(self) -> torch.utils.data.DataLoader:
+        """Return a data loader over the full (unsplit) dataset."""
         return DataLoader(
             self.dataset,
             batch_size=self.val_batch_size,

@@ -21,6 +21,13 @@ from beast.train import train
 # TODO: Replace with contextlib.chdir in python 3.11.
 @contextlib.contextmanager
 def chdir(dir: str | Path) -> Generator[None, None, None]:
+    """Context manager that temporarily changes the working directory.
+
+    Parameters
+    ----------
+    dir: directory to change to for the duration of the context
+
+    """
     pwd = os.getcwd()
     os.chdir(dir)
     try:

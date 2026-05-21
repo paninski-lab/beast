@@ -22,6 +22,13 @@ from beast.models.base import BaseLightningModel
 
 
 def reset_seeds(seed: int = 0) -> None:
+    """Reset all random seeds for reproducible training.
+
+    Parameters
+    ----------
+    seed: seed value for all random number generators
+
+    """
     os.environ["PYTHONHASHSEED"] = str(seed)
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -32,6 +39,7 @@ def reset_seeds(seed: int = 0) -> None:
 
 @rank_zero_only
 def pretty_print_config(config: dict) -> None:
+    """Print the config dict section by section to stdout."""
     print('config file:')
     for key, val in config.items():
         print('--------------------')
@@ -47,7 +55,19 @@ def pretty_print_config(config: dict) -> None:
 
 
 def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> BaseLightningModel:
+    """Set up data, trainer, and callbacks, then train the model.
 
+    Parameters
+    ----------
+    config: full experiment configuration dict
+    model: initialized Lightning model to train
+    output_dir: directory where config, checkpoints, and logs are saved
+
+    Returns
+    -------
+    trained model
+
+    """
     output_dir = Path(output_dir)
 
     # Only print from rank 0
@@ -222,7 +242,19 @@ def get_callbacks(
     lr_monitor: bool = True,
     ckpt_every_n_epochs: int | None = None,
 ) -> list:
+    """Build list of Lightning callbacks for training.
 
+    Parameters
+    ----------
+    checkpointing: whether to save the best checkpoint by validation loss
+    lr_monitor: whether to log learning rate each epoch
+    ckpt_every_n_epochs: if set, also save a checkpoint every n epochs
+
+    Returns
+    -------
+    list of configured Lightning callbacks
+
+    """
     callbacks = []
 
     if lr_monitor:

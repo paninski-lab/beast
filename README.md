@@ -96,3 +96,10 @@ beast predict --model <model_dir> --input <video_path> [options]
 ```
 
 Type "beast predict -h" in the terminal for details on the options.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on setting up a development environment,
+code style, and submitting pull requests.

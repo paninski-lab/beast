@@ -150,6 +150,19 @@ def extract_frames(
 
 
 def _run_kmeans(data: np.ndarray, n_clusters: int, seed: int = 0) -> tuple:
+    """Fit k-means on data and return cluster labels and centers.
+
+    Parameters
+    ----------
+    data: 2D array of shape (n_samples, n_features)
+    n_clusters: number of clusters
+    seed: random seed for reproducibility
+
+    Returns
+    -------
+    tuple of (cluster_labels, cluster_centers)
+
+    """
     np.random.seed(seed)
     kmeans_obj = KMeans(n_clusters, n_init='auto')
     kmeans_obj.fit(data)

@@ -95,6 +95,7 @@ class BaseDataset(torch.utils.data.Dataset):
         self.pytorch_transform = transforms.Compose(pytorch_transform_list)
 
     def __len__(self) -> int:
+        """Return number of images in the dataset."""
         return len(self.image_list)
 
     def __getitem__(self, idx: int | list) -> ExampleDict | list[ExampleDict]:

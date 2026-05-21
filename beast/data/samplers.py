@@ -113,7 +113,17 @@ class ContrastBatchSampler(Sampler):
         shuffle: bool = True,
         seed: int = 42,
     ) -> None:
+        """Initialize sampler and pre-compute valid anchor/positive index pairs.
 
+        Parameters
+        ----------
+        dataset: training dataset subset (must expose .indices and .dataset.image_list)
+        batch_size: number of samples per batch; must be even
+        idx_offset: frame number offset used to define valid positive pairs
+        shuffle: whether to shuffle anchor indices each epoch
+        seed: base random seed; combined with epoch number for per-epoch shuffling
+
+        """
         super().__init__()
 
         # Get distributed training info
@@ -153,7 +163,7 @@ class ContrastBatchSampler(Sampler):
         self.seed = seed
 
     def __iter__(self) -> Iterator[list[int]]:
-
+        """Yield batches of (reference, positive) index pairs for one epoch."""
         self.epoch += 1
 
         # Reshuffle ALL anchor indices with epoch-specific seed
@@ -229,6 +239,7 @@ class ContrastBatchSampler(Sampler):
             batches_returned += 1
 
     def __len__(self) -> int:
+        """Return the number of batches this sampler will yield per epoch."""
         return self.num_batches
 
 

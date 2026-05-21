@@ -26,6 +26,18 @@ class Perceptual(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x_hat: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        """Compute perceptual loss between reconstructed and target images.
+
+        Parameters
+        ----------
+        x_hat: reconstructed image batch
+        x: target image batch
+
+        Returns
+        -------
+        scalar loss tensor
+
+        """
         x_hat_features = self.sigmoid(self.net(x_hat))
         x_features = self.sigmoid(self.net(x))
         loss = self.criterion(x_hat_features, x_features)
