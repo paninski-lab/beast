@@ -116,7 +116,8 @@ class Model:
         model_class = cls.MODEL_REGISTRY[model_type]
         log_step(f"Creating {model_type} model instance", level='debug')
         log_step(
-            f"About to call {model_class.__name__}.__init__() - this may take several minutes if downloading pretrained weights",
+            f"About to call {model_class.__name__}.__init__() - this may take several"
+            ' minutes if downloading pretrained weights',
             level='debug',
         )
         init_start = time.time()

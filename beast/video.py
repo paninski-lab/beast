@@ -1,7 +1,6 @@
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Tuple
 
 import cv2
 import numpy as np
@@ -187,7 +186,7 @@ def compute_video_motion_energy(
     video_file: str | Path,
     resize_dims: int = 32,
     return_frames: bool = False,
-) -> np.ndarray | Tuple[np.ndarray, np.ndarray]:
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Compute the absolute pixel difference in consecutive downsampled frames.
 
     Paramters
@@ -246,7 +245,7 @@ def read_nth_frames(
     cap = cv2.VideoCapture(video_file)
 
     if not cap.isOpened():
-        raise IOError(f'Error opening video file {video_file}')
+        raise OSError(f'Error opening video file {video_file}')
 
     frames = []
     frame_counter = 0

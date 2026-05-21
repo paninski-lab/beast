@@ -3,14 +3,14 @@
 import importlib.metadata
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 __package_version = "unknown"
 
 
 def log_step(
     msg: str,
-    level: Optional[str] = None,
+    level: str | None = None,
     flush: bool = True,
     logger: Any = None,
 ) -> None:
@@ -67,7 +67,10 @@ def __get_package_version() -> str:
 
         import toml
 
-        warnings.warn('beast not pip-installed, getting version from pyproject.toml.')
+        warnings.warn(
+            'beast not pip-installed, getting version from pyproject.toml.',
+            stacklevel=2,
+        )
 
         pyproject_toml_file = Path(__file__).parent.parent / 'pyproject.toml'
         __package_version = toml.load(pyproject_toml_file)['project']['version']
