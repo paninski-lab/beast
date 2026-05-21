@@ -176,7 +176,7 @@ def select_frame_idxs_kmeans(
 
     Returns
     -------
-    frames array of shape (n_frames_to_select, n_channels, ypix, xpix)
+    array of selected frame indices of shape (n_frames_to_select,)
 
     """
 

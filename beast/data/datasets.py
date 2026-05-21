@@ -46,7 +46,7 @@ class BaseDataset(torch.utils.data.Dataset):
         Parameters
         ----------
         data_dir: absolute path to data directory
-        imgaug_transform: imgaug transform pipeline to apply to images
+        imgaug_pipeline: imgaug transform pipeline to apply to images
         num_channels: number of output channels; 1 loads as grayscale then converts to RGB,
             3 loads directly as RGB
 

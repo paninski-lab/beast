@@ -32,7 +32,7 @@ def get_configs(arch: str = 'resnet18') -> tuple[list[int], bool]:
 
 
 class ResnetAutoencoder(BaseLightningModel):
-    """Vision Transformer implementation."""
+    """ResNet autoencoder implementation."""
 
     def __init__(self, config: dict) -> None:
 

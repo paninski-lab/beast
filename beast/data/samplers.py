@@ -12,14 +12,16 @@ def extract_anchor_indices(
     image_list: Sequence[str | Path],
     idx_offset: int = 1,
 ) -> tuple[list[int], dict[int, list[int]]]:
-    """
-    Extract anchor indices from image paths that have valid neighboring frames.
+    """Extract anchor indices from image paths that have valid neighboring frames.
 
     Args:
-        image_list: List of image paths
+        image_list: list of image paths
+        idx_offset: frame number offset used to define a valid neighbor
 
     Returns:
-        List of indices that can serve as anchors (have valid neighbors)
+        tuple of (anchor_indices, pos_indices) where anchor_indices is the list of dataset
+        indices that have at least one valid neighbor, and pos_indices maps each anchor index
+        to its list of valid neighbor indices
     """
     anchor_indices = []
     pos_indices = {}
@@ -229,16 +231,15 @@ class ContrastBatchSampler(Sampler):
 
 
 def contrastive_collate_fn(batch_of_dicts: list[dict]) -> dict[str, torch.Tensor]:
-    """
-    Splits a batch of dictionaries into separate lists for refs and pos.
+    """Collate a contrastive batch into a single dict of stacked tensors.
+
+    Assumes even-indexed items are reference frames and odd-indexed items are positives.
 
     Args:
-        batch_of_dicts (list): List of dictionaries returned by __getitem__.
+        batch_of_dicts: list of dicts returned by BaseDataset.__getitem__
 
     Returns:
-        refs_data (tensor): Tensor of shape (N, ...) containing N references.
-        pos_data (tensor): Tensor of shape (N, ...) containing N positives.
-    Batch size affects the sampling very little, as we always sample exactly
+        dict with keys 'image' (all frames stacked: refs then positives) and 'idx' (frame indices)
     """
     refs = []
     pos = []

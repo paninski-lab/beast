@@ -185,8 +185,8 @@ def compute_video_motion_energy(
 ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """Compute the absolute pixel difference in consecutive downsampled frames.
 
-    Paramters
-    ---------
+    Parameters
+    ----------
     video_file: absolute path to mp4
     resize_dims: number of pixels (in both dimensions) to downsample video before computing motion
         energy
@@ -225,6 +225,8 @@ def read_nth_frames(
 ) -> np.ndarray:
     """Read every nth frame from a video file and return results in a numpy array.
 
+    Parameters
+    ----------
     video_file: absolute path to mp4
     n: number of frames to advance after successfully loading a frame
     resize_dims: number of pixels (in both dimensions) to downsample video before computing motion
