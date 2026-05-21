@@ -246,7 +246,7 @@ class ViTMAE(ViTMAEForPreTraining):
 def topk(similarities: torch.Tensor, labels: torch.Tensor, k: int = 5) -> torch.Tensor:
     if k > similarities.shape[0]:
         k = similarities.shape[0]
-    topsum = torch.tensor(0.0)
+    topsum = torch.tensor(0.0, device=similarities.device)
     for i in range(k):
         topsum += torch.sum(torch.argsort(similarities, dim=1)[:, -(i+1)] == labels) / len(labels)
     return topsum
