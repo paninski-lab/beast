@@ -201,6 +201,7 @@ def run_model_test(tmp_path, data_dir) -> Callable:
             # run inference on labeled data
             model.predict_images(image_dir=data_dir)
             # ensure model checkpoint saved
+            assert model.model_dir is not None
             assert len(list(model.model_dir.rglob('*.ckpt'))) == 1
         finally:
             # remove tensors from gpu

@@ -155,7 +155,7 @@ class ImagePredictionHandler:
 
     def process_predictions(
         self,
-        predictions: list[dict],
+        predictions: list,
         save_reconstructions: bool = True,
         save_latents: bool = False,
     ) -> dict[str, Any]:
@@ -311,7 +311,7 @@ class VideoPredictionHandler:
             output_video_path = self.output_dir / f'{self.video_file.stem}_reconstruction.mp4'
 
             # Use mp4v codec for better compatibility
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # type: ignore[attr-defined]
 
             self.reconstruction_writer = cv2.VideoWriter(
                 str(output_video_path),
@@ -351,6 +351,7 @@ class VideoPredictionHandler:
 
                 if self.reconstruction_writer is None:
                     self._init_video_writer()
+                assert self.reconstruction_writer is not None
 
                 # convert tensor to BGR numpy array
                 frame_bgr = self.tensor_to_numpy_bgr(reconstructions[i])
@@ -370,7 +371,7 @@ class VideoPredictionHandler:
 
     def process_predictions(
         self,
-        predictions: list[dict],
+        predictions: list,
         save_reconstructions: bool = True,
         save_latents: bool = True,
     ) -> dict[str, Any]:
@@ -505,6 +506,7 @@ def predict_images(
     # run inference
     trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
     predictions = trainer.predict(model, dataloaders=dataloader, return_predictions=True)
+    assert predictions is not None
 
     # process outputs
     results = handler.process_predictions(
@@ -556,6 +558,7 @@ def predict_video(
     # run inference
     trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
     predictions = trainer.predict(model, dataloaders=dataloader, return_predictions=True)
+    assert predictions is not None
 
     # process outputs
     handler.process_predictions(

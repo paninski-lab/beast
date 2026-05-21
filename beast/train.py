@@ -7,6 +7,8 @@ import lightning.pytorch as pl
 import numpy as np
 import torch
 import yaml
+from lightning.pytorch import callbacks as pl_callbacks
+from lightning.pytorch import loggers as pl_loggers
 from lightning.pytorch.utilities import rank_zero_only
 from typeguard import typechecked
 
@@ -46,6 +48,8 @@ def pretty_print_config(config: dict) -> None:
 
 @typechecked
 def train(config: dict, model, output_dir: str | Path):
+
+    output_dir = Path(output_dir)
 
     # Only print from rank 0
     if rank_zero_only.rank == 0:
@@ -147,7 +151,7 @@ def train(config: dict, model, output_dir: str | Path):
     # logger
     if rank_zero_only.rank == 0:
         log_step("Creating TensorBoardLogger", level='debug')
-    logger = pl.loggers.TensorBoardLogger('tb_logs', name='')
+    logger = pl_loggers.TensorBoardLogger('tb_logs', name='')
     if rank_zero_only.rank == 0:
         log_step("TensorBoardLogger created", level='debug')
 
@@ -224,12 +228,12 @@ def get_callbacks(
     callbacks = []
 
     if lr_monitor:
-        lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval='epoch')
-        callbacks.append(lr_monitor)
+        lr_monitor_cb = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
+        callbacks.append(lr_monitor_cb)
 
     # always save out best model
     if checkpointing:
-        ckpt_best_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        ckpt_best_callback = pl_callbacks.ModelCheckpoint(
             monitor='val_loss',
             mode='min',
             filename='{epoch}-{step}-best',
@@ -238,7 +242,7 @@ def get_callbacks(
 
     if ckpt_every_n_epochs:
         # if ckpt_every_n_epochs is not None, save separate checkpoint files
-        ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        ckpt_callback = pl_callbacks.ModelCheckpoint(
             monitor=None,
             every_n_epochs=ckpt_every_n_epochs,
             save_top_k=-1,

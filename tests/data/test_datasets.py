@@ -28,6 +28,7 @@ class TestBaseDataset:
         from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD
         dataset = BaseDataset(data_dir=data_dir, imgaug_pipeline=None, num_channels=1)
         example = dataset[0]
+        assert isinstance(example, dict)
         image = example['image']
         assert image.shape == (3, 224, 224)
         # undo per-channel ImageNet normalization before comparing channels

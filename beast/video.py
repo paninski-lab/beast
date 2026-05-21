@@ -68,7 +68,8 @@ def copy_and_reformat_video_file(
     src = Path(video_file)
 
     # make sure copied vid has mp4 extension
-    dst = Path(dst_dir).joinpath(video_file.stem + '.mp4')
+    dst_dir = Path(dst_dir)
+    dst = dst_dir.joinpath(src.stem + '.mp4')
 
     # check 0: do we even need to reformat?
     if dst.is_file():

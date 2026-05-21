@@ -101,6 +101,8 @@ def extract_frames(
 
     """
 
+    input_path = Path(input_path)
+    output_dir = Path(output_dir)
     print(f'Extracting frames from: {input_path}')
     print(f'Saving to: {output_dir}')
     print(f'Method: {method}')
@@ -267,6 +269,7 @@ def export_frames(
     frames = get_frames_from_idxs(video_file, frame_idxs)
 
     # save out frames
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     for frame, idx in zip(frames, frame_idxs, strict=True):
         cv2.imwrite(
