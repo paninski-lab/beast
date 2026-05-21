@@ -112,7 +112,7 @@ class VisionTransformer(BaseLightningModel):
         self,
         stage: str,
         **kwargs,
-    ) -> tuple[torch.tensor, list[dict]]:
+    ) -> tuple[torch.Tensor, list[dict]]:
         assert 'loss' in kwargs, "Loss is not in the kwargs"
         mse_loss = kwargs['loss']
         # add all losses here for logging

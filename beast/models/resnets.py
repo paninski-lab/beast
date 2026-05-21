@@ -100,7 +100,7 @@ class ResnetAutoencoder(BaseLightningModel):
             | Float[torch.Tensor, 'batch num_latents']
         ),
         **kwargs,
-    ) -> tuple[torch.tensor, list[dict]]:
+    ) -> tuple[torch.Tensor, list[dict]]:
         mse_loss = nn.functional.mse_loss(images, reconstructions, reduction='mean')
         # add all losses here for logging
         log_list = [
@@ -229,7 +229,7 @@ class ResNetEncoder(nn.Module):
                 in_channels=256, hidden_channels=512, layers=configs[3], downsample_method='conv',
             )
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
@@ -288,7 +288,7 @@ class ResNetDecoder(nn.Module):
 
         # self.gate = nn.Sigmoid()
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
@@ -352,7 +352,7 @@ class EncoderResidualBlock(nn.Module):
 
                 self.add_module(f'{i + 1} EncoderLayer', layer)
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         for _name, layer in self.named_children():
             x = layer(x)
         return x
@@ -409,7 +409,7 @@ class EncoderBottleneckBlock(nn.Module):
 
                 self.add_module(f'{i + 1} EncoderLayer', layer)
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         for _name, layer in self.named_children():
             x = layer(x)
         return x
@@ -443,7 +443,7 @@ class DecoderResidualBlock(nn.Module):
 
             self.add_module(f'{i} EncoderLayer', layer)
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         for _name, layer in self.named_children():
             x = layer(x)
         return x
@@ -476,7 +476,7 @@ class DecoderBottleneckBlock(nn.Module):
 
             self.add_module(f'{i} EncoderLayer', layer)
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         for _name, layer in self.named_children():
             x = layer(x)
         return x
@@ -535,7 +535,7 @@ class EncoderResidualLayer(nn.Module):
             nn.ReLU(inplace=True)
         )
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         identity = x
         x = self.weight_layer1(x)
         x = self.weight_layer2(x)
@@ -617,7 +617,7 @@ class EncoderBottleneckLayer(nn.Module):
 
         self.relu = nn.Sequential(nn.ReLU(inplace=True))
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         identity = x
         x = self.weight_layer1(x)
         x = self.weight_layer2(x)
@@ -682,7 +682,7 @@ class DecoderResidualLayer(nn.Module):
         else:
             self.upsample = None
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         identity = x
         x = self.weight_layer1(x)
         x = self.weight_layer2(x)
@@ -764,7 +764,7 @@ class DecoderBottleneckLayer(nn.Module):
             self.upsample = None
             self.down_scale = None
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         identity = x
         x = self.weight_layer1(x)
         x = self.weight_layer2(x)

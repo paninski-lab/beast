@@ -101,6 +101,15 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["beast"]
 
+[tool.pyright]
+pythonVersion = "3.11"
+pythonPlatform = "Linux"
+typeCheckingMode = "basic"
+include = ["beast", "tests"]
+exclude = ["build", "configs", "data", "dist", "docs", "docker", "scripts"]
+# torch stubs don't re-export public functions at the top level (torch.tensor, torch.allclose, etc.)
+reportPrivateImportUsage = "none"
+
 [tool.pytest.ini_options]
 testpaths = "tests"
 generate_report_on_test = "True"

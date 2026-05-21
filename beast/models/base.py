@@ -101,7 +101,7 @@ class BaseLightningModel(pl.LightningModule):
         self,
         batch_dict: dict,
         stage: Literal['train', 'val', 'test'] | None = None,
-    ) -> torch.tensor:
+    ) -> torch.Tensor:
         """Compute and log the losses on a batch of labeled data."""
 
         # forward pass; collected true and predicted heatmaps, keypoints
@@ -156,8 +156,8 @@ class BaseLightningModel(pl.LightningModule):
     def get_model_outputs(self, batch_dict: dict) -> dict:
         raise NotImplementedError
 
-    def compute_loss(self, stage: int, **kwargs) -> tuple[torch.tensor, list[dict]]:
+    def compute_loss(self, stage: int, **kwargs) -> tuple[torch.Tensor, list[dict]]:
         raise NotImplementedError
 
-    def predict_step(self, batch_dict: dict, batch_idx: int) -> torch.tensor:
+    def predict_step(self, batch_dict: dict, batch_idx: int) -> torch.Tensor:
         raise NotImplementedError
