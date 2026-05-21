@@ -21,35 +21,25 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install linters
-        run: pip install autopep8 flake8 isort
+      - name: Install dependencies
+        run: |
+          # CPU-only torch is sufficient for type checking (avoids ~2GB CUDA download)
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]"
 
-      - name: Check import sorting with isort
-        run: isort --check-only --diff beast tests
-        # Reads config from [tool.isort] in pyproject.toml
+      - name: Lint with ruff
+        run: ruff check beast tests
+        # Reads config from [tool.ruff.lint] in pyproject.toml
 
-      - name: Check formatting with autopep8
-        run: autopep8 --diff --recursive --exit-code beast tests
-        # Reads config from [tool.autopep8] in pyproject.toml
-
-      - name: Lint with flake8 (critical errors only)
-        run: flake8 beast tests --select=E9,F63,F7,F82
-        # Reads config from .flake8 file
-        # F9: syntax errors, can't parse file
-        # F63: invalid ** use in `assert` or `raise`
-        # F7: syntax errors in type annotations
-        # F82: undefined names (var or function that was never imported)
-
-      - name: Show fix instructions if formatting needed
-        if: failure()
+      - name: Show fix instructions if linting failed
+        if: always() && steps.ruff.outcome == 'failure'
         run: |
           echo ""
           echo "Linting failed!"
           echo ""
-          echo "To fix formatting issues locally, run:"
-          echo "  autopep8 --in-place --recursive beast tests"
-          echo "  isort beast tests"
+          echo "To auto-fix issues locally, run:"
+          echo "  ruff check --fix lightning_pose tests"
           echo ""
-          echo "To check for flake8 errors locally, run:"
-          echo "  flake8 beast tests --select=E9,F63,F7,F82"
+          echo "To see all violations without fixing, run:"
+          echo "  ruff check lightning_pose tests"
           echo ""
