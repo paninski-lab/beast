@@ -63,6 +63,7 @@ dev = [
     "pre-commit",
     "pyright",
     "pytest",
+    "pytest-cov",
     "pytest-html",
     "urllib3 (>=2.7.0)",  # harder requirement than "requests" to address security vulnerability
     "requests",
