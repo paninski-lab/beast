@@ -1,3 +1,5 @@
+"""Inference handlers for saving model predictions on images and videos."""
+
 from pathlib import Path
 from typing import Any
 

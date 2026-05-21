@@ -1,3 +1,5 @@
+"""BEAST: Behavioral analysis via self-supervised pretraining of transformers."""
+
 # Hacky way to get version from pypackage.toml.
 # Adapted from: https://github.com/python-poetry/poetry/issues/273#issuecomment-1877789967
 import importlib.metadata

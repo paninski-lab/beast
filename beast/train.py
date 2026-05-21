@@ -1,3 +1,5 @@
+"""Training loop and callback setup for BEAST models."""
+
 import os
 import random
 import sys

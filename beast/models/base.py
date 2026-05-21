@@ -1,3 +1,5 @@
+"""Base Lightning module shared by all BEAST model architectures."""
+
 from collections.abc import Iterator
 from typing import Literal
 

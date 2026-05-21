@@ -1,3 +1,4 @@
+"""Frame extraction from videos using motion energy and PCA-kmeans clustering."""
 
 from pathlib import Path
 

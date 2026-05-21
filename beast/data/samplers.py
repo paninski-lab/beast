@@ -1,3 +1,5 @@
+"""Custom batch samplers for contrastive learning with temporally adjacent frame pairs."""
+
 import re
 from collections.abc import Iterator, Sequence
 from pathlib import Path

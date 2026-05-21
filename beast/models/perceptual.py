@@ -1,3 +1,5 @@
+"""Perceptual loss modules using pretrained feature extractors."""
+
 from typing import Any
 
 import torch

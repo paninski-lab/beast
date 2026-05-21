@@ -1,3 +1,5 @@
+"""Video I/O utilities: codec checking, re-encoding, frame extraction, and motion energy."""
+
 import shutil
 import subprocess
 from pathlib import Path

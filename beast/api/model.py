@@ -1,3 +1,5 @@
+"""High-level Model API for training and running inference with BEAST models."""
+
 import contextlib
 import os
 import time
