@@ -63,4 +63,4 @@ pip show beast
 python -c "import beast; print('Beast location:', beast.__file__); print('Beast import successful')"
 
 # Run with html reporting.
-pytest --html=report.html --self-contained-html --cov=. --cov-report=xml:$HOME/buildbot_beast/coverage.xml tests/
+pytest --html=report.html --self-contained-html --cov=. --cov-report=xml:$HOME/buildbot/coverage.xml --basetemp=/local/$(whoami)/pytest-tmp tests/
