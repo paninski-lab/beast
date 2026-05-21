@@ -120,6 +120,7 @@ class ResnetAutoencoder(BaseLightningModel):
 
 
 class LatentMapping(nn.Module):
+    """Linear bottleneck layer mapping between encoder feature maps and a flat latent vector."""
 
     def __init__(self, num_latents: int, source: str, bottleneck: bool) -> None:
 
@@ -176,6 +177,7 @@ class LatentMapping(nn.Module):
 
 
 class ResNetEncoder(nn.Module):
+    """ResNet encoder that maps input images to a spatial feature map."""
 
     def __init__(self, configs: list, bottleneck: bool = False) -> None:
 
@@ -236,6 +238,7 @@ class ResNetEncoder(nn.Module):
 
 
 class ResNetDecoder(nn.Module):
+    """ResNet decoder that upsamples a feature map back to the input image resolution."""
 
     def __init__(self, configs: list, bottleneck: bool = False) -> None:
 
@@ -296,6 +299,7 @@ class ResNetDecoder(nn.Module):
 
 
 class EncoderResidualBlock(nn.Module):
+    """Stack of residual layers with optional spatial downsampling for the encoder."""
 
     def __init__(
         self,
@@ -356,6 +360,7 @@ class EncoderResidualBlock(nn.Module):
 
 
 class EncoderBottleneckBlock(nn.Module):
+    """Stack of bottleneck layers with optional spatial downsampling for the encoder."""
 
     def __init__(
         self,
@@ -413,6 +418,7 @@ class EncoderBottleneckBlock(nn.Module):
 
 
 class DecoderResidualBlock(nn.Module):
+    """Stack of residual layers with optional spatial upsampling for the decoder."""
 
     def __init__(
         self,
@@ -447,6 +453,7 @@ class DecoderResidualBlock(nn.Module):
 
 
 class DecoderBottleneckBlock(nn.Module):
+    """Stack of bottleneck layers with optional spatial upsampling for the decoder."""
 
     def __init__(
         self,
@@ -480,6 +487,7 @@ class DecoderBottleneckBlock(nn.Module):
 
 
 class EncoderResidualLayer(nn.Module):
+    """Single residual layer with two convolutions and an optional downsampling skip connection."""
 
     def __init__(
         self,
@@ -544,6 +552,7 @@ class EncoderResidualLayer(nn.Module):
 
 
 class EncoderBottleneckLayer(nn.Module):
+    """Single bottleneck layer with 1x1/3x3/1x1 convolutions and an optional downsampling skip."""
 
     def __init__(
         self,
@@ -629,6 +638,7 @@ class EncoderBottleneckLayer(nn.Module):
 
 
 class DecoderResidualLayer(nn.Module):
+    """Single residual layer with two convolutions and an optional upsampling skip connection."""
 
     def __init__(
         self,
@@ -690,6 +700,7 @@ class DecoderResidualLayer(nn.Module):
 
 
 class DecoderBottleneckLayer(nn.Module):
+    """Single bottleneck layer with 1x1/3x3/1x1 convolutions and an optional upsampling skip."""
 
     def __init__(
         self,

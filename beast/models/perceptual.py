@@ -10,6 +10,8 @@ from torch import nn
 
 
 class Perceptual(nn.Module):
+    """Base perceptual loss module that compares feature representations."""
+
     def __init__(self, *, network: nn.Module, criterion: nn.Module) -> None:
         """Initialize perceptual loss module.
 
@@ -31,6 +33,8 @@ class Perceptual(nn.Module):
 
 
 class AlexPerceptual(Perceptual):
+    """Perceptual loss using the first five layers of a pretrained AlexNet."""
+
     def __init__(self, *, device: str | torch.device, **kwargs: Any) -> None:
         """Perceptual loss using pretrained AlexNet features [Pihlgren et al. 2020].
 

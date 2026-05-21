@@ -17,6 +17,8 @@ from beast.models.perceptual import AlexPerceptual
 
 
 class BatchNormProjector(nn.Module):
+    """Three-layer MLP with batch normalization for projecting encoder representations."""
+
     def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
         self.config = config
