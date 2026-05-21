@@ -61,31 +61,45 @@ beast = "beast.cli.main:main"
 
 [project.optional-dependencies]
 dev = [
-    "autopep8",
-    "flake8-pyproject",
-    "isort",
+    "pre-commit",
     "pytest",
     "pytest-html",
     "urllib3 (>=2.7.0)",  # harder requirement than "requests" to address security vulnerability
     "requests",
+    "ruff",
 ]
 
-[tool.isort]
-line_length = 99
-profile = "black"
-src_paths = ["beast", "tests"]
-
-[tool.flake8]
-max-line-length = 99
-extend-ignore = ["E203", "W503", "F722"]  # Optional: common ignores for black compatibility
+[tool.ruff]
+line-length = 99
 exclude = [
     ".git",
     "__pycache__",
     "build",
+    "configs",
     "dist",
-    ".venv",
-    "venv"
+    "docs",
+    "scripts",
 ]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (undefined names, unused imports/variables)
+    "I",   # isort
+    "UP",  # pyupgrade (modernize syntax: Tuple->tuple, Union->|, etc.)
+    "B",   # flake8-bugbear (real bugs: mutable defaults, broad excepts, etc.)
+    # "N",   # pep8-naming
+]
+ignore = [
+    "B006",  # mutable default arguments are used intentionally in some places
+    "E203",  # whitespace before ':' conflicts with black-style slice formatting
+    "F722",  # jaxtyping dim strings (e.g. "batch channels") are not Python expressions
+    "F821",  # undefined names in __all__ are flagged incorrectly for re-exports
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["beast"]
 
 [tool.pytest.ini_options]
 testpaths = "tests"

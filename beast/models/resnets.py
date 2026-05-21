@@ -4,7 +4,7 @@ Adapted from https://github.com/Horizon2333/imagenet-autoencoder
 
 """
 
-from typing import Literal, Union
+from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -61,10 +61,8 @@ class ResnetAutoencoder(BaseLightningModel):
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
     ) -> tuple[
         Float[torch.Tensor, 'batch channels img_height img_width'],         # reconstructions
-        Union[                                                              # latents
-            Float[torch.Tensor, 'batch features feat_height feat_width'],
-            Float[torch.Tensor, 'batch num_latents'],
-        ]
+        Float[torch.Tensor, 'batch features feat_height feat_width']        # latents
+        | Float[torch.Tensor, 'batch num_latents'],
     ]:
         features = self.encoder(x)
         if self.num_latents:
@@ -97,10 +95,10 @@ class ResnetAutoencoder(BaseLightningModel):
         stage: str,
         images: Float[torch.Tensor, 'batch channels img_height img_width'],
         reconstructions: Float[torch.Tensor, 'batch channels img_height img_width'],
-        latents: Union[
-            Float[torch.Tensor, 'batch features feat_height feat_width'],
-            Float[torch.Tensor, 'batch num_latents'],
-        ],
+        latents: (
+            Float[torch.Tensor, 'batch features feat_height feat_width']
+            | Float[torch.Tensor, 'batch num_latents']
+        ),
         **kwargs,
     ) -> tuple[torch.tensor, list[dict]]:
         mse_loss = nn.functional.mse_loss(images, reconstructions, reduction='mean')
@@ -159,14 +157,14 @@ class LatentMapping(nn.Module):
 
     def forward(
         self,
-        x: Union[
-            Float[torch.Tensor, 'batch num_features feature_height feature_width'],
-            Float[torch.Tensor, 'batch num_features'],
-        ]
-    ) -> Union[
-        Float[torch.Tensor, 'batch num_features feature_height feature_width'],
-        Float[torch.Tensor, 'batch num_features'],
-    ]:
+        x: (
+            Float[torch.Tensor, 'batch num_features feature_height feature_width']
+            | Float[torch.Tensor, 'batch num_features']
+        ),
+    ) -> (
+        Float[torch.Tensor, 'batch num_features feature_height feature_width']
+        | Float[torch.Tensor, 'batch num_features']
+    ):
         if self.source == 'encoder':
             if self.reduce:
                 x = self.reduce(x)
@@ -355,7 +353,7 @@ class EncoderResidualBlock(nn.Module):
                 self.add_module(f'{i + 1} EncoderLayer', layer)
 
     def forward(self, x: torch.tensor) -> torch.tensor:
-        for name, layer in self.named_children():
+        for _name, layer in self.named_children():
             x = layer(x)
         return x
 
@@ -371,7 +369,7 @@ class EncoderBottleneckBlock(nn.Module):
         downsample_method: Literal['conv', 'pool'] = 'conv',
     ) -> None:
 
-        super(EncoderBottleneckBlock, self).__init__()
+        super().__init__()
 
         if downsample_method == 'conv':
 
@@ -412,7 +410,7 @@ class EncoderBottleneckBlock(nn.Module):
                 self.add_module(f'{i + 1} EncoderLayer', layer)
 
     def forward(self, x: torch.tensor) -> torch.tensor:
-        for name, layer in self.named_children():
+        for _name, layer in self.named_children():
             x = layer(x)
         return x
 
@@ -446,7 +444,7 @@ class DecoderResidualBlock(nn.Module):
             self.add_module(f'{i} EncoderLayer', layer)
 
     def forward(self, x: torch.tensor) -> torch.tensor:
-        for name, layer in self.named_children():
+        for _name, layer in self.named_children():
             x = layer(x)
         return x
 
@@ -479,7 +477,7 @@ class DecoderBottleneckBlock(nn.Module):
             self.add_module(f'{i} EncoderLayer', layer)
 
     def forward(self, x: torch.tensor) -> torch.tensor:
-        for name, layer in self.named_children():
+        for _name, layer in self.named_children():
             x = layer(x)
         return x
 

@@ -1,6 +1,7 @@
 """Functions to build augmentation pipeline."""
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import imgaug.augmenters as iaa
 from typeguard import typechecked

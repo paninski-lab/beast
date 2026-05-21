@@ -10,9 +10,9 @@ def valid_file(path_str: str | Path) -> Path:
     """Validate that a path exists and is a file."""
     path = Path(path_str)
     if not path.exists():
-        raise IOError(f'File does not exist: {path}')
+        raise OSError(f'File does not exist: {path}')
     if not path.is_file():
-        raise IOError(f'Not a file: {path}')
+        raise OSError(f'Not a file: {path}')
     return path
 
 
@@ -21,9 +21,9 @@ def valid_dir(path_str: str | Path) -> Path:
     """Validate that a path exists and is a directory."""
     path = Path(path_str)
     if not path.exists():
-        raise IOError(f'Directory does not exist: {path}')
+        raise OSError(f'Directory does not exist: {path}')
     if not path.is_dir():
-        raise IOError(f'Not a directory: {path}')
+        raise OSError(f'Not a directory: {path}')
     return path
 
 

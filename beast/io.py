@@ -21,7 +21,7 @@ def load_config(path: str | Path) -> dict:
     path = Path(path)
     assert path.is_file(), f'{path} does not exist'
 
-    with open(path, 'r') as file:
+    with open(path) as file:
         config = yaml.safe_load(file)
 
     return config

@@ -254,7 +254,6 @@ class TestContrastBatchSampler:
             "Ranks should have non-overlapping anchors in the same epoch"
 
         # Verify roughly equal distribution per epoch
-        total_epoch_anchors = len(anchors_rank0_epoch1) + len(anchors_rank1_epoch1)
         assert abs(len(anchors_rank0_epoch1) - len(anchors_rank1_epoch1)) <= 2, \
             "Anchors should be roughly evenly distributed per epoch"
 
@@ -322,7 +321,7 @@ class TestContrastBatchSampler:
 
         # Collect indices from multiple epochs
         epoch_data = []
-        for epoch in range(3):
+        for _epoch in range(3):
             epoch_indices = []
             for batch in sampler:
                 epoch_indices.extend(batch)
@@ -453,7 +452,8 @@ class TestContrastBatchSampler:
                     pos_idx = batch[i + 1]
 
                     # Verify this is a valid anchor-positive relationship
-                    assert anchor_idx in sampler.pos_indices, f"Anchor {anchor_idx} should have positives"
+                    assert anchor_idx in sampler.pos_indices, \
+                        f"Anchor {anchor_idx} should have positives"
                     assert pos_idx in sampler.pos_indices[anchor_idx], \
                         f"Positive {pos_idx} should be valid for anchor {anchor_idx}"
 

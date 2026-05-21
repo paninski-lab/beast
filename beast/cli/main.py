@@ -24,7 +24,7 @@ def build_parser() -> ArgumentParser:
     )
 
     # register all commands from the commands module
-    for name, module in COMMANDS.items():
+    for _name, module in COMMANDS.items():
         module.register_parser(subparsers)
 
     return parser

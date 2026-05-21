@@ -16,7 +16,7 @@ class Perceptual(nn.Module):
         network: feature extractor that maps input images to feature tensors
         criterion: loss function applied to extracted features (e.g. MSELoss)
         """
-        super(Perceptual, self).__init__()
+        super().__init__()
         self.net = network
         self.criterion = criterion
         self.sigmoid = nn.Sigmoid()
@@ -45,8 +45,8 @@ class AlexPerceptual(Perceptual):
         # Extract features after second relu activation
         # Append sigmoid layer to normalize features
         perceptual_net = alex_net.features[:5].to(device)
-        # Don't record gradients for the perceptual net, the gradients will still propagate through.
+        # don't record gradients for the perceptual net; gradients will still propagate through
         for parameter in perceptual_net.parameters():
             parameter.requires_grad = False
 
-        super(AlexPerceptual, self).__init__(network=perceptual_net, **kwargs)
+        super().__init__(network=perceptual_net, **kwargs)

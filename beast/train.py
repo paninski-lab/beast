@@ -121,7 +121,9 @@ def train(config: dict, model, output_dir: str | Path):
     model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
     if rank_zero_only.rank == 0:
         log_step(
-            f"Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs", level='debug')
+            f"Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs",
+            level='debug',
+        )
 
     # ----------------------------------------------------------------------------------
     # Save configuration in output directory
@@ -171,7 +173,7 @@ def train(config: dict, model, output_dir: str | Path):
 
     if rank_zero_only.rank == 0:
         log_step("Creating PyTorch Lightning Trainer", level='debug')
-        log_step(f"  - accelerator: gpu", level='debug')
+        log_step("  - accelerator: gpu", level='debug')
         log_step(f"  - devices: {config['training']['num_gpus']}", level='debug')
         log_step(f"  - num_nodes: {config['training']['num_nodes']}", level='debug')
         log_step(f"  - max_epochs: {max_epochs}", level='debug')
@@ -194,7 +196,11 @@ def train(config: dict, model, output_dir: str | Path):
 
     # train model!
     if rank_zero_only.rank == 0:
-        log_step("About to call trainer.fit() - this may hang here if there are issues with data loading or GPU setup", level='debug')
+        log_step(
+            "About to call trainer.fit() - this may hang here if there are issues"
+            ' with data loading or GPU setup',
+            level='debug',
+        )
     trainer.fit(model=model, datamodule=datamodule)
     if rank_zero_only.rank == 0:
         log_step("trainer.fit() completed", level='debug')

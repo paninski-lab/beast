@@ -36,8 +36,8 @@ def test_run_kmeans():
 
     from beast.extraction import _run_kmeans
 
-    n_samples = int(50)
-    n_features = int(5)
+    n_samples = 50
+    n_features = 5
     n_clusters = 10
 
     data_to_cluster = np.random.rand(n_samples, n_features)

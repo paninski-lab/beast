@@ -206,7 +206,8 @@ def _make_contrastive_dataloader(
 
     IMPORTANT — why sampler= and not batch_sampler=:
     PyTorch's DataLoader has two ways to plug in a custom batch sampler:
-      (a) batch_sampler=X  → PyTorch wraps it and sets dataloader.sampler = SequentialSampler(dataset)
+      (a) batch_sampler=X  → PyTorch wraps it and sets dataloader.sampler
+          = SequentialSampler(dataset)
       (b) sampler=X, batch_size=None  → dataloader.sampler IS X
 
     Lightning computes val_check_batch from len(dataloader.sampler).

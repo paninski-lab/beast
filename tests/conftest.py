@@ -2,8 +2,8 @@ import gc
 import io
 import json
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import pytest
 import requests
@@ -25,7 +25,7 @@ def _load_dataset_metadata(dst_dir: Path) -> dict:
     """Load metadata from dataset directory."""
     metadata_file = dst_dir / '.dataset_metadata.json'
     if metadata_file.exists():
-        with open(metadata_file, 'r') as f:
+        with open(metadata_file) as f:
             return json.load(f)
     return {}
 

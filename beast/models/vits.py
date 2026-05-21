@@ -1,6 +1,5 @@
 """Vision transformer autoencoder implementation."""
 
-from typing import Dict, Optional
 
 import numpy as np
 import torch
@@ -50,7 +49,10 @@ class VisionTransformer(BaseLightningModel):
         use_pretrained = not config['model']['model_params'].get('random_init', False)
         if use_pretrained:
             log_step(
-                "Loading pretrained model from 'facebook/vit-mae-base' (this may take several minutes if downloading)...", level='debug')
+                "Loading pretrained model from 'facebook/vit-mae-base'"
+                ' (this may take several minutes if downloading)...',
+                level='debug',
+            )
             log_step("Note: Model will be cached locally after first download", level='debug')
             self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
         else:
@@ -75,7 +77,7 @@ class VisionTransformer(BaseLightningModel):
         self,
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
         return_recon: bool = True,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         results_dict = self.vit_mae(pixel_values=x, return_recon=return_recon)
         if (
             self.config['model']['model_params'].get('use_perceptual_loss', False)
@@ -175,14 +177,14 @@ class ViTMAE(ViTMAEForPreTraining):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        noise: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        noise: torch.Tensor | None = None,
+        head_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         return_latent: bool = False,
         return_recon: bool = False,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         # Setting default for return_dict based on the configuration
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if (self.training or self.config.mask_ratio > 0) or return_recon:

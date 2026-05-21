@@ -133,7 +133,7 @@ def extract_frames(
 
         # save csv file inside same output directory
         frames_to_label = np.array([
-            "img%s.%s" % (str(idx).zfill(n_digits), extension) for idx in idxs
+            f'img{str(idx).zfill(n_digits)}.{extension}' for idx in idxs
         ])
         csv_path = save_dir / 'selected_frames.csv'
         np.savetxt(csv_path, np.sort(frames_to_label), delimiter=',', fmt='%s')
@@ -268,7 +268,7 @@ def export_frames(
 
     # save out frames
     output_dir.mkdir(parents=True, exist_ok=True)
-    for frame, idx in zip(frames, frame_idxs):
+    for frame, idx in zip(frames, frame_idxs, strict=True):
         cv2.imwrite(
             filename=output_dir.joinpath(f'img{str(idx).zfill(n_digits)}.{extension}'),
             img=cv2.cvtColor(frame.transpose(1, 2, 0), cv2.COLOR_RGB2BGR),

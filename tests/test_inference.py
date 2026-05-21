@@ -172,7 +172,7 @@ class TestImagePredictionHandler:
         assert len(result['metadata']) == 2
 
         # Check metadata entries
-        for i, metadata in enumerate(result['metadata']):
+        for _i, metadata in enumerate(result['metadata']):
             assert 'original_path' in metadata
             assert 'video' in metadata
             assert 'idx' in metadata
@@ -253,7 +253,7 @@ class TestImagePredictionHandler:
         assert metadata_path.exists()
 
         # Check YAML content
-        with open(metadata_path, 'r') as f:
+        with open(metadata_path) as f:
             loaded_metadata = yaml.safe_load(f)
 
         assert loaded_metadata == test_metadata
