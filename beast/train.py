@@ -10,7 +10,6 @@ import yaml
 from lightning.pytorch import callbacks as pl_callbacks
 from lightning.pytorch import loggers as pl_loggers
 from lightning.pytorch.utilities import rank_zero_only
-from typeguard import typechecked
 
 import beast
 from beast import log_step
@@ -20,7 +19,6 @@ from beast.data.datasets import BaseDataset
 from beast.models.base import BaseLightningModel
 
 
-@typechecked
 def reset_seeds(seed: int = 0) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
     torch.manual_seed(seed)
@@ -31,7 +29,6 @@ def reset_seeds(seed: int = 0) -> None:
 
 
 @rank_zero_only
-@typechecked
 def pretty_print_config(config: dict) -> None:
     print('config file:')
     for key, val in config.items():
@@ -47,7 +44,6 @@ def pretty_print_config(config: dict) -> None:
     print('\n\n')
 
 
-@typechecked
 def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> BaseLightningModel:
 
     output_dir = Path(output_dir)
@@ -219,7 +215,6 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
     return model
 
 
-@typechecked
 def get_callbacks(
     checkpointing: bool = True,
     lr_monitor: bool = True,

@@ -4,13 +4,11 @@ import cv2
 import numpy as np
 import torch
 from torchvision import transforms
-from typeguard import typechecked
 
 from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD
 from beast.video import get_frames_from_idxs
 
 
-@typechecked
 class VideoFrameIterator:
     """Iterator that yields batches of video frames sequentially."""
 

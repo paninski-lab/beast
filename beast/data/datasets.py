@@ -10,7 +10,6 @@ import numpy as np
 import torch
 from PIL import Image
 from torchvision import transforms
-from typeguard import typechecked
 
 from beast import log_step
 from beast.data.types import ExampleDict
@@ -33,7 +32,6 @@ def _patched_prevent(axis_size: int, crop_start: int, crop_end: int) -> tuple[in
 _iaa_size._prevent_zero_size_after_crop_ = _patched_prevent
 
 
-@typechecked
 class BaseDataset(torch.utils.data.Dataset):
     """Base dataset that contains images."""
 

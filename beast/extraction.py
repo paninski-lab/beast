@@ -5,7 +5,6 @@ import cv2
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
-from typeguard import typechecked
 
 from beast.video import (
     compute_video_motion_energy,
@@ -13,7 +12,6 @@ from beast.video import (
 )
 
 
-@typechecked
 def extract_frames(
     input_path: Path | str,
     output_dir: Path | str,
@@ -150,7 +148,6 @@ def extract_frames(
     }
 
 
-@typechecked
 def _run_kmeans(data: np.ndarray, n_clusters: int, seed: int = 0) -> tuple:
     np.random.seed(seed)
     kmeans_obj = KMeans(n_clusters, n_init='auto')
@@ -160,7 +157,6 @@ def _run_kmeans(data: np.ndarray, n_clusters: int, seed: int = 0) -> tuple:
     return cluster_labels, cluster_centers
 
 
-@typechecked
 def select_frame_idxs_kmeans(
     video_file: str | Path,
     resize_dims: int = 64,
@@ -232,7 +228,6 @@ def select_frame_idxs_kmeans(
     return idxs_prototypes
 
 
-@typechecked
 def export_frames(
     video_file: str | Path,
     output_dir: str | Path,

@@ -4,10 +4,8 @@ from typing import Literal
 import lightning.pytorch as pl
 import torch
 from lightning.pytorch.utilities import rank_zero_only
-from typeguard import typechecked
 
 
-@typechecked
 class BaseLightningModel(pl.LightningModule):
     """Base Lightning Module that specific model architectures will inherit from."""
 

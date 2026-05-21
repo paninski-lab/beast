@@ -10,13 +10,11 @@ import numpy as np
 import torch
 from lightning.pytorch.utilities import rank_zero_only
 from torch.utils.data import DataLoader, Subset, random_split
-from typeguard import typechecked
 
 from beast.data.datasets import BaseDataset
 from beast.data.samplers import ContrastBatchSampler, contrastive_collate_fn
 
 
-@typechecked
 class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""
 
@@ -249,7 +247,6 @@ def _make_contrastive_dataloader(
     )
 
 
-@typechecked
 def split_sizes_from_probabilities(
     total_number: int,
     train_probability: float,

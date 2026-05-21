@@ -9,12 +9,10 @@ from typing import Literal
 import torch
 import torch.nn as nn
 from jaxtyping import Float
-from typeguard import typechecked
 
 from beast.models.base import BaseLightningModel
 
 
-@typechecked
 def get_configs(arch: str = 'resnet18') -> tuple[list[int], bool]:
     """Get number and type of layers for resnet models."""
     # True or False means wether to use BottleNeck
@@ -33,7 +31,6 @@ def get_configs(arch: str = 'resnet18') -> tuple[list[int], bool]:
         raise ValueError(f'{arch} is an invalid entry in model.model_params.backbone')
 
 
-@typechecked
 class ResnetAutoencoder(BaseLightningModel):
     """Vision Transformer implementation."""
 

@@ -10,7 +10,6 @@ from transformers import (
     ViTMAEConfig,
     ViTMAEForPreTraining,
 )
-from typeguard import typechecked
 
 from beast import log_step
 from beast.models.base import BaseLightningModel
@@ -36,7 +35,6 @@ class BatchNormProjector(nn.Module):
         return proj_hidden
 
 
-@typechecked
 class VisionTransformer(BaseLightningModel):
     """Vision Transformer implementation."""
 

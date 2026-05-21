@@ -2,10 +2,7 @@
 
 from pathlib import Path
 
-from typeguard import typechecked
 
-
-@typechecked
 def valid_file(path_str: str | Path) -> Path:
     """Validate that a path exists and is a file."""
     path = Path(path_str)
@@ -16,7 +13,6 @@ def valid_file(path_str: str | Path) -> Path:
     return path
 
 
-@typechecked
 def valid_dir(path_str: str | Path) -> Path:
     """Validate that a path exists and is a directory."""
     path = Path(path_str)
@@ -27,7 +23,6 @@ def valid_dir(path_str: str | Path) -> Path:
     return path
 
 
-@typechecked
 def config_file(path_str: str | Path) -> Path:
     """Validate a config file path."""
     path = valid_file(path_str)
@@ -37,7 +32,6 @@ def config_file(path_str: str | Path) -> Path:
     return path
 
 
-@typechecked
 def output_dir(path_str: str | Path) -> Path:
     """Create output directory if it does not exist."""
     path = Path(path_str)

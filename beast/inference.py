@@ -7,14 +7,12 @@ import numpy as np
 import torch
 import yaml
 from PIL import Image
-from typeguard import typechecked
 
 from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD, BaseDataset
 from beast.data.video import VideoFrameIterator
 from beast.models.base import BaseLightningModel
 
 
-@typechecked
 class ImagePredictionHandler:
     """Handles saving predictions while preserving directory structure."""
 
@@ -232,7 +230,6 @@ class ImagePredictionHandler:
         return metadata_path
 
 
-@typechecked
 class VideoPredictionHandler:
     """Handles saving predictions for video processing."""
 
@@ -438,7 +435,6 @@ class VideoPredictionHandler:
         return results
 
 
-@typechecked
 def predict_images(
     model: BaseLightningModel,
     output_dir: str | Path,
@@ -518,7 +514,6 @@ def predict_images(
     return results
 
 
-@typechecked
 def predict_video(
     model: BaseLightningModel,
     output_dir: str | Path,

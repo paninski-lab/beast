@@ -7,7 +7,6 @@ from typing import Any
 
 import torch
 import yaml
-from typeguard import typechecked
 
 from beast import log_step
 from beast.inference import predict_images, predict_video
@@ -28,7 +27,6 @@ def chdir(dir: str | Path) -> Generator[None, None, None]:
         os.chdir(pwd)
 
 
-@typechecked
 class Model:
     """High-level API wrapper for BEAST models.
 
