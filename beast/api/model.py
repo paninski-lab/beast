@@ -165,6 +165,8 @@ class Model:
 
         """
         image_dir = Path(image_dir)
+        if self.model_dir is None:
+            raise ValueError('model_dir is None; call train() before predict_images()')
         outputs = predict_images(
             model=self.model,
             output_dir=output_dir or self.model_dir / 'image_predictions' / image_dir.stem,
@@ -195,6 +197,8 @@ class Model:
 
         """
         video_file = Path(video_file)
+        if self.model_dir is None:
+            raise ValueError('model_dir is None; call train() before predict_video()')
         predict_video(
             model=self.model,
             output_dir=output_dir or self.model_dir / 'video_predictions',

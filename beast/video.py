@@ -153,6 +153,8 @@ def get_frames_from_idxs(
     """
     should_release = False
     if cap is None:
+        if video_file is None:
+            raise ValueError('video_file must be provided when cap is None')
         cap = cv2.VideoCapture(video_file)
         should_release = True
 
