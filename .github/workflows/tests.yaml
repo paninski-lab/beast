@@ -2,6 +2,9 @@
 name: Run Tests
 
 on:
+  push:
+    branches:
+      - main
   pull_request_target:
     types: [opened, synchronize, reopened]
 
@@ -15,6 +18,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout source for Codecov file network
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
       - name: Add SSH key to agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -34,7 +42,35 @@ jobs:
           # axon-remote.rc.zi.columbia.edu:55 SSH-2.0-OpenSSH_7.4" >> ~/.ssh/known_hosts
           # -- END
           chmod 600 ~/.ssh/known_hosts
+
       - name: Execute build script via SSH
         # -t flag is necessary to forward github cancellation event (SIGINT)
         run: |
-          ssh -tt -p 55 mw3323@axon-remote.rc.zi.columbia.edu 'sh buildbot/build_srun.sh ${{ github.event.pull_request.number }}'
+          PR="${{ github.event.pull_request.number }}"
+          ssh -tt -p 55 mw3323@axon-remote.rc.zi.columbia.edu 'sh buildbot/build_srun.sh ${PR:-0}'
+
+      - name: Copy coverage report from remote
+        run: |
+          scp -P 55 mw3323@axon-remote.rc.zi.columbia.edu:~/buildbot/coverage.xml coverage.xml
+
+      - name: Fix coverage XML source tags
+        # coverage.py emits <source>.</source> (relative) when run on the remote server;
+        # replace it with the runner's absolute checkout path so Codecov can resolve filenames.
+        # Also strip any empty <source/> tags that coverage.py may emit alongside it.
+        run: |
+          python -c "
+          import re, pathlib
+          p = pathlib.Path('coverage.xml')
+          text = p.read_text()
+          text = re.sub(r'<source></source>\s*', '', text)
+          text = text.replace('<source>.</source>', '<source>/home/runner/work/beast/beast</source>')
+          p.write_text(text)
+          "
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: paninski-lab/beast
+          override_commit: ${{ github.event.pull_request.head.sha || github.sha }}

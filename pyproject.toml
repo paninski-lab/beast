@@ -63,6 +63,7 @@ dev = [
     "pre-commit",
     "pyright",
     "pytest",
+    "pytest-cov",
     "pytest-html",
     "urllib3 (>=2.7.0)",  # harder requirement than "requests" to address security vulnerability
     "requests",
@@ -109,6 +110,27 @@ include = ["beast", "tests"]
 exclude = ["build", "configs", "data", "dist", "docs", "docker", "scripts"]
 # torch stubs don't re-export public functions at the top level (torch.tensor, torch.allclose, etc.)
 reportPrivateImportUsage = "none"
+
+[tool.coverage.run]
+# store paths relative to the repo root so that codecov can match coverage
+# data against source files in the github repo, regardless of where the tests
+# are run on the build machine. omit non-source directories to keep the report
+## focused on beast/ only.
+relative_files = true
+omit = [
+    "data/*",
+    "docs/*",
+    "configs/*",
+    "htmlcov/*",
+    "scripts/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]
 
 [tool.pytest.ini_options]
 testpaths = "tests"
