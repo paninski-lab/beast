@@ -43,3 +43,17 @@ jobs:
           echo "To see all violations without fixing, run:"
           echo "  ruff check lightning_pose tests"
           echo ""
+
+      - name: Type check with pyright
+        id: pyright
+        run: pyright
+
+      - name: Show fix instructions if type checking failed
+        if: always() && steps.pyright.outcome == 'failure'
+        run: |
+          echo ""
+          echo "Type checking failed!"
+          echo ""
+          echo "To reproduce locally, run:"
+          echo "  pyright"
+          echo ""

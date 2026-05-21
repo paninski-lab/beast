@@ -3,6 +3,7 @@
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import imgaug.augmenters.size as _iaa_size
 import numpy as np
@@ -128,16 +129,18 @@ class BaseDataset(torch.utils.data.Dataset):
             image = Image.open(img_path).convert('RGB')
         if self.imgaug_pipeline is not None:
             # expands add batch dim for imgaug
-            transformed_images = self.imgaug_pipeline(images=np.expand_dims(image, axis=0))
+            transformed_images = self.imgaug_pipeline(
+                images=np.expand_dims(np.asarray(image), axis=0)
+            )
             # get rid of the batch dim
             transformed_images = transformed_images[0]
         else:
             transformed_images = image
 
-        transformed_images = self.pytorch_transform(transformed_images)
+        transformed_tensor = cast(torch.Tensor, self.pytorch_transform(transformed_images))
 
         return ExampleDict(
-            image=transformed_images,  # shape (3, img_height, img_width)
+            image=transformed_tensor,  # shape (3, img_height, img_width)
             video=img_path.parts[-2],
             idx=idx,
             image_path=str(img_path),
