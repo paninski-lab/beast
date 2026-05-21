@@ -10,7 +10,6 @@ from transformers import (
     ViTMAEConfig,
     ViTMAEForPreTraining,
 )
-from typeguard import typechecked
 
 from beast import log_step
 from beast.models.base import BaseLightningModel
@@ -18,7 +17,7 @@ from beast.models.perceptual import AlexPerceptual
 
 
 class BatchNormProjector(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
         self.config = config
         self.proj = nn.Sequential(
@@ -31,16 +30,15 @@ class BatchNormProjector(nn.Module):
             nn.Linear(self.config.hidden_size, self.config.embed_size)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         proj_hidden = self.proj(x)
         return proj_hidden
 
 
-@typechecked
 class VisionTransformer(BaseLightningModel):
     """Vision Transformer implementation."""
 
-    def __init__(self, config):
+    def __init__(self, config: dict) -> None:
         super().__init__(config)
         # Set up ViT architecture
         vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
@@ -110,9 +108,9 @@ class VisionTransformer(BaseLightningModel):
 
     def compute_loss(
         self,
-        stage: str,
+        stage: str | None,
         **kwargs,
-    ) -> tuple[torch.tensor, list[dict]]:
+    ) -> tuple[torch.Tensor, list[dict]]:
         assert 'loss' in kwargs, "Loss is not in the kwargs"
         mse_loss = kwargs['loss']
         # add all losses here for logging
@@ -209,7 +207,7 @@ class ViTMAE(ViTMAEForPreTraining):
             embedding_output_ = torch.gather(embedding_output_, dim=1, index=index)
             # add cls token back
             embedding_output = torch.cat((embedding_output[:, :1, :], embedding_output_), dim=1)
-            encoder_outputs = self.vit.encoder(
+            encoder_outputs = self.vit.encoder(  # pyright: ignore[reportCallIssue]
                 embedding_output,
                 return_dict=return_dict,
             )
@@ -227,7 +225,7 @@ class ViTMAE(ViTMAEForPreTraining):
         decoder_outputs = self.decoder(latent, ids_restore)
         logits = decoder_outputs.logits
         # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
-        loss = self.forward_loss(pixel_values, logits, mask)
+        loss = self.forward_loss(pixel_values, logits, mask)  # pyright: ignore[reportCallIssue]
 
         if return_recon:
             return {
@@ -243,16 +241,16 @@ class ViTMAE(ViTMAEForPreTraining):
         }
 
 
-def topk(similarities, labels, k=5):
+def topk(similarities: torch.Tensor, labels: torch.Tensor, k: int = 5) -> torch.Tensor:
     if k > similarities.shape[0]:
         k = similarities.shape[0]
-    topsum = 0
+    topsum = torch.tensor(0.0, device=similarities.device)
     for i in range(k):
-        topsum += torch.sum(torch.argsort(similarities, axis=1)[:, -(i+1)] == labels) / len(labels)
+        topsum += torch.sum(torch.argsort(similarities, dim=1)[:, -(i+1)] == labels) / len(labels)
     return topsum
 
 
-def batch_wise_contrastive_loss(sim_matrix):
+def batch_wise_contrastive_loss(sim_matrix: torch.Tensor) -> dict[str, torch.Tensor]:
     N = sim_matrix.shape[0]
     # remove the diagonal from the sim_matrix
     mask = torch.eye(N, dtype=torch.bool, device=sim_matrix.device)

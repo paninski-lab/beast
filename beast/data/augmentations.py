@@ -4,10 +4,8 @@ from collections.abc import Callable
 from typing import Any
 
 import imgaug.augmenters as iaa
-from typeguard import typechecked
 
 
-@typechecked
 def imgaug_pipeline(params_dict: dict) -> Callable:
     """Create simple and flexible data transform pipeline that augments images.
 
@@ -86,7 +84,6 @@ def imgaug_pipeline(params_dict: dict) -> Callable:
     return iaa.Sequential(data_transform)
 
 
-@typechecked
 def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
     params_dict = {}
     if params == 'none':

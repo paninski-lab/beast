@@ -7,17 +7,18 @@ import lightning.pytorch as pl
 import numpy as np
 import torch
 import yaml
+from lightning.pytorch import callbacks as pl_callbacks
+from lightning.pytorch import loggers as pl_loggers
 from lightning.pytorch.utilities import rank_zero_only
-from typeguard import typechecked
 
 import beast
 from beast import log_step
 from beast.data.augmentations import imgaug_pipeline
 from beast.data.datamodules import BaseDataModule
 from beast.data.datasets import BaseDataset
+from beast.models.base import BaseLightningModel
 
 
-@typechecked
 def reset_seeds(seed: int = 0) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
     torch.manual_seed(seed)
@@ -28,7 +29,6 @@ def reset_seeds(seed: int = 0) -> None:
 
 
 @rank_zero_only
-@typechecked
 def pretty_print_config(config: dict) -> None:
     print('config file:')
     for key, val in config.items():
@@ -44,8 +44,9 @@ def pretty_print_config(config: dict) -> None:
     print('\n\n')
 
 
-@typechecked
-def train(config: dict, model, output_dir: str | Path):
+def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> BaseLightningModel:
+
+    output_dir = Path(output_dir)
 
     # Only print from rank 0
     if rank_zero_only.rank == 0:
@@ -147,7 +148,7 @@ def train(config: dict, model, output_dir: str | Path):
     # logger
     if rank_zero_only.rank == 0:
         log_step("Creating TensorBoardLogger", level='debug')
-    logger = pl.loggers.TensorBoardLogger('tb_logs', name='')
+    logger = pl_loggers.TensorBoardLogger('tb_logs', name='')
     if rank_zero_only.rank == 0:
         log_step("TensorBoardLogger created", level='debug')
 
@@ -214,7 +215,6 @@ def train(config: dict, model, output_dir: str | Path):
     return model
 
 
-@typechecked
 def get_callbacks(
     checkpointing: bool = True,
     lr_monitor: bool = True,
@@ -224,12 +224,12 @@ def get_callbacks(
     callbacks = []
 
     if lr_monitor:
-        lr_monitor = pl.callbacks.LearningRateMonitor(logging_interval='epoch')
-        callbacks.append(lr_monitor)
+        lr_monitor_cb = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
+        callbacks.append(lr_monitor_cb)
 
     # always save out best model
     if checkpointing:
-        ckpt_best_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        ckpt_best_callback = pl_callbacks.ModelCheckpoint(
             monitor='val_loss',
             mode='min',
             filename='{epoch}-{step}-best',
@@ -238,7 +238,7 @@ def get_callbacks(
 
     if ckpt_every_n_epochs:
         # if ckpt_every_n_epochs is not None, save separate checkpoint files
-        ckpt_callback = pl.callbacks.model_checkpoint.ModelCheckpoint(
+        ckpt_callback = pl_callbacks.ModelCheckpoint(
             monitor=None,
             every_n_epochs=ckpt_every_n_epochs,
             save_top_k=-1,

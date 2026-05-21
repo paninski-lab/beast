@@ -3,13 +3,13 @@
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import imgaug.augmenters.size as _iaa_size
 import numpy as np
 import torch
 from PIL import Image
 from torchvision import transforms
-from typeguard import typechecked
 
 from beast import log_step
 from beast.data.types import ExampleDict
@@ -18,7 +18,7 @@ _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
-def _patched_prevent(axis_size, crop_start, crop_end):
+def _patched_prevent(axis_size: int, crop_start: int, crop_end: int) -> tuple[int, ...]:
     """Monkey patch to fix imaug 0.4.2 compatability issue with numpy 2.x"""
     result = _iaa_size._prevent_zero_sizes_after_crops_(
         np.array([axis_size], dtype=np.int32),
@@ -32,7 +32,6 @@ def _patched_prevent(axis_size, crop_start, crop_end):
 _iaa_size._prevent_zero_size_after_crop_ = _patched_prevent
 
 
-@typechecked
 class BaseDataset(torch.utils.data.Dataset):
     """Base dataset that contains images."""
 
@@ -128,16 +127,18 @@ class BaseDataset(torch.utils.data.Dataset):
             image = Image.open(img_path).convert('RGB')
         if self.imgaug_pipeline is not None:
             # expands add batch dim for imgaug
-            transformed_images = self.imgaug_pipeline(images=np.expand_dims(image, axis=0))
+            transformed_images = self.imgaug_pipeline(
+                images=np.expand_dims(np.asarray(image), axis=0)
+            )
             # get rid of the batch dim
             transformed_images = transformed_images[0]
         else:
             transformed_images = image
 
-        transformed_images = self.pytorch_transform(transformed_images)
+        transformed_tensor = cast(torch.Tensor, self.pytorch_transform(transformed_images))
 
         return ExampleDict(
-            image=transformed_images,  # shape (3, img_height, img_width)
+            image=transformed_tensor,  # shape (3, img_height, img_width)
             video=img_path.parts[-2],
             idx=idx,
             image_path=str(img_path),

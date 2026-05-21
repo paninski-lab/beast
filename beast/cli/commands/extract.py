@@ -1,14 +1,16 @@
 """Command to extract frames from videos."""
 
+import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 from beast.cli.types import output_dir
 
 _logger = logging.getLogger('BEAST.CLI.EXTRACT')
 
 
-def register_parser(subparsers):
+def register_parser(subparsers: Any) -> None:
     """Register the extract command parser."""
 
     parser = subparsers.add_parser(
@@ -54,7 +56,7 @@ def register_parser(subparsers):
     )
 
 
-def handle(args):
+def handle(args: argparse.Namespace) -> None:
     """Handle the extract command execution."""
 
     _logger.info(f'Running frame extraction with {args.method} method')

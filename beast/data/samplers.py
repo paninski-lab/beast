@@ -1,12 +1,17 @@
 import re
+from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
 from torch.utils.data import Sampler
 
 
-def extract_anchor_indices(image_list, idx_offset=1):
+def extract_anchor_indices(
+    image_list: Sequence[str | Path],
+    idx_offset: int = 1,
+) -> tuple[list[int], dict[int, list[int]]]:
     """
     Extract anchor indices from image paths that have valid neighboring frames.
 
@@ -96,7 +101,14 @@ class ContrastBatchSampler(Sampler):
         seen in ``__init__`` are always correct at the time of construction.
     """
 
-    def __init__(self, dataset, batch_size, idx_offset=1, shuffle=True, seed=42):
+    def __init__(
+        self,
+        dataset: Any,
+        batch_size: int,
+        idx_offset: int = 1,
+        shuffle: bool = True,
+        seed: int = 42,
+    ) -> None:
 
         super().__init__()
 
@@ -136,7 +148,7 @@ class ContrastBatchSampler(Sampler):
         self.epoch = 0
         self.seed = seed
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[list[int]]:
 
         self.epoch += 1
 
@@ -212,11 +224,11 @@ class ContrastBatchSampler(Sampler):
             yield batch
             batches_returned += 1
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.num_batches
 
 
-def contrastive_collate_fn(batch_of_dicts):
+def contrastive_collate_fn(batch_of_dicts: list[dict]) -> dict[str, torch.Tensor]:
     """
     Splits a batch of dictionaries into separate lists for refs and pos.
 

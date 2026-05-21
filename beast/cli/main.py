@@ -30,7 +30,7 @@ def build_parser() -> ArgumentParser:
     return parser
 
 
-def main():
+def main() -> None:
     """Main CLI entry point."""
 
     # configure logging once at application startup

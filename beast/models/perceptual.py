@@ -8,7 +8,7 @@ from torch import nn
 
 
 class Perceptual(nn.Module):
-    def __init__(self, *, network: nn.Module, criterion: nn.Module):
+    def __init__(self, *, network: nn.Module, criterion: nn.Module) -> None:
         """Initialize perceptual loss module.
 
         Parameters
@@ -29,7 +29,7 @@ class Perceptual(nn.Module):
 
 
 class AlexPerceptual(Perceptual):
-    def __init__(self, *, device: str | torch.device, **kwargs: Any):
+    def __init__(self, *, device: str | torch.device, **kwargs: Any) -> None:
         """Perceptual loss using pretrained AlexNet features [Pihlgren et al. 2020].
 
         Extracts features from the first five layers of AlexNet (pretrained on ImageNet)

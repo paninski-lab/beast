@@ -182,5 +182,5 @@ runs/
 app.log
 
 # data
-data/
+/data/
 *.png

@@ -23,11 +23,13 @@ def test_copy_and_reformat_video_file(video_file, tmpdir):
     # check when dst_dir exists
     video_file_new_1 = copy_and_reformat_video_file(video_file, tmpdir, remove_old=False)
     assert video_file.is_file()
+    assert video_file_new_1 is not None
     assert check_codec_format(video_file_new_1)
     # check when dst_dir does not exist
     dst_dir = tmpdir.joinpath('subdir')
     video_file_new_2 = copy_and_reformat_video_file(video_file, dst_dir, remove_old=False)
     assert video_file.is_file()
+    assert video_file_new_2 is not None
     assert check_codec_format(video_file_new_2)
 
 

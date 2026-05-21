@@ -365,7 +365,7 @@ class TestVideoPredictionHandler:
         # create test video file
         video_file = temp_source / 'video1.mp4'
         # create a simple test video with 10 frames
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # type: ignore[attr-defined]
         out = cv2.VideoWriter(str(video_file), fourcc, 10.0, (64, 64))
         for i in range(10):
             # create frames with different colors

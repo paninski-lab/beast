@@ -3,24 +3,24 @@
 import copy
 import multiprocessing
 import os
+from typing import cast
 
 import lightning.pytorch as pl
 import numpy as np
 import torch
 from lightning.pytorch.utilities import rank_zero_only
 from torch.utils.data import DataLoader, Subset, random_split
-from typeguard import typechecked
 
+from beast.data.datasets import BaseDataset
 from beast.data.samplers import ContrastBatchSampler, contrastive_collate_fn
 
 
-@typechecked
 class BaseDataModule(pl.LightningDataModule):
     """Splits a labeled dataset into train, val, and test data loaders."""
 
     def __init__(
         self,
-        dataset: torch.utils.data.Dataset,
+        dataset: BaseDataset,
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 16,
@@ -64,17 +64,17 @@ class BaseDataModule(pl.LightningDataModule):
                 self.num_workers = int(slurm_cpus)
             else:
                 # Fallback to os.cpu_count()
-                self.num_workers = os.cpu_count()
+                self.num_workers = os.cpu_count() or 0
         self.train_probability = train_probability
         self.val_probability = val_probability
         self.test_probability = test_probability
-        self.train_dataset = None  # populated by self.setup()
-        self.val_dataset = None  # populated by self.setup()
-        self.test_dataset = None  # populated by self.setup()
+        self.train_dataset: Subset | None = None  # populated by self.setup()
+        self.val_dataset: Subset | None = None  # populated by self.setup()
+        self.test_dataset: Subset | None = None  # populated by self.setup()
         self.seed = seed
         self.sampler = None
 
-    def setup(self, stage: str = None) -> None:
+    def setup(self, stage: str | None = None) -> None:
 
         datalen = self.dataset.__len__()
 
@@ -99,19 +99,26 @@ class BaseDataModule(pl.LightningDataModule):
             # we can't simply change the imgaug pipeline in the datasets after they've been split
             # because the subsets actually point to the same underlying dataset, so we create
             # separate datasets here
-            split_fn = self._sequential_split if self.use_sampler else random_split
-            train_idxs, val_idxs, test_idxs = split_fn(
-                range(len(self.dataset)),
-                data_splits_list,
-                generator=torch.Generator().manual_seed(self.seed),
-            )
+            generator = torch.Generator().manual_seed(self.seed)
+            if self.use_sampler:
+                train_split, val_split, test_split = self._sequential_split(
+                    range(len(self.dataset)), data_splits_list, generator=generator,
+                )
+                train_idxs = list(train_split)
+                val_idxs = list(val_split)
+                test_idxs = list(test_split)
+            else:
+                splits = random_split(self.dataset, data_splits_list, generator=generator)
+                train_idxs = list(splits[0].indices)
+                val_idxs = list(splits[1].indices)
+                test_idxs = list(splits[2].indices)
 
-            self.train_dataset = Subset(copy.deepcopy(self.dataset), indices=list(train_idxs))
-            self.val_dataset = Subset(copy.deepcopy(self.dataset), indices=list(val_idxs))
-            self.test_dataset = Subset(copy.deepcopy(self.dataset), indices=list(test_idxs))
+            self.train_dataset = Subset(copy.deepcopy(self.dataset), indices=train_idxs)
+            self.val_dataset = Subset(copy.deepcopy(self.dataset), indices=val_idxs)
+            self.test_dataset = Subset(copy.deepcopy(self.dataset), indices=test_idxs)
 
-            self.val_dataset.dataset.imgaug_pipeline = None
-            self.test_dataset.dataset.imgaug_pipeline = None
+            cast(BaseDataset, self.val_dataset.dataset).imgaug_pipeline = None
+            cast(BaseDataset, self.test_dataset.dataset).imgaug_pipeline = None
 
         if rank_zero_only.rank == 0:
             print(
@@ -123,7 +130,11 @@ class BaseDataModule(pl.LightningDataModule):
             )
 
     @staticmethod
-    def _sequential_split(dataset_or_range, split_sizes, generator=None):
+    def _sequential_split(
+        idxs: range,
+        split_sizes: list[int],
+        generator=None,
+    ) -> tuple[range, range, range]:
         """Create sequential splits: first portion for train, second for val, third for test.
 
         'generator' argument needed to match kwargs of random_split function
@@ -137,16 +148,13 @@ class BaseDataModule(pl.LightningDataModule):
         test_end = val_end + test_size
 
         # Create sequential splits
-        train_split = dataset_or_range[:train_end]
-        val_split = dataset_or_range[train_end:val_end]
-        test_split = dataset_or_range[val_end:test_end]
-
-        return train_split, val_split, test_split
+        return idxs[:train_end], idxs[train_end:val_end], idxs[val_end:test_end]
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
+        assert self.train_dataset is not None, 'call setup() before train_dataloader()'
         if self.use_sampler:
             return _make_contrastive_dataloader(
-                dataset=self.train_dataset,
+                dataset=cast(BaseDataset, self.train_dataset),
                 batch_size=self.train_batch_size,
                 seed=self.seed,
                 num_workers=self.num_workers,
@@ -165,6 +173,7 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
+        assert self.val_dataset is not None, 'call setup() before val_dataloader()'
         return DataLoader(
             self.val_dataset,
             batch_size=self.val_batch_size,
@@ -177,6 +186,7 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
+        assert self.test_dataset is not None, 'call setup() before test_dataloader()'
         return DataLoader(
             self.test_dataset,
             batch_size=self.test_batch_size,
@@ -196,7 +206,7 @@ class BaseDataModule(pl.LightningDataModule):
 
 
 def _make_contrastive_dataloader(
-    dataset: torch.utils.data.Dataset,
+    dataset: BaseDataset,
     batch_size: int,
     seed: int,
     num_workers: int,
@@ -237,7 +247,6 @@ def _make_contrastive_dataloader(
     )
 
 
-@typechecked
 def split_sizes_from_probabilities(
     total_number: int,
     train_probability: float,
@@ -266,7 +275,11 @@ def split_sizes_from_probabilities(
         val_probability = round(remaining_probability / 2, 5)
         test_probability = round(remaining_probability / 2, 5)
     elif test_probability is None:
+        assert val_probability is not None
         test_probability = 1.0 - train_probability - val_probability
+
+    assert val_probability is not None
+    assert test_probability is not None
 
     # probabilities should add to one
     assert test_probability + train_probability + val_probability == 1.0

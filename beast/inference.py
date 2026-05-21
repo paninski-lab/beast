@@ -7,14 +7,12 @@ import numpy as np
 import torch
 import yaml
 from PIL import Image
-from typeguard import typechecked
 
 from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD, BaseDataset
 from beast.data.video import VideoFrameIterator
 from beast.models.base import BaseLightningModel
 
 
-@typechecked
 class ImagePredictionHandler:
     """Handles saving predictions while preserving directory structure."""
 
@@ -155,7 +153,7 @@ class ImagePredictionHandler:
 
     def process_predictions(
         self,
-        predictions: list[dict],
+        predictions: list,
         save_reconstructions: bool = True,
         save_latents: bool = False,
     ) -> dict[str, Any]:
@@ -232,7 +230,6 @@ class ImagePredictionHandler:
         return metadata_path
 
 
-@typechecked
 class VideoPredictionHandler:
     """Handles saving predictions for video processing."""
 
@@ -276,7 +273,7 @@ class VideoPredictionHandler:
         self.mean = torch.Tensor(_IMAGENET_MEAN).view(1, 1, 3)
         self.std = torch.Tensor(_IMAGENET_STD).view(1, 1, 3)
 
-    def tensor_to_numpy_bgr(self, tensor: torch.Tensor):
+    def tensor_to_numpy_bgr(self, tensor: torch.Tensor) -> np.ndarray:
         """Convert tensor (C, H, W) to OpenCV BGR format."""
         # handle different tensor formats
         if tensor.dim() == 4:  # (B, C, H, W) - take first batch item
@@ -311,7 +308,7 @@ class VideoPredictionHandler:
             output_video_path = self.output_dir / f'{self.video_file.stem}_reconstruction.mp4'
 
             # Use mp4v codec for better compatibility
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # type: ignore[attr-defined]
 
             self.reconstruction_writer = cv2.VideoWriter(
                 str(output_video_path),
@@ -351,6 +348,7 @@ class VideoPredictionHandler:
 
                 if self.reconstruction_writer is None:
                     self._init_video_writer()
+                assert self.reconstruction_writer is not None
 
                 # convert tensor to BGR numpy array
                 frame_bgr = self.tensor_to_numpy_bgr(reconstructions[i])
@@ -370,7 +368,7 @@ class VideoPredictionHandler:
 
     def process_predictions(
         self,
-        predictions: list[dict],
+        predictions: list,
         save_reconstructions: bool = True,
         save_latents: bool = True,
     ) -> dict[str, Any]:
@@ -437,7 +435,6 @@ class VideoPredictionHandler:
         return results
 
 
-@typechecked
 def predict_images(
     model: BaseLightningModel,
     output_dir: str | Path,
@@ -505,6 +502,7 @@ def predict_images(
     # run inference
     trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
     predictions = trainer.predict(model, dataloaders=dataloader, return_predictions=True)
+    assert predictions is not None
 
     # process outputs
     results = handler.process_predictions(
@@ -516,7 +514,6 @@ def predict_images(
     return results
 
 
-@typechecked
 def predict_video(
     model: BaseLightningModel,
     output_dir: str | Path,
@@ -556,6 +553,7 @@ def predict_video(
     # run inference
     trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
     predictions = trainer.predict(model, dataloaders=dataloader, return_predictions=True)
+    assert predictions is not None
 
     # process outputs
     handler.process_predictions(

@@ -5,10 +5,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 from tqdm import tqdm
-from typeguard import typechecked
 
 
-@typechecked
 def check_codec_format(input_file: str | Path) -> bool:
     """Run FFprobe command to check if video codec and pixel format match DALI requirements."""
     ffmpeg_cmd = f'ffmpeg -i {str(input_file)}'
@@ -25,7 +23,6 @@ def check_codec_format(input_file: str | Path) -> bool:
     return is_codec
 
 
-@typechecked
 def reencode_video(input_file: str | Path, output_file: str | Path) -> None:
     """Reencode video into H.264 format using ffmpeg from a subprocess.
 
@@ -49,7 +46,6 @@ def reencode_video(input_file: str | Path, output_file: str | Path) -> None:
     subprocess.run(ffmpeg_cmd, shell=True)
 
 
-@typechecked
 def copy_and_reformat_video_file(
     video_file: str | Path,
     dst_dir: str | Path,
@@ -68,7 +64,8 @@ def copy_and_reformat_video_file(
     src = Path(video_file)
 
     # make sure copied vid has mp4 extension
-    dst = Path(dst_dir).joinpath(video_file.stem + '.mp4')
+    dst_dir = Path(dst_dir)
+    dst = dst_dir.joinpath(src.stem + '.mp4')
 
     # check 0: do we even need to reformat?
     if dst.is_file():
@@ -101,7 +98,6 @@ def copy_and_reformat_video_file(
     return dst
 
 
-@typechecked
 def copy_and_reformat_video_directory(
     src_dir: str | Path,
     dst_dir: str | Path,
@@ -131,7 +127,6 @@ def copy_and_reformat_video_directory(
             copy_and_reformat_video_file(src, dst_dir, remove_old)
 
 
-@typechecked
 def get_frames_from_idxs(
     video_file: str | Path | None,
     idxs: np.ndarray,
@@ -152,6 +147,8 @@ def get_frames_from_idxs(
     """
     should_release = False
     if cap is None:
+        if video_file is None:
+            raise ValueError('video_file must be provided when cap is None')
         cap = cv2.VideoCapture(video_file)
         should_release = True
 
@@ -181,7 +178,6 @@ def get_frames_from_idxs(
     return frames
 
 
-@typechecked
 def compute_video_motion_energy(
     video_file: str | Path,
     resize_dims: int = 32,
@@ -222,7 +218,6 @@ def compute_video_motion_energy(
         return me
 
 
-@typechecked
 def read_nth_frames(
     video_file: str | Path,
     n: int = 1,

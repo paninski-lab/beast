@@ -13,8 +13,8 @@ def test_perceptual_forward():
     )
     with torch.no_grad():
         # make weights small to avoid NaNs
-        mock_net[0].weight.fill_(0.01)
-        mock_net[0].bias.zero_()
+        mock_net[0].weight.fill_(0.01)  # type: ignore[union-attr]
+        mock_net[0].bias.zero_()  # type: ignore[union-attr]
     criterion = torch.nn.MSELoss()
     perceptual = Perceptual(network=mock_net, criterion=criterion)
     torch.manual_seed(1)

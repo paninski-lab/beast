@@ -1,12 +1,12 @@
 import contextlib
 import os
 import time
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
 import torch
 import yaml
-from typeguard import typechecked
 
 from beast import log_step
 from beast.inference import predict_images, predict_video
@@ -18,7 +18,7 @@ from beast.train import train
 
 # TODO: Replace with contextlib.chdir in python 3.11.
 @contextlib.contextmanager
-def chdir(dir: str | Path):
+def chdir(dir: str | Path) -> Generator[None, None, None]:
     pwd = os.getcwd()
     os.chdir(dir)
     try:
@@ -27,7 +27,6 @@ def chdir(dir: str | Path):
         os.chdir(pwd)
 
 
-@typechecked
 class Model:
     """High-level API wrapper for BEAST models.
 
@@ -52,7 +51,7 @@ class Model:
         self.model_dir = Path(model_dir) if model_dir is not None else None
 
     @classmethod
-    def from_dir(cls, model_dir: str | Path):
+    def from_dir(cls, model_dir: str | Path) -> 'Model':
         """Load a model from a directory.
 
         Parameters
@@ -90,7 +89,7 @@ class Model:
         return cls(model, config, model_dir)
 
     @classmethod
-    def from_config(cls, config_path: str | Path | dict):
+    def from_config(cls, config_path: str | Path | dict) -> 'Model':
         """Create a new model from a config file.
 
         Parameters
@@ -129,7 +128,7 @@ class Model:
 
         return cls(model, config, model_dir=None)
 
-    def train(self, output_dir: str | Path = 'runs/default'):
+    def train(self, output_dir: str | Path = 'runs/default') -> None:
         """Train the model using PyTorch Lightning.
 
         Parameters
@@ -165,6 +164,8 @@ class Model:
 
         """
         image_dir = Path(image_dir)
+        if self.model_dir is None:
+            raise ValueError('model_dir is None; call train() before predict_images()')
         outputs = predict_images(
             model=self.model,
             output_dir=output_dir or self.model_dir / 'image_predictions' / image_dir.stem,
@@ -195,6 +196,8 @@ class Model:
 
         """
         video_file = Path(video_file)
+        if self.model_dir is None:
+            raise ValueError('model_dir is None; call train() before predict_video()')
         predict_video(
             model=self.model,
             output_dir=output_dir or self.model_dir / 'video_predictions',
