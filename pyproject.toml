@@ -117,6 +117,7 @@ reportPrivateImportUsage = "none"
 # are run on the build machine. omit non-source directories to keep the report
 ## focused on beast/ only.
 relative_files = true
+source = ["beast"]
 omit = [
     "data/*",
     "docs/*",
