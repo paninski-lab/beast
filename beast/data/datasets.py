@@ -1,8 +1,8 @@
 """Dataset objects store images and augmentation pipeline."""
 
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import imgaug.augmenters.size as _iaa_size
 import numpy as np
@@ -66,18 +66,26 @@ class BaseDataset(torch.utils.data.Dataset):
         scan_start = time.time()
         try:
             log_step(
-                f"Starting to scan for PNG files in {self.data_dir} (this may take a while for large directories)...", level='debug')
+                f"Starting to scan for PNG files in {self.data_dir}"
+                ' (this may take a while for large directories)...',
+                level='debug',
+            )
             self.image_list = sorted(list(self.data_dir.rglob('*.png')))
             scan_duration = time.time() - scan_start
             log_step(
-                f"Finished scanning. Found {len(self.image_list)} PNG files in {scan_duration:.2f} seconds", level='debug')
+                f"Finished scanning. Found {len(self.image_list)} PNG files"
+                f' in {scan_duration:.2f} seconds',
+                level='debug',
+            )
         except Exception as e:
             log_step(f"ERROR during file scanning: {e}", level='error')
             raise
         if len(self.image_list) == 0:
             raise ValueError(f'{self.data_dir} does not contain image data in png format')
         log_step(
-            f"BaseDataset initialization complete with {len(self.image_list)} images", level='debug')
+            f"BaseDataset initialization complete with {len(self.image_list)} images",
+            level='debug',
+        )
 
         # send image to tensor, resize to canonical dimensions, and normalize
         pytorch_transform_list = [
