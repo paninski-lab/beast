@@ -18,7 +18,7 @@ from beast.models.perceptual import AlexPerceptual
 
 
 class BatchNormProjector(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: ViTMAEConfig) -> None:
         super().__init__()
         self.config = config
         self.proj = nn.Sequential(
@@ -31,7 +31,7 @@ class BatchNormProjector(nn.Module):
             nn.Linear(self.config.hidden_size, self.config.embed_size)
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         proj_hidden = self.proj(x)
         return proj_hidden
 
@@ -40,7 +40,7 @@ class BatchNormProjector(nn.Module):
 class VisionTransformer(BaseLightningModel):
     """Vision Transformer implementation."""
 
-    def __init__(self, config):
+    def __init__(self, config: dict) -> None:
         super().__init__(config)
         # Set up ViT architecture
         vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
@@ -243,7 +243,7 @@ class ViTMAE(ViTMAEForPreTraining):
         }
 
 
-def topk(similarities, labels, k=5):
+def topk(similarities: torch.Tensor, labels: torch.Tensor, k: int = 5) -> torch.Tensor:
     if k > similarities.shape[0]:
         k = similarities.shape[0]
     topsum = torch.tensor(0.0)
@@ -252,7 +252,7 @@ def topk(similarities, labels, k=5):
     return topsum
 
 
-def batch_wise_contrastive_loss(sim_matrix):
+def batch_wise_contrastive_loss(sim_matrix: torch.Tensor) -> dict[str, torch.Tensor]:
     N = sim_matrix.shape[0]
     # remove the diagonal from the sim_matrix
     mask = torch.eye(N, dtype=torch.bool, device=sim_matrix.device)

@@ -1,6 +1,7 @@
 import contextlib
 import os
 import time
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ from beast.train import train
 
 # TODO: Replace with contextlib.chdir in python 3.11.
 @contextlib.contextmanager
-def chdir(dir: str | Path):
+def chdir(dir: str | Path) -> Generator[None, None, None]:
     pwd = os.getcwd()
     os.chdir(dir)
     try:
@@ -52,7 +53,7 @@ class Model:
         self.model_dir = Path(model_dir) if model_dir is not None else None
 
     @classmethod
-    def from_dir(cls, model_dir: str | Path):
+    def from_dir(cls, model_dir: str | Path) -> 'Model':
         """Load a model from a directory.
 
         Parameters
@@ -90,7 +91,7 @@ class Model:
         return cls(model, config, model_dir)
 
     @classmethod
-    def from_config(cls, config_path: str | Path | dict):
+    def from_config(cls, config_path: str | Path | dict) -> 'Model':
         """Create a new model from a config file.
 
         Parameters
@@ -129,7 +130,7 @@ class Model:
 
         return cls(model, config, model_dir=None)
 
-    def train(self, output_dir: str | Path = 'runs/default'):
+    def train(self, output_dir: str | Path = 'runs/default') -> None:
         """Train the model using PyTorch Lightning.
 
         Parameters

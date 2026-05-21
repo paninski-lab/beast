@@ -19,7 +19,7 @@ _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
-def _patched_prevent(axis_size, crop_start, crop_end):
+def _patched_prevent(axis_size: int, crop_start: int, crop_end: int) -> tuple[int, ...]:
     """Monkey patch to fix imaug 0.4.2 compatability issue with numpy 2.x"""
     result = _iaa_size._prevent_zero_sizes_after_crops_(
         np.array([axis_size], dtype=np.int32),

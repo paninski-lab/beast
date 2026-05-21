@@ -53,7 +53,7 @@ class VideoFrameIterator:
         # initialize frame counter
         self.current_frame = 0
 
-    def __iter__(self):
+    def __iter__(self) -> 'VideoFrameIterator':
         """Return the iterator object."""
         return self
 
@@ -100,16 +100,16 @@ class VideoFrameIterator:
         }
         return batch_dict
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Return the number of batches."""
         return (self.total_frames + self.batch_size - 1) // self.batch_size
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Clean up the video capture object."""
         if hasattr(self, 'cap') and self.cap is not None:
             self.cap.release()
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset the iterator to the beginning of the video."""
         self.current_frame = 0
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)

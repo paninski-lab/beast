@@ -15,7 +15,7 @@ from beast.models.base import BaseLightningModel
 
 
 @typechecked
-def get_configs(arch='resnet18') -> tuple:
+def get_configs(arch: str = 'resnet18') -> tuple[list[int], bool]:
     """Get number and type of layers for resnet models."""
     # True or False means wether to use BottleNeck
 

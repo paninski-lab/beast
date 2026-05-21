@@ -276,7 +276,7 @@ class VideoPredictionHandler:
         self.mean = torch.Tensor(_IMAGENET_MEAN).view(1, 1, 3)
         self.std = torch.Tensor(_IMAGENET_STD).view(1, 1, 3)
 
-    def tensor_to_numpy_bgr(self, tensor: torch.Tensor):
+    def tensor_to_numpy_bgr(self, tensor: torch.Tensor) -> np.ndarray:
         """Convert tensor (C, H, W) to OpenCV BGR format."""
         # handle different tensor formats
         if tensor.dim() == 4:  # (B, C, H, W) - take first batch item

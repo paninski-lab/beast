@@ -1,12 +1,14 @@
 """Command to run model inference on videos."""
 
+import argparse
 import logging
 from pathlib import Path
+from typing import Any
 
 _logger = logging.getLogger('BEAST.CLI.PREDICT')
 
 
-def register_parser(subparsers):
+def register_parser(subparsers: Any) -> None:
     """Register the predict command parser."""
 
     parser = subparsers.add_parser(
@@ -55,7 +57,7 @@ def register_parser(subparsers):
     )
 
 
-def handle(args):
+def handle(args: argparse.Namespace) -> None:
     """Handle the predict command execution."""
 
     _logger.info(f'Running inference with model from: {args.model}')

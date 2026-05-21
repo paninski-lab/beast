@@ -17,6 +17,7 @@ from beast import log_step
 from beast.data.augmentations import imgaug_pipeline
 from beast.data.datamodules import BaseDataModule
 from beast.data.datasets import BaseDataset
+from beast.models.base import BaseLightningModel
 
 
 @typechecked
@@ -47,7 +48,7 @@ def pretty_print_config(config: dict) -> None:
 
 
 @typechecked
-def train(config: dict, model, output_dir: str | Path):
+def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> BaseLightningModel:
 
     output_dir = Path(output_dir)
 
