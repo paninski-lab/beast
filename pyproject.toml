@@ -110,6 +110,20 @@ exclude = ["build", "configs", "data", "dist", "docs", "docker", "scripts"]
 # torch stubs don't re-export public functions at the top level (torch.tensor, torch.allclose, etc.)
 reportPrivateImportUsage = "none"
 
+[tool.coverage.run]
+# store paths relative to the repo root so that codecov can match coverage
+# data against source files in the github repo, regardless of where the tests
+# are run on the build machine.
+relative_files = true
+source = ["beast"]
+
+[tool.coverage.report]
+omit = ["*/tests/*"]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]
+
 [tool.pytest.ini_options]
 testpaths = "tests"
 generate_report_on_test = "True"

@@ -16,13 +16,7 @@ BASE_DIR=/local/$(whoami)/builds
 TARGET_DIR=$BASE_DIR/$(date '+%Y_%m_%d-%H_%M_%S')
 CONDA_ENV=beast_build
 
-# Check if the PR number argument is provided
-if [ $# -eq 0 ]; then
-  echo "Error: Pull request number is required as the first argument."
-  echo "Usage: $0 <PR_NUMBER>"
-  exit 1
-fi
-PR_NUMBER="$1"
+PR_NUMBER="${1:-0}"
 
 echo "Running from $(hostname)"
 
@@ -30,9 +24,10 @@ echo "Running from $(hostname)"
 echo "Setting up environment..."
 source ~/.bashrc
 ml Miniforge-24.7.1-2
-conda activate $CONDA_ENV
 ml gcc/14.1                        # satisfies NumPy >= 2 requirement
 export LD_PRELOAD=/home/$(whoami)/.conda/envs/$CONDA_ENV/lib/libstdc++.so.6
+export LD_LIBRARY_PATH=/share/apps/spack/gcc/14.1/lib64:$LD_LIBRARY_PATH
+conda activate $CONDA_ENV
 echo "Active conda environment: $CONDA_ENV"
 echo "Python location: $(which python)"
 echo "Pip location $(which pip)"
@@ -52,14 +47,20 @@ done
 git init "$TARGET_DIR"
 cd "$TARGET_DIR"
 git remote add upstream "https://github.com/$USER/$REPO_NAME.git"
-git fetch upstream "refs/pull/$PR_NUMBER/merge"
-git checkout FETCH_HEAD
+if [ "$PR_NUMBER" -eq 0 ]; then
+  echo "No PR number provided; checking out main."
+  git fetch upstream main
+  git checkout FETCH_HEAD
+else
+  git fetch upstream "refs/pull/$PR_NUMBER/merge"
+  git checkout FETCH_HEAD
+fi
 
-# Install beast with checks
-pip install -e .
+# Install with checks
+pip install -e ".[dev]"
 echo "Pip install exit code: $?"
 pip show beast
 python -c "import beast; print('Beast location:', beast.__file__); print('Beast import successful')"
 
 # Run with html reporting.
-pytest --html=report.html --self-contained-html
+pytest --html=report.html --self-contained-html --cov=. --cov-report=xml:$HOME/buildbot_beast/coverage.xml tests/
