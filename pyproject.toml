@@ -123,7 +123,7 @@ omit = [
     "configs/*",
     "htmlcov/*",
     "scripts/*",
-    "*/tests/*",
+    "tests/*",
 ]
 
 [tool.coverage.report]
