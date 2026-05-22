@@ -81,6 +81,27 @@ class TestBaseDataModule:
         with pytest.raises(ValueError, match='Sampler cannot be used without augmentations'):
             dm.setup()
 
+    def test_train_dataloader_without_setup_raises(self, base_dataset) -> None:
+        # Arrange
+        dm = BaseDataModule(dataset=base_dataset, train_probability=0.8)
+        # Act / Assert
+        with pytest.raises(RuntimeError, match='call setup()'):
+            dm.train_dataloader()
+
+    def test_val_dataloader_without_setup_raises(self, base_dataset) -> None:
+        # Arrange
+        dm = BaseDataModule(dataset=base_dataset, train_probability=0.8)
+        # Act / Assert
+        with pytest.raises(RuntimeError, match='call setup()'):
+            dm.val_dataloader()
+
+    def test_test_dataloader_without_setup_raises(self, base_dataset) -> None:
+        # Arrange
+        dm = BaseDataModule(dataset=base_dataset, train_probability=0.8)
+        # Act / Assert
+        with pytest.raises(RuntimeError, match='call setup()'):
+            dm.test_dataloader()
+
     def test_slurm_env_var_sets_num_workers(self, data_dir, monkeypatch) -> None:
         # Arrange — SLURM_CPUS_PER_TASK present; num_workers should be read from it
 
@@ -172,3 +193,13 @@ class TestSplitSizesFromProbabilities:
 
         with pytest.raises(ValueError):
             split_sizes_from_probabilities(1, train_probability=0.95)
+
+    def test_probabilities_not_summing_to_one_raises(self) -> None:
+
+        with pytest.raises(ValueError, match='must sum to 1.0'):
+            split_sizes_from_probabilities(
+                100,
+                train_probability=0.8,
+                val_probability=0.1,
+                test_probability=0.2,
+            )

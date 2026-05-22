@@ -1,6 +1,7 @@
 import shutil
 import tempfile
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import cv2
 import numpy as np
@@ -9,7 +10,12 @@ import torch
 import yaml
 from PIL import Image
 
-from beast.inference import ImagePredictionHandler, VideoPredictionHandler
+from beast.inference import (
+    ImagePredictionHandler,
+    VideoPredictionHandler,
+    predict_images,
+    predict_video,
+)
 
 
 class TestImagePredictionHandler:
@@ -500,3 +506,105 @@ class TestVideoPredictionHandler:
             assert result['latents_shape'] == (4, 128)
         else:
             assert result['latents_file'] is None
+
+
+class TestVideoPredictionHandlerInitVideoWriter:
+    """Test the _init_video_writer error path."""
+
+    def test_init_video_writer_bad_path_raises(self, tmp_path, video_file) -> None:
+        # Arrange — handler with a bad output path so the writer fails to open
+        handler = VideoPredictionHandler(tmp_path / 'out', video_file)
+        mock_writer = Mock()
+        mock_writer.isOpened.return_value = False
+        with patch('beast.inference.cv2.VideoWriter', return_value=mock_writer):
+            # Act / Assert
+            with pytest.raises(ValueError, match='Failed to open video writer'):
+                handler._init_video_writer()
+
+
+class TestPredictImages:
+    """Test the predict_images standalone function."""
+
+    def test_predict_images_none_predictions_raises(self, data_dir, tmp_path) -> None:
+        # Arrange — trainer returns None instead of a prediction list
+        mock_model = Mock()
+        with patch('beast.inference.pl.Trainer') as MockTrainer:
+            MockTrainer.return_value.predict.return_value = None
+            # Act / Assert
+            with pytest.raises(RuntimeError, match="trainer.predict\\(\\) returned None"):
+                predict_images(
+                    model=mock_model,
+                    output_dir=tmp_path,
+                    source_dir=data_dir,
+                )
+
+    def test_predict_images_returns_results(self, data_dir, tmp_path) -> None:
+        # Arrange — mock trainer to return a minimal prediction list
+        mock_model = Mock()
+        mock_predictions = [
+            {
+                'reconstructions': torch.rand(2, 3, 224, 224),
+                'latents': torch.rand(2, 128),
+                'metadata': {
+                    'video': ['vid', 'vid'],
+                    'idx': [torch.tensor(0), torch.tensor(1)],
+                    'image_paths': [
+                        next(data_dir.rglob('*.png')),
+                        next(data_dir.rglob('*.png')),
+                    ],
+                },
+            }
+        ]
+        with patch('beast.inference.pl.Trainer') as MockTrainer:
+            MockTrainer.return_value.predict.return_value = mock_predictions
+            # Act
+            result = predict_images(
+                model=mock_model,
+                output_dir=tmp_path,
+                source_dir=data_dir,
+                save_reconstructions=False,
+                save_latents=False,
+            )
+        # Assert
+        assert 'num_images_processed' in result
+        assert result['num_images_processed'] == 2
+
+
+class TestPredictVideo:
+    """Test the predict_video standalone function."""
+
+    def test_predict_video_none_predictions_raises(self, video_file, tmp_path) -> None:
+        # Arrange — trainer returns None
+        mock_model = Mock()
+        with patch('beast.inference.pl.Trainer') as MockTrainer:
+            MockTrainer.return_value.predict.return_value = None
+            # Act / Assert
+            with pytest.raises(RuntimeError, match="trainer.predict\\(\\) returned None"):
+                predict_video(
+                    model=mock_model,
+                    output_dir=tmp_path,
+                    video_file=video_file,
+                )
+
+    def test_predict_video_returns_results(self, video_file, tmp_path) -> None:
+        # Arrange — mock trainer to return a minimal prediction list
+        mock_model = Mock()
+        mock_predictions = [
+            {
+                'reconstructions': torch.rand(2, 3, 224, 224),
+                'latents': torch.rand(2, 128),
+            }
+        ]
+        with patch('beast.inference.pl.Trainer') as MockTrainer:
+            MockTrainer.return_value.predict.return_value = mock_predictions
+            # Act
+            result = predict_video(
+                model=mock_model,
+                output_dir=tmp_path,
+                video_file=video_file,
+                save_reconstructions=False,
+                save_latents=False,
+            )
+        # Assert
+        assert 'frames_processed' in result
+        assert result['frames_processed'] == 2
