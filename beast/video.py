@@ -125,7 +125,7 @@ def copy_and_reformat_video_directory(
         if not src.is_file():
             # don't copy subdirectories in video directory
             continue
-        elif src.suffix in ['mp4', 'avi']:
+        elif src.suffix in ['.mp4', '.avi']:
             copy_and_reformat_video_file(src, dst_dir, remove_old)
 
 

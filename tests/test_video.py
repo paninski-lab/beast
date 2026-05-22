@@ -71,7 +71,9 @@ class TestCopyAndReformatVideoDirectory:
         dst_dir = tmp_path
         copy_and_reformat_video_directory(src_dir, dst_dir)
         assert video_file.is_file()
-        for file in dst_dir.glob('*'):
+        copied = list(dst_dir.glob('*'))
+        assert len(copied) > 0, 'no files were copied to dst_dir'
+        for file in copied:
             assert check_codec_format(file)
 
 
