@@ -12,23 +12,20 @@ from jaxtyping import Float
 
 from beast.models.base import BaseLightningModel
 
+_RESNET_CONFIGS: dict[str, tuple[list[int], bool]] = {
+    'resnet18': ([2, 2, 2, 2], False),
+    'resnet34': ([3, 4, 6, 3], False),
+    'resnet50': ([3, 4, 6, 3], True),
+    'resnet101': ([3, 4, 23, 3], True),
+    'resnet152': ([3, 8, 36, 3], True),
+}
+
 
 def get_configs(arch: str = 'resnet18') -> tuple[list[int], bool]:
     """Get number and type of layers for resnet models."""
-    # True or False means wether to use BottleNeck
-
-    if arch == 'resnet18':
-        return [2, 2, 2, 2], False
-    elif arch == 'resnet34':
-        return [3, 4, 6, 3], False
-    elif arch == 'resnet50':
-        return [3, 4, 6, 3], True
-    elif arch == 'resnet101':
-        return [3, 4, 23, 3], True
-    elif arch == 'resnet152':
-        return [3, 8, 36, 3], True
-    else:
+    if arch not in _RESNET_CONFIGS:
         raise ValueError(f'{arch} is an invalid entry in model.model_params.backbone')
+    return _RESNET_CONFIGS[arch]
 
 
 class ResnetAutoencoder(BaseLightningModel):
