@@ -1,40 +1,64 @@
+"""Tests for configuration loading and override utilities."""
+
 import copy
 
 import pytest
 
 
-def test_load_config(config_ae_path):
+class TestLoadConfig:
+    """Test the load_config function."""
 
-    from beast.io import load_config
+    def test_load_config_valid(self, config_ae_path) -> None:
+        # Arrange / Act
+        from beast.io import load_config
+        config = load_config(config_ae_path)
+        # Assert
+        assert isinstance(config, dict)
 
-    # test normal loading
-    load_config(config_ae_path)
-
-    # test Assertion error with bad path
-    with pytest.raises(AssertionError):
-        load_config('/fake/path')
+    def test_load_config_bad_path_raises(self) -> None:
+        from beast.io import load_config
+        with pytest.raises(AssertionError):
+            load_config('/fake/path')
 
 
-def test_apply_config_overrides(config_ae):
+class TestApplyConfigOverrides:
+    """Test the apply_config_overrides function."""
 
-    from beast.io import apply_config_overrides
+    def test_override_existing_field_with_dict(self, config_ae) -> None:
+        # Arrange
+        from beast.io import apply_config_overrides
+        overrides = {'model.seed': 1}
+        # Act
+        new_config = apply_config_overrides(copy.deepcopy(config_ae), overrides)
+        # Assert
+        assert new_config['model']['seed'] == overrides['model.seed']
 
-    # override existing fields with dict
-    overrides = {'model.seed': 1}
-    new_config = apply_config_overrides(copy.deepcopy(config_ae), overrides)
-    assert new_config['model']['seed'] == overrides['model.seed']
+    def test_add_new_fields_with_dict(self, config_ae) -> None:
+        from beast.io import apply_config_overrides
+        overrides = {
+            'data': '/path/to/data',
+            'model.seed': 2,
+            'model.model_params.batchnorm': True,
+        }
+        new_config = apply_config_overrides(copy.deepcopy(config_ae), overrides)
+        assert new_config['data'] == overrides['data']
+        assert new_config['model']['seed'] == overrides['model.seed']
+        assert new_config['model']['model_params']['batchnorm'] == overrides[
+            'model.model_params.batchnorm'
+        ]
 
-    # add new fields at different levels with dict
-    overrides = {'data': '/path/to/data', 'model.seed': 2, 'model.model_params.batchnorm': True}
-    new_config = apply_config_overrides(copy.deepcopy(config_ae), overrides)
-    assert new_config['data'] == overrides['data']
-    assert new_config['model']['seed'] == overrides['model.seed']
-    assert new_config['model']['model_params']['batchnorm'] == overrides[
-        'model.model_params.batchnorm'
-    ]
+    def test_override_existing_fields_with_list(self, config_ae) -> None:
+        from beast.io import apply_config_overrides
+        overrides = ['model.seed=1', 'training.imgaug=geometric']
+        new_config = apply_config_overrides(copy.deepcopy(config_ae), overrides)
+        assert new_config['model']['seed'] == '1'
+        assert new_config['training']['imgaug'] == 'geometric'
 
-    # override existing fields with list
-    overrides = ['model.seed=1', 'training.imgaug=geometric']
-    new_config = apply_config_overrides(copy.deepcopy(config_ae), overrides)
-    assert new_config['model']['seed'] == '1'
-    assert new_config['training']['imgaug'] == 'geometric'
+    def test_creates_new_nested_keys(self, config_ae) -> None:
+        # Arrange — 'brand.new.nested' doesn't exist in config; both parent keys must be created
+        from beast.io import apply_config_overrides
+        overrides = {'brand.new.nested': 'value'}
+        # Act
+        new_config = apply_config_overrides(copy.deepcopy(config_ae), overrides)
+        # Assert
+        assert new_config['brand']['new']['nested'] == 'value'

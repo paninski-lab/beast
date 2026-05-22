@@ -1,168 +1,175 @@
+"""Tests for data module splitting and loading."""
+
 import numpy as np
 import pytest
 import torch
-from torch.utils.data import RandomSampler
+from torch.utils.data import DataLoader, RandomSampler
 
 from beast.data.samplers import ContrastBatchSampler
 
 
-def test_base_datamodule(base_datamodule):
+class TestBaseDataModule:
+    """Test the BaseDataModule class."""
 
-    train_size = base_datamodule.train_batch_size
-    val_size = base_datamodule.val_batch_size
-    test_size = base_datamodule.test_batch_size
+    def test_train_val_test_dataloaders(self, base_datamodule) -> None:
+        train_size = base_datamodule.train_batch_size
+        val_size = base_datamodule.val_batch_size
+        test_size = base_datamodule.test_batch_size
 
-    # check train batch properties
-    train_dataloader = base_datamodule.train_dataloader()
-    assert isinstance(train_dataloader.sampler, RandomSampler)
-    batch = next(iter(train_dataloader))
-    assert batch['image'].shape == (train_size, 3, 224, 224)
-    # check imgaug pipeline makes non-repeatable data
-    base_datamodule.train_dataset.dataset.imgaug_pipeline.seed_(0)
-    b1 = base_datamodule.train_dataset[0]
-    base_datamodule.train_dataset.dataset.imgaug_pipeline.seed_(1)
-    b2 = base_datamodule.train_dataset[0]
-    assert not np.allclose(b1['image'], b2['image'])
+        # check train batch properties
+        train_dataloader = base_datamodule.train_dataloader()
+        assert isinstance(train_dataloader.sampler, RandomSampler)
+        batch = next(iter(train_dataloader))
+        assert batch['image'].shape == (train_size, 3, 224, 224)
+        # check imgaug pipeline makes non-repeatable data
+        base_datamodule.train_dataset.dataset.imgaug_pipeline.seed_(0)
+        b1 = base_datamodule.train_dataset[0]
+        base_datamodule.train_dataset.dataset.imgaug_pipeline.seed_(1)
+        b2 = base_datamodule.train_dataset[0]
+        assert not np.allclose(b1['image'], b2['image'])
 
-    # check val batch properties
-    val_dataloader = base_datamodule.val_dataloader()
-    batch = next(iter(val_dataloader))
-    assert not isinstance(val_dataloader.sampler, RandomSampler)
-    assert not isinstance(val_dataloader.sampler, ContrastBatchSampler)
-    assert batch['image'].shape[1:] == (3, 224, 224)
-    assert batch['image'].shape[0] <= val_size
-    # check imgaug pipeline makes repeatable data
-    b1 = base_datamodule.val_dataset[0]
-    b2 = base_datamodule.val_dataset[0]
-    assert np.allclose(b1['image'], b2['image'], rtol=1e-3)
+        # check val batch properties
+        val_dataloader = base_datamodule.val_dataloader()
+        batch = next(iter(val_dataloader))
+        assert not isinstance(val_dataloader.sampler, RandomSampler)
+        assert not isinstance(val_dataloader.sampler, ContrastBatchSampler)
+        assert batch['image'].shape[1:] == (3, 224, 224)
+        assert batch['image'].shape[0] <= val_size
+        b1 = base_datamodule.val_dataset[0]
+        b2 = base_datamodule.val_dataset[0]
+        assert np.allclose(b1['image'], b2['image'], rtol=1e-3)
 
-    test_dataloader = base_datamodule.test_dataloader()
-    batch = next(iter(test_dataloader))
-    assert not isinstance(test_dataloader.sampler, RandomSampler)
-    assert not isinstance(val_dataloader.sampler, ContrastBatchSampler)
-    assert batch['image'].shape[1:] == (3, 224, 224)
-    assert batch['image'].shape[0] <= test_size
-    # check imgaug pipeline makes repeatable data
-    b1 = base_datamodule.test_dataset[0]
-    b2 = base_datamodule.test_dataset[0]
-    assert np.allclose(b1['image'], b2['image'], rtol=1e-3)
+        test_dataloader = base_datamodule.test_dataloader()
+        batch = next(iter(test_dataloader))
+        assert not isinstance(test_dataloader.sampler, RandomSampler)
+        assert not isinstance(val_dataloader.sampler, ContrastBatchSampler)
+        assert batch['image'].shape[1:] == (3, 224, 224)
+        assert batch['image'].shape[0] <= test_size
+        b1 = base_datamodule.test_dataset[0]
+        b2 = base_datamodule.test_dataset[0]
+        assert np.allclose(b1['image'], b2['image'], rtol=1e-3)
 
+    def test_full_labeled_dataloader(self, base_datamodule) -> None:
+        # Arrange / Act
+        loader = base_datamodule.full_labeled_dataloader()
+        # Assert
+        assert isinstance(loader, DataLoader)
+        batch = next(iter(loader))
+        assert 'image' in batch
+        assert batch['image'].shape[1:] == (3, 224, 224)
 
-def test_base_datamodule_contrastive(base_datamodule_contrastive):
-    """Test the contrastive datamodule functionality."""
+    def test_setup_without_augmentations(self, data_dir) -> None:
+        # Arrange — dataset with no augmentation pipeline → random_split path
+        from beast.data.datamodules import BaseDataModule
+        from beast.data.datasets import BaseDataset
+        dataset = BaseDataset(data_dir=data_dir, imgaug_pipeline=None)
+        dm = BaseDataModule(dataset=dataset, train_probability=0.8)
+        # Act
+        dm.setup()
+        # Assert — all three splits are populated
+        assert dm.train_dataset is not None
+        assert dm.val_dataset is not None
+        assert dm.test_dataset is not None
 
-    # Check that the datamodule is configured for contrastive learning
-    assert base_datamodule_contrastive.use_sampler is True
-    assert base_datamodule_contrastive.train_batch_size % 2 == 0  # Even batch size for pairs
+    def test_use_sampler_without_augmentations_raises(self, data_dir) -> None:
+        # Arrange — sampler requires an augmentation pipeline; None pipeline should assert
+        from beast.data.datamodules import BaseDataModule
+        from beast.data.datasets import BaseDataset
+        dataset = BaseDataset(data_dir=data_dir, imgaug_pipeline=None)
+        dm = BaseDataModule(dataset=dataset, train_probability=0.8, use_sampler=True)
+        # Act / Assert
+        with pytest.raises(AssertionError, match='Sampler cannot be used without augmentations'):
+            dm.setup()
 
-    # Get the train dataloader
-    np.random.seed(0)
-    train_dataloader = base_datamodule_contrastive.train_dataloader()
-
-    # Verify it's using the contrastive sampler
-    assert hasattr(train_dataloader, 'sampler')
-    assert isinstance(train_dataloader.sampler, ContrastBatchSampler)
-
-    # Check sampler properties
-    sampler = train_dataloader.sampler
-    assert sampler.batch_size == base_datamodule_contrastive.train_batch_size
-    assert sampler.num_samples == len(base_datamodule_contrastive.train_dataset)
-    assert sampler.batch_size % 2 == 0  # Even batch size for reference-positive pairs
-
-    # Get a batch and verify its structure
-    batch = next(iter(train_dataloader))
-
-    # Verify batch structure
-    assert isinstance(batch, dict)
-    assert 'image' in batch
-    assert 'idx' in batch
-
-    # Test that the collate function reorganizes data correctly
-    # The contrastive_collate_fn reorganizes from [ref1, pos1, ref2, pos2, ...]
-    # to [ref1, ref2, ..., pos1, pos2, ...]
-    expected_batch_size = base_datamodule_contrastive.train_batch_size
-    num_pairs = expected_batch_size // 2
-    ref_indices = batch['idx'][:num_pairs]
-    pos_indices = batch['idx'][num_pairs:]
-
-    # Verify that reference and positive indices are within the expected range
-    # (they should be within idx_offset of each other, but we can't directly check
-    # this since the collate function reorganizes the data)
-    assert torch.all(ref_indices >= 0)
-    assert torch.all(pos_indices >= 0)
-    assert torch.all(ref_indices < len(base_datamodule_contrastive.train_dataset))
-    assert torch.all(pos_indices < len(base_datamodule_contrastive.train_dataset))
-
-    # Test all batches to ensure consistency
-    np.random.seed(1)
-    batch_count = 0
-    for batch in train_dataloader:
-
-        # Should have the expected number of images (batch_size)
-        assert batch['image'].shape == (expected_batch_size, 3, 224, 224)
-        assert batch['idx'].shape == (expected_batch_size,)
-
-        # Verify that indices are valid
-        assert torch.all(batch['idx'] >= 0)
-        assert torch.all(batch['idx'] < len(base_datamodule_contrastive.train_dataset))
-
-        # Check that we have unique anchor indices (no duplicates within a batch)
-        unique_indices = torch.unique(batch['idx'][::2])
-        assert len(unique_indices) == len(batch['idx']) // 2, \
-            f"Unique indices: {unique_indices}, batch indices: {batch['idx']}"
-
-        batch_count += 1
-
-    # Verify that we can get at least one batch
-    assert batch_count > 0
+    def test_slurm_env_var_sets_num_workers(self, data_dir, monkeypatch) -> None:
+        # Arrange — SLURM_CPUS_PER_TASK present; num_workers should be read from it
+        from beast.data.datamodules import BaseDataModule
+        from beast.data.datasets import BaseDataset
+        monkeypatch.setenv('SLURM_CPUS_PER_TASK', '4')
+        dataset = BaseDataset(data_dir=data_dir, imgaug_pipeline=None)
+        # Act
+        dm = BaseDataModule(dataset=dataset)
+        # Assert
+        assert dm.num_workers == 4
 
 
-def test_split_sizes_from_probabilities():
+class TestBaseDataModuleContrastive:
+    """Test BaseDataModule with contrastive (sampler-based) configuration."""
 
-    from beast.data.datamodules import split_sizes_from_probabilities
+    def test_contrastive_datamodule_properties(self, base_datamodule_contrastive) -> None:
+        assert base_datamodule_contrastive.use_sampler is True
+        assert base_datamodule_contrastive.train_batch_size % 2 == 0
 
-    # make sure we count examples properly
-    total_number = 100
-    train_prob = 0.8
-    val_prob = 0.1
-    test_prob = 0.1
+        np.random.seed(0)
+        train_dataloader = base_datamodule_contrastive.train_dataloader()
+        assert isinstance(train_dataloader.sampler, ContrastBatchSampler)
 
-    out = split_sizes_from_probabilities(total_number, train_probability=train_prob)
-    assert out[0] == 80 and out[1] == 10 and out[2] == 10
+        sampler = train_dataloader.sampler
+        assert sampler.batch_size == base_datamodule_contrastive.train_batch_size
+        assert sampler.num_samples == len(base_datamodule_contrastive.train_dataset)
+        assert sampler.batch_size % 2 == 0
 
-    out = split_sizes_from_probabilities(
-        total_number, train_probability=train_prob, val_probability=val_prob
-    )
-    assert out[0] == 80 and out[1] == 10 and out[2] == 10
+        batch = next(iter(train_dataloader))
+        assert isinstance(batch, dict)
+        assert 'image' in batch
+        assert 'idx' in batch
 
-    out = split_sizes_from_probabilities(
-        total_number,
-        train_probability=train_prob,
-        val_probability=val_prob,
-        test_probability=test_prob,
-    )
-    assert out[0] == 80 and out[1] == 10 and out[2] == 10
+        expected_batch_size = base_datamodule_contrastive.train_batch_size
+        num_pairs = expected_batch_size // 2
+        ref_indices = batch['idx'][:num_pairs]
+        pos_indices = batch['idx'][num_pairs:]
+        assert torch.all(ref_indices >= 0)
+        assert torch.all(pos_indices >= 0)
 
-    out = split_sizes_from_probabilities(total_number, train_probability=0.7)
-    assert out[0] == 70 and out[1] == 15 and out[2] == 15
+    def test_all_batches_have_correct_shape(self, base_datamodule_contrastive) -> None:
+        np.random.seed(1)
+        expected_batch_size = base_datamodule_contrastive.train_batch_size
+        train_dataloader = base_datamodule_contrastive.train_dataloader()
+        batch_count = 0
+        for batch in train_dataloader:
+            assert batch['image'].shape == (expected_batch_size, 3, 224, 224)
+            assert batch['idx'].shape == (expected_batch_size,)
+            assert torch.all(batch['idx'] >= 0)
+            unique_indices = torch.unique(batch['idx'][::2])
+            assert len(unique_indices) == len(batch['idx']) // 2
+            batch_count += 1
+        assert batch_count > 0
 
-    # test that extra samples end up in test
-    out = split_sizes_from_probabilities(101, train_probability=0.7)
-    assert out[0] == 70 and out[1] == 15 and out[2] == 16
 
-    # make sure we have at least one example in the validation set
-    total_number = 10
-    train_prob = 0.95
-    val_prob = 0.05
-    out = split_sizes_from_probabilities(
-        total_number, train_probability=train_prob, val_probability=val_prob
-    )
-    assert sum(out) == total_number
-    assert out[0] == 9
-    assert out[1] == 1
-    assert out[2] == 0
+class TestSplitSizesFromProbabilities:
+    """Test the split_sizes_from_probabilities function."""
 
-    # make sure an error is raised if there are not enough labeled frames
-    total_number = 1
-    with pytest.raises(ValueError):
-        split_sizes_from_probabilities(total_number, train_probability=train_prob)
+    def test_basic_splits(self) -> None:
+        from beast.data.datamodules import split_sizes_from_probabilities
+        out = split_sizes_from_probabilities(100, train_probability=0.8)
+        assert out[0] == 80 and out[1] == 10 and out[2] == 10
+
+    def test_explicit_val_probability(self) -> None:
+        from beast.data.datamodules import split_sizes_from_probabilities
+        out = split_sizes_from_probabilities(100, train_probability=0.8, val_probability=0.1)
+        assert out[0] == 80 and out[1] == 10 and out[2] == 10
+
+    def test_all_three_probabilities(self) -> None:
+        from beast.data.datamodules import split_sizes_from_probabilities
+        out = split_sizes_from_probabilities(
+            100, train_probability=0.8, val_probability=0.1, test_probability=0.1,
+        )
+        assert out[0] == 80 and out[1] == 10 and out[2] == 10
+
+    def test_leftover_samples_go_to_test(self) -> None:
+        from beast.data.datamodules import split_sizes_from_probabilities
+        out = split_sizes_from_probabilities(101, train_probability=0.7)
+        assert out[0] == 70 and out[1] == 15 and out[2] == 16
+
+    def test_minimum_val_sample(self) -> None:
+        from beast.data.datamodules import split_sizes_from_probabilities
+        out = split_sizes_from_probabilities(10, train_probability=0.95, val_probability=0.05)
+        assert sum(out) == 10
+        assert out[0] == 9
+        assert out[1] == 1
+        assert out[2] == 0
+
+    def test_too_few_samples_raises(self) -> None:
+        from beast.data.datamodules import split_sizes_from_probabilities
+        with pytest.raises(ValueError):
+            split_sizes_from_probabilities(1, train_probability=0.95)

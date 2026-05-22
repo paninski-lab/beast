@@ -1,29 +1,49 @@
+"""Tests for the video frame iterator."""
+
+import pytest
 
 
-def test_video_iterator(video_file):
+class TestVideoFrameIterator:
+    """Test the VideoFrameIterator class."""
 
-    from beast.data.video import VideoFrameIterator
+    def test_basic_iteration(self, video_file) -> None:
+        from beast.data.video import VideoFrameIterator
+        iterator = VideoFrameIterator(video_file=video_file, batch_size=8)
+        batch = next(iterator)
+        assert batch['image'].shape == (8, 3, 224, 224)
+        assert 'video' in batch
+        assert 'idx' in batch
+        assert 'image_path' in batch
 
-    batch_size = 8
-    iterator = VideoFrameIterator(video_file=video_file, batch_size=batch_size)
-    batch = next(iterator)
-    assert batch['image'].shape == (batch_size, 3, 224, 224)
-    assert 'video' in batch
-    assert 'idx' in batch
-    assert 'image_path' in batch
-    del iterator
+    def test_different_batch_size(self, video_file) -> None:
+        from beast.data.video import VideoFrameIterator
+        iterator = VideoFrameIterator(video_file=video_file, batch_size=4)
+        batch = next(iterator)
+        assert batch['image'].shape == (4, 3, 224, 224)
 
-    batch_size = 4
-    iterator = VideoFrameIterator(video_file=video_file, batch_size=batch_size)
-    batch = next(iterator)
-    assert batch['image'].shape == (batch_size, 3, 224, 224)
-    del iterator
+    def test_all_frames_consumed(self, video_file) -> None:
+        from beast.data.video import VideoFrameIterator
+        iterator = VideoFrameIterator(video_file=video_file, batch_size=32)
+        n_frames = 0
+        for batch in iterator:
+            n_frames += batch['image'].shape[0]
+        assert n_frames == iterator.total_frames
 
-    # make sure last batch is handled fine
-    n_frames = 0
-    batch_size = 32
-    iterator = VideoFrameIterator(video_file=video_file, batch_size=batch_size)
-    for batch in iterator:
-        n_frames += batch['image'].shape[0]
-    assert n_frames == iterator.total_frames
-    del iterator
+    def test_invalid_video_path_raises(self) -> None:
+        from beast.data.video import VideoFrameIterator
+        with pytest.raises(ValueError, match='Cannot open video file'):
+            VideoFrameIterator(video_file='/nonexistent/video.mp4')
+
+    def test_reset_restarts_iteration(self, video_file) -> None:
+        from beast.data.video import VideoFrameIterator
+        iterator = VideoFrameIterator(video_file=video_file, batch_size=8)
+        # advance a few batches
+        next(iterator)
+        next(iterator)
+        assert iterator.current_frame > 0
+        # Act
+        iterator.reset()
+        # Assert
+        assert iterator.current_frame == 0
+        batch = next(iterator)
+        assert batch['image'].shape == (8, 3, 224, 224)

@@ -38,6 +38,26 @@ class TestBaseDataset:
         assert torch.allclose(denorm[0], denorm[1], atol=1e-5)
         assert torch.allclose(denorm[1], denorm[2], atol=1e-5)
 
-    def test_invalid_num_channels(self, data_dir):
+    def test_invalid_num_channels(self, data_dir) -> None:
         with pytest.raises(ValueError, match='num_channels must be 1 or 3'):
             BaseDataset(data_dir=data_dir, imgaug_pipeline=None, num_channels=2)
+
+    def test_data_dir_not_a_directory_raises(self, tmp_path) -> None:
+        # Arrange — pass a file path where a directory is expected
+        f = tmp_path / 'not_a_dir.txt'
+        f.touch()
+        # Act / Assert
+        with pytest.raises(ValueError, match='is not a directory'):
+            BaseDataset(data_dir=f, imgaug_pipeline=None)
+
+    def test_list_indexing_returns_list(self, base_dataset) -> None:
+        # Arrange
+        indices = [0, 1, 2]
+        # Act
+        result = base_dataset[indices]
+        # Assert
+        assert isinstance(result, list)
+        assert len(result) == len(indices)
+        for item in result:
+            assert 'image' in item
+            assert item['image'].shape == (3, 224, 224)
