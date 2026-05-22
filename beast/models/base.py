@@ -1,5 +1,6 @@
 """Base Lightning module shared by all BEAST model architectures."""
 
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from typing import Literal
 
@@ -8,7 +9,7 @@ import torch
 from lightning.pytorch.utilities import rank_zero_only
 
 
-class BaseLightningModel(pl.LightningModule):
+class BaseLightningModel(ABC, pl.LightningModule):
     """Base Lightning Module that specific model architectures will inherit from."""
 
     def __init__(self, config: dict) -> None:
@@ -165,6 +166,7 @@ class BaseLightningModel(pl.LightningModule):
         self.evaluate_batch(batch_dict, 'test')
 
     # Required Lightning methods to be implemented by children
+    @abstractmethod
     def get_model_outputs(self, batch_dict: dict) -> dict:
         """Run forward pass and return model outputs; implemented by subclasses.
 
@@ -177,8 +179,8 @@ class BaseLightningModel(pl.LightningModule):
         dict of model outputs
 
         """
-        raise NotImplementedError
 
+    @abstractmethod
     def compute_loss(self, stage: str | None, **kwargs) -> tuple[torch.Tensor, list[dict]]:
         """Compute loss from model outputs; implemented by subclasses.
 
@@ -192,8 +194,8 @@ class BaseLightningModel(pl.LightningModule):
         tuple of (total loss tensor, list of logging dicts)
 
         """
-        raise NotImplementedError
 
+    @abstractmethod
     def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
         """Run inference on a single batch; implemented by subclasses.
 
@@ -207,4 +209,3 @@ class BaseLightningModel(pl.LightningModule):
         dict of predictions and metadata
 
         """
-        raise NotImplementedError
