@@ -72,6 +72,26 @@ class TestSelectFrameIdxsKmeans:
                 n_frames_to_select=1000,
             )
 
+    def test_frame_range_negative_start_raises(self, video_file) -> None:
+
+        with pytest.raises(ValueError, match='frame_range\\[0\\]'):
+            select_frame_idxs_kmeans(
+                video_file=video_file,
+                resize_dims=8,
+                n_frames_to_select=5,
+                frame_range=[-0.1, 1.0],
+            )
+
+    def test_frame_range_end_exceeds_one_raises(self, video_file) -> None:
+
+        with pytest.raises(ValueError, match='frame_range\\[1\\]'):
+            select_frame_idxs_kmeans(
+                video_file=video_file,
+                resize_dims=8,
+                n_frames_to_select=5,
+                frame_range=[0.0, 1.1],
+            )
+
     def test_large_number_of_frames(self, video_file) -> None:
 
         n_clusters = 990

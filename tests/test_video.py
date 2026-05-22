@@ -1,5 +1,8 @@
 """Tests for video I/O utilities."""
 
+import shutil
+from unittest.mock import Mock, patch
+
 import cv2
 import numpy as np
 import pytest
@@ -21,6 +24,15 @@ class TestCheckCodecFormat:
     def test_valid_h264_video(self, video_file) -> None:
         assert check_codec_format(video_file)
 
+    def test_non_h264_video_returns_false(self, tmp_path) -> None:
+        # Arrange — mock ffprobe output to omit 'h264'
+        mock_result = Mock()
+        mock_result.stderr = 'mpeg4, yuv420p'
+        with patch('beast.video.subprocess.run', return_value=mock_result):
+            result = check_codec_format(tmp_path / 'fake.mp4')
+        # Assert
+        assert result is False
+
 
 class TestReencodeVideo:
     """Test the reencode_video function."""
@@ -30,6 +42,13 @@ class TestReencodeVideo:
         video_file_new = tmp_path / 'test.mp4'
         reencode_video(video_file, video_file_new)
         assert check_codec_format(video_file_new)
+
+    def test_nonexistent_input_raises(self, tmp_path) -> None:
+        # Arrange
+        nonexistent = tmp_path / 'ghost.mp4'
+        # Act / Assert
+        with pytest.raises(FileNotFoundError):
+            reencode_video(nonexistent, tmp_path / 'output.mp4')
 
 
 class TestCopyAndReformatVideoFile:
@@ -69,6 +88,36 @@ class TestCopyAndReformatVideoFile:
         # Assert — function prints a warning and returns None
         assert result is None
 
+    def test_copy_with_remove_old_correct_codec(self, video_file, tmp_path) -> None:
+        # Arrange — copy fixture so remove_old=True doesn't delete the original
+        src = tmp_path / 'src.mp4'
+        shutil.copyfile(video_file, src)
+        # Act — exercises the remove_old=True branch when codec is already correct
+        result = copy_and_reformat_video_file(src, tmp_path / 'dst', remove_old=True)
+        # Assert — function returns the destination path without raising
+        assert result is not None
+
+    def test_copy_reencodes_non_h264_video(self, video_file, tmp_path) -> None:
+        # Arrange — mock codec check so the reencode branch is taken
+        with patch('beast.video.check_codec_format', return_value=False):
+            # Act
+            result = copy_and_reformat_video_file(video_file, tmp_path / 'dst', remove_old=False)
+        # Assert
+        assert result is not None
+        assert result.is_file()
+
+    def test_copy_reencodes_non_h264_video_with_remove_old(self, video_file, tmp_path) -> None:
+        # Arrange — copy fixture so remove_old=True can safely unlink the copy
+        src = tmp_path / 'src.mp4'
+        shutil.copyfile(video_file, src)
+        with patch('beast.video.check_codec_format', return_value=False):
+            # Act
+            result = copy_and_reformat_video_file(src, tmp_path / 'dst', remove_old=True)
+        # Assert — src was unlinked and dst was created
+        assert not src.exists()
+        assert result is not None
+        assert result.is_file()
+
 
 class TestCopyAndReformatVideoDirectory:
     """Test the copy_and_reformat_video_directory function."""
@@ -101,6 +150,18 @@ class TestGetFramesFromIdxs:
         # Act / Assert
         with pytest.raises(ValueError, match='video_file must be provided when cap is None'):
             get_frames_from_idxs(video_file=None, idxs=np.arange(3))
+
+    def test_beyond_end_of_video_returns_partial_frames(self, video_file) -> None:
+        # Arrange — request an index far past the last frame
+        cap = cv2.VideoCapture(str(video_file))
+        n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+        idxs = np.array([0, n_frames + 100])
+        # Act
+        frames = get_frames_from_idxs(video_file, idxs)
+        # Assert — array has the right first dimension; trailing frame is blank zeros
+        assert frames.shape[0] == 2
+        assert np.all(frames[1] == 0)
 
 
 class TestComputeVideoMotionEnergy:
