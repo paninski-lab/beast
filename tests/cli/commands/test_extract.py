@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+from beast.cli.commands.extract import handle
 from beast.cli.main import build_parser
 
 
@@ -78,7 +79,6 @@ class TestHandle:
 
     def test_calls_extract_frames_with_correct_kwargs(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.extract import handle
         args = argparse.Namespace(
             input=Path('/some/input'),
             output=tmp_path,
@@ -101,7 +101,6 @@ class TestHandle:
 
     def test_calls_extract_frames_with_custom_args(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.extract import handle
         args = argparse.Namespace(
             input=Path('/videos'),
             output=tmp_path,

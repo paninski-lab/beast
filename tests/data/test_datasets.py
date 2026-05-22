@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from beast.data.datasets import BaseDataset
+from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD, BaseDataset
 
 
 class TestBaseDataset:
@@ -25,7 +25,6 @@ class TestBaseDataset:
         assert Path(example['image_path']).is_file()
 
     def test_grayscale(self, data_dir):
-        from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD
         dataset = BaseDataset(data_dir=data_dir, imgaug_pipeline=None, num_channels=1)
         example = dataset[0]
         assert isinstance(example, dict)

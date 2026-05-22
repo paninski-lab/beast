@@ -7,6 +7,7 @@ from typing import Literal
 import lightning.pytorch as pl
 import torch
 from lightning.pytorch.utilities import rank_zero_only
+from torch.optim.lr_scheduler import MultiStepLR, OneCycleLR
 
 
 class BaseLightningModel(ABC, pl.LightningModule):
@@ -46,15 +47,12 @@ class BaseLightningModel(ABC, pl.LightningModule):
         scheduler = self.config['optimizer']['scheduler']
         if scheduler == 'step':
             # define a scheduler that reduces the base learning rate at predefined steps
-            from torch.optim.lr_scheduler import MultiStepLR
             scheduler = MultiStepLR(
                 optimizer=optimizer,
                 milestones=self.config['optimizer']['steps'],
                 gamma=self.config['optimizer']['gamma'],
             )
         elif scheduler == 'cosine':
-            from torch.optim.lr_scheduler import OneCycleLR
-
             # compute max learning rate
             global_batch_size = (
                 self.config['training']['train_batch_size']

@@ -3,12 +3,14 @@
 import numpy as np
 import pytest
 
+from beast.extraction import _run_kmeans, export_frames, extract_frames, select_frame_idxs_kmeans
+
 
 class TestExtractFrames:
     """Test the extract_frames function."""
 
     def test_extract_frames_pca_kmeans(self, video_file, tmp_path) -> None:
-        from beast.extraction import extract_frames
+
         frames_per_video = 5
         details = extract_frames(
             input_path=video_file.parent,
@@ -23,7 +25,7 @@ class TestExtractFrames:
         assert (output_dir / 'selected_frames.csv').is_file()
 
     def test_unimplemented_method_raises(self, video_file, tmp_path) -> None:
-        from beast.extraction import extract_frames
+
         with pytest.raises(NotImplementedError):
             extract_frames(
                 input_path=video_file.parent,
@@ -37,7 +39,7 @@ class TestRunKmeans:
     """Test the _run_kmeans function."""
 
     def test_cluster_shapes(self) -> None:
-        from beast.extraction import _run_kmeans
+
         n_samples = 50
         n_features = 5
         n_clusters = 10
@@ -52,7 +54,7 @@ class TestSelectFrameIdxsKmeans:
     """Test the select_frame_idxs_kmeans function."""
 
     def test_returns_correct_number_of_frames(self, video_file) -> None:
-        from beast.extraction import select_frame_idxs_kmeans
+
         n_clusters = 5
         idxs = select_frame_idxs_kmeans(
             video_file=video_file,
@@ -62,7 +64,7 @@ class TestSelectFrameIdxsKmeans:
         assert len(idxs) == n_clusters
 
     def test_too_many_frames_raises(self, video_file) -> None:
-        from beast.extraction import select_frame_idxs_kmeans
+
         with pytest.raises(AssertionError):
             select_frame_idxs_kmeans(
                 video_file=video_file,
@@ -71,7 +73,7 @@ class TestSelectFrameIdxsKmeans:
             )
 
     def test_large_number_of_frames(self, video_file) -> None:
-        from beast.extraction import select_frame_idxs_kmeans
+
         n_clusters = 990
         idxs = select_frame_idxs_kmeans(
             video_file=video_file,
@@ -85,7 +87,7 @@ class TestExportFrames:
     """Test the export_frames function."""
 
     def test_export_multiple_frames_no_context(self, video_file, tmp_path) -> None:
-        from beast.extraction import export_frames
+
         save_dir = tmp_path / 'frames-0'
         idxs = np.array([0, 2, 4, 6, 8, 10])
         export_frames(
@@ -94,7 +96,7 @@ class TestExportFrames:
         assert len(list(save_dir.glob('*'))) == len(idxs)
 
     def test_export_multiple_frames_with_context(self, video_file, tmp_path) -> None:
-        from beast.extraction import export_frames
+
         save_dir = tmp_path / 'frames-1'
         idxs = np.array([5, 10, 15, 20])
         export_frames(
@@ -103,7 +105,7 @@ class TestExportFrames:
         assert len(list(save_dir.glob('*'))) == 5 * len(idxs)
 
     def test_export_single_frame_with_context(self, video_file, tmp_path) -> None:
-        from beast.extraction import export_frames
+
         save_dir = tmp_path / 'frames-2'
         idxs = np.array([10])
         export_frames(

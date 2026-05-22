@@ -1,6 +1,7 @@
 """Tests for BaseLightningModel."""
 
 import pytest
+import torch
 
 from beast.models.base import BaseLightningModel
 
@@ -51,7 +52,6 @@ class TestBaseLightningModelAbstract:
                 return {}
 
             def compute_loss(self, stage, **kwargs):
-                import torch
                 return torch.tensor(0.0), []
 
             def predict_step(self, batch_dict, batch_idx):

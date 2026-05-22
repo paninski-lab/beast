@@ -2,12 +2,13 @@
 
 import torch
 
+from beast.models.perceptual import AlexPerceptual, Perceptual
+
 
 class TestPerceptual:
     """Test the base Perceptual class."""
 
     def test_forward(self) -> None:
-        from beast.models.perceptual import Perceptual
         torch.manual_seed(0)
         mock_net = torch.nn.Sequential(
             torch.nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
@@ -31,7 +32,6 @@ class TestAlexPerceptual:
     """Test the AlexPerceptual class."""
 
     def test_forward(self) -> None:
-        from beast.models.perceptual import AlexPerceptual
         torch.manual_seed(0)
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         criterion = torch.nn.MSELoss()
@@ -44,7 +44,6 @@ class TestAlexPerceptual:
         assert loss.item() >= 0
 
     def test_identical_inputs_produce_near_zero_loss(self) -> None:
-        from beast.models.perceptual import AlexPerceptual
         torch.manual_seed(0)
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         criterion = torch.nn.MSELoss()
@@ -54,7 +53,6 @@ class TestAlexPerceptual:
         assert loss_same.item() < 1e-5
 
     def test_different_inputs_produce_nonzero_loss(self) -> None:
-        from beast.models.perceptual import AlexPerceptual
         torch.manual_seed(0)
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         criterion = torch.nn.MSELoss()
