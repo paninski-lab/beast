@@ -50,7 +50,7 @@ training:
 
 # optimizer configuration
 optimizer:
-  type: Adam
+  type: AdamW
   accumulate_grad_batches: 1
   lr: 5.e-5
   wd: 0.05

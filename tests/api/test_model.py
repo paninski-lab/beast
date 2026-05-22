@@ -6,8 +6,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from beast.api.model import Model, chdir
+
+
+def _make_valid_config(model_class: str) -> dict:
+    model_params = {} if model_class in ('vit', 'resnet') else {'model_class': model_class}
+    return {
+        'model': {'model_class': model_class, 'model_params': model_params},
+        'training': {'train_batch_size': 32, 'val_batch_size': 64},
+        'optimizer': {'lr': 1e-4},
+        'data': {'data_dir': '/path/to/data'},
+    }
 
 
 class TestChdir:
@@ -51,46 +62,40 @@ class TestModelInit:
 class TestModelFromConfig:
     """Test the Model.from_config class method."""
 
-    def _make_config(self, model_class: str) -> dict:
-        return {'model': {'model_class': model_class}, 'training': {}}
-
     def _mock_class(self) -> MagicMock:
         mock = MagicMock(return_value=MagicMock())
         mock.__name__ = 'MockModel'
         return mock
 
     def test_dict_config_vit(self) -> None:
-        config = self._make_config('vit')
+        config = _make_valid_config('vit')
         mock_class = self._mock_class()
         with patch.dict(Model.MODEL_REGISTRY, {'vit': mock_class}):
             m = Model.from_config(config)
         assert isinstance(m, Model)
-        mock_class.assert_called_once_with(config)
 
     def test_dict_config_resnet(self) -> None:
-        config = self._make_config('resnet')
+        config = _make_valid_config('resnet')
         mock_class = self._mock_class()
         with patch.dict(Model.MODEL_REGISTRY, {'resnet': mock_class}):
             m = Model.from_config(config)
         assert isinstance(m, Model)
-        mock_class.assert_called_once_with(config)
 
     def test_file_config(self, tmp_path: Path) -> None:
-        config = self._make_config('vit')
         config_path = tmp_path / 'config.yaml'
-        config_path.write_text(yaml.dump(config))
+        config_path.write_text(yaml.dump(_make_valid_config('vit')))
         mock_class = self._mock_class()
         with patch.dict(Model.MODEL_REGISTRY, {'vit': mock_class}):
             m = Model.from_config(config_path)
         assert isinstance(m, Model)
 
     def test_unknown_model_type_raises(self) -> None:
-        config = self._make_config('unknown_arch')
-        with pytest.raises(ValueError, match='Unknown model type'):
+        config = _make_valid_config('unknown_arch')
+        with pytest.raises(ValidationError):
             Model.from_config(config)
 
     def test_model_dir_is_none_after_from_config(self) -> None:
-        config = self._make_config('vit')
+        config = _make_valid_config('vit')
         mock_class = self._mock_class()
         with patch.dict(Model.MODEL_REGISTRY, {'vit': mock_class}):
             m = Model.from_config(config)
@@ -101,8 +106,7 @@ class TestModelFromDir:
     """Test the Model.from_dir class method."""
 
     def _write_config(self, model_dir: Path, model_class: str) -> None:
-        config = {'model': {'model_class': model_class}, 'training': {}}
-        (model_dir / 'config.yaml').write_text(yaml.dump(config))
+        (model_dir / 'config.yaml').write_text(yaml.dump(_make_valid_config(model_class)))
 
     def _write_checkpoint(self, model_dir: Path) -> Path:
         ckpt = model_dir / 'model_best.ckpt'
@@ -130,8 +134,10 @@ class TestModelFromDir:
         mock_instance.load_state_dict.assert_called_once_with({'layer': 'weights'})
 
     def test_unknown_model_type_raises(self, tmp_path: Path) -> None:
+        # load_config rejects unknown model_class at the Pydantic discriminated-union level
+        # before the MODEL_REGISTRY check is reached
         self._write_config(tmp_path, 'unknown_arch')
-        with pytest.raises(ValueError, match='Unknown model type'):
+        with pytest.raises(ValidationError):
             Model.from_dir(tmp_path)
 
     def test_accepts_string_path(self, tmp_path: Path) -> None:

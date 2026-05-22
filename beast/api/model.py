@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any
 
 import torch
-import yaml
 
+from beast.config import BeastConfig
 from beast.inference import predict_images, predict_video
+from beast.io import load_config
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
 from beast.models.resnets import ResnetAutoencoder
@@ -76,8 +77,7 @@ class Model:
         model_dir = Path(model_dir)
 
         config_path = model_dir / 'config.yaml'
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
+        config = load_config(config_path)
 
         model_type = config['model'].get('model_class', '').lower()
         if model_type not in cls.MODEL_REGISTRY:
@@ -111,10 +111,9 @@ class Model:
 
         """
         if not isinstance(config_path, dict):
-            with open(config_path) as f:
-                config = yaml.safe_load(f)
+            config = load_config(config_path)
         else:
-            config = config_path
+            config = BeastConfig.model_validate(config_path).model_dump()
 
         model_type = config['model'].get('model_class', '').lower()
         if model_type not in cls.MODEL_REGISTRY:
