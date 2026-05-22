@@ -1,6 +1,7 @@
 """High-level Model API for training and running inference with BEAST models."""
 
 import contextlib
+import logging
 import os
 import time
 from collections.abc import Generator
@@ -17,6 +18,8 @@ from beast.models.base import BaseLightningModel
 from beast.models.resnets import ResnetAutoencoder
 from beast.models.vits import VisionTransformer
 from beast.train import train
+
+_logger = logging.getLogger(__name__)
 
 
 # TODO: Replace with contextlib.chdir in python 3.11.
@@ -87,13 +90,13 @@ class Model:
         model_class = cls.MODEL_REGISTRY[model_type]
         model = model_class(config)
 
-        print(f'Loaded a {model_class} model')
+        _logger.info(f'Loaded a {model_class} model')
 
         # Load best weights
         checkpoint_path = list(model_dir.rglob('*best.ckpt'))[0]
         state_dict = torch.load(checkpoint_path, map_location='cpu')
         model.load_state_dict(state_dict['state_dict'])
-        print(f'Loaded model weights from {checkpoint_path}')
+        _logger.info(f'Loaded model weights from {checkpoint_path}')
 
         return cls(model, config, model_dir)
 
@@ -132,7 +135,7 @@ class Model:
         init_duration = time.time() - init_start
         log_step(f"Model initialization completed in {init_duration:.2f} seconds", level='debug')
 
-        print(f'Initialized a {model_class} model')
+        _logger.info(f'Initialized a {model_class} model')
 
         return cls(model, config, model_dir=None)
 

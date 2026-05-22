@@ -134,9 +134,8 @@ class ContrastBatchSampler(Sampler):
             self.num_replicas = 1
             self.rank = 0
 
-        assert batch_size % 2 == 0, (
-            "Batch size must be even to form (ref, pos) pairs."
-        )
+        if batch_size % 2 != 0:
+            raise ValueError('Batch size must be even to form (ref, pos) pairs.')
 
         self.dataset = dataset
         self.batch_size = batch_size

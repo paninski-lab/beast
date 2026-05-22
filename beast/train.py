@@ -1,5 +1,6 @@
 """Training loop and callback setup for BEAST models."""
 
+import logging
 import os
 import random
 import sys
@@ -20,6 +21,8 @@ from beast.data.datasets import BaseDataset
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
 
+_logger = logging.getLogger(__name__)
+
 
 def reset_seeds(seed: int = 0) -> None:
     """Reset all random seeds for reproducible training.
@@ -39,19 +42,18 @@ def reset_seeds(seed: int = 0) -> None:
 
 @rank_zero_only
 def pretty_print_config(config: dict) -> None:
-    """Print the config dict section by section to stdout."""
-    print('config file:')
+    """Log the config dict section by section."""
+    _logger.info('config file:')
     for key, val in config.items():
-        print('--------------------')
-        print(f'{key} parameters')
-        print('--------------------')
+        _logger.info('--------------------')
+        _logger.info(f'{key} parameters')
+        _logger.info('--------------------')
         if isinstance(val, dict):
             for k, v in val.items():
-                print(f'{k}: {v}')
+                _logger.info(f'{k}: {v}')
         else:
-            print(f'{val}')
-        print()
-    print('\n\n')
+            _logger.info(f'{val}')
+    _logger.info('')
 
 
 def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> BaseLightningModel:
@@ -73,8 +75,8 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
     # Only print from rank 0
     if rank_zero_only.rank == 0:
         log_step("Entering train() function", level='debug')
-        print(f'output directory: {output_dir}')
-        print(f'model type: {type(model)}')
+        _logger.info(f'output directory: {output_dir}')
+        _logger.info(f'model type: {type(model)}')
 
     # reset all seeds
     if rank_zero_only.rank == 0:

@@ -65,7 +65,7 @@ class TestSelectFrameIdxsKmeans:
 
     def test_too_many_frames_raises(self, video_file) -> None:
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             select_frame_idxs_kmeans(
                 video_file=video_file,
                 resize_dims=8,

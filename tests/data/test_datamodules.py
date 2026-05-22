@@ -78,7 +78,7 @@ class TestBaseDataModule:
         dataset = BaseDataset(data_dir=data_dir, imgaug_pipeline=None)
         dm = BaseDataModule(dataset=dataset, train_probability=0.8, use_sampler=True)
         # Act / Assert
-        with pytest.raises(AssertionError, match='Sampler cannot be used without augmentations'):
+        with pytest.raises(ValueError, match='Sampler cannot be used without augmentations'):
             dm.setup()
 
     def test_slurm_env_var_sets_num_workers(self, data_dir, monkeypatch) -> None:

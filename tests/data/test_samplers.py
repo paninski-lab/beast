@@ -75,7 +75,7 @@ class TestContrastBatchSampler:
         dataset.dataset.image_list = [f"path_{i}" for i in range(100)]
         dataset.indices = list(range(100))
 
-        with pytest.raises(AssertionError, match="Batch size must be even"):
+        with pytest.raises(ValueError, match='Batch size must be even'):
             ContrastBatchSampler(dataset, batch_size=7)
 
     def test_len(self):
