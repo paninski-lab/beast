@@ -9,6 +9,8 @@ import pytest
 
 from beast.cli.main import build_parser, main
 
+VERSION_MODULE = 'beast.cli.main.importlib.metadata'
+
 
 class TestBuildParser:
     """Test the build_parser function."""
@@ -32,6 +34,38 @@ class TestBuildParser:
         # Act / Assert
         with pytest.raises(SystemExit):
             parser.parse_args(['notacommand'])
+
+    def test_version_flag_exits_with_code_0(self) -> None:
+        # Arrange
+        parser = build_parser()
+        # Act / Assert
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(['--version'])
+        assert exc_info.value.code == 0
+
+    def test_version_flag_prints_version(self, capsys) -> None:
+        # Arrange
+        with patch(f'{VERSION_MODULE}.version', return_value='9.9.9'):
+            parser = build_parser()
+        # Act
+        with pytest.raises(SystemExit):
+            parser.parse_args(['--version'])
+        # Assert
+        assert '9.9.9' in capsys.readouterr().out
+
+    def test_version_unknown_when_package_not_found(self, capsys) -> None:
+        # Arrange
+        import importlib.metadata
+        with patch(
+            f'{VERSION_MODULE}.version',
+            side_effect=importlib.metadata.PackageNotFoundError,
+        ):
+            parser = build_parser()
+        # Act
+        with pytest.raises(SystemExit):
+            parser.parse_args(['--version'])
+        # Assert
+        assert 'unknown' in capsys.readouterr().out
 
     def test_registers_extract(self, tmp_path: Path) -> None:
         # Arrange
