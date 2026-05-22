@@ -10,8 +10,8 @@ from typing import Any
 import torch
 import yaml
 
-from beast import log_step
 from beast.inference import predict_images, predict_video
+from beast.logging import log_step
 from beast.models.base import BaseLightningModel
 from beast.models.resnets import ResnetAutoencoder
 from beast.models.vits import VisionTransformer

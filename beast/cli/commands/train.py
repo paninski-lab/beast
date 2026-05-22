@@ -6,8 +6,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from beast import log_step
 from beast.cli.types import config_file, output_dir
+from beast.logging import log_step
 
 _logger = logging.getLogger('BEAST.CLI.TRAIN')
 

@@ -3,47 +3,10 @@
 # Hacky way to get version from pypackage.toml.
 # Adapted from: https://github.com/python-poetry/poetry/issues/273#issuecomment-1877789967
 import importlib.metadata
-import time
 from pathlib import Path
 from typing import Any
 
 __package_version = "unknown"
-
-
-def log_step(
-    msg: str,
-    level: str | None = None,
-    flush: bool = True,
-    logger: Any = None,
-) -> None:
-    """Unified logging function with optional level.
-
-    Parameters
-    ----------
-    msg: message to log
-    level: None (plain timestamp + msg), 'info', 'debug', or 'error'
-    flush: whether to flush stdout after printing
-    logger: if provided and level is 'info', also call logger.info(msg);
-        if provided and level is 'error', also call logger.error(msg)
-    """
-    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    if level == 'info':
-        if logger is not None:
-            logger.info(msg)
-        else:
-            print(f"[{timestamp}] INFO: {msg}", flush=flush)
-    elif level == 'debug':
-        if logger is not None:
-            logger.debug(msg)
-        else:
-            print(f"[{timestamp}] DEBUG: {msg}", flush=flush)
-    elif level == 'error':
-        if logger is not None:
-            logger.error(msg)
-        else:
-            print(f"[{timestamp}] ERROR: {msg}", flush=flush)
-    else:
-        print(f"[{timestamp}] {msg}", flush=flush)
 
 
 def __get_package_version() -> str:

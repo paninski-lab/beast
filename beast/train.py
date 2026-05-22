@@ -14,10 +14,10 @@ from lightning.pytorch import loggers as pl_loggers
 from lightning.pytorch.utilities import rank_zero_only
 
 import beast
-from beast import log_step
 from beast.data.augmentations import imgaug_pipeline
 from beast.data.datamodules import BaseDataModule
 from beast.data.datasets import BaseDataset
+from beast.logging import log_step
 from beast.models.base import BaseLightningModel
 
 
