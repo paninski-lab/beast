@@ -17,7 +17,7 @@ class TestLoadConfig:
         assert isinstance(config, dict)
 
     def test_load_config_bad_path_raises(self) -> None:
-        with pytest.raises(AssertionError):
+        with pytest.raises(FileNotFoundError):
             load_config('/fake/path')
 
 

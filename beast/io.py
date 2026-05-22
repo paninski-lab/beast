@@ -4,6 +4,8 @@ from pathlib import Path
 
 import yaml
 
+from beast.config import BeastConfig
+
 
 def load_config(path: str | Path) -> dict:
     """Load yaml configuration file to a nested dictionary structure.
@@ -19,12 +21,20 @@ def load_config(path: str | Path) -> dict:
     """
 
     path = Path(path)
-    assert path.is_file(), f'{path} does not exist'
+    if not path.is_file():
+        raise FileNotFoundError(f'{path} does not exist')
 
+    # load raw yaml into an untyped dict
     with open(path) as file:
-        config = yaml.safe_load(file)
+        raw = yaml.safe_load(file)
 
-    return config
+    # validate against the schema; raises ValidationError on missing required
+    # fields, wrong types, or invalid Literal values
+    validated = BeastConfig.model_validate(raw)
+
+    # convert back to a plain nested dict so callers don't depend on pydantic types;
+    # this also fills in any fields that have defaults but were absent from the yaml
+    return validated.model_dump()
 
 
 def apply_config_overrides(config: dict, overrides: dict | list) -> dict:
