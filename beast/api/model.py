@@ -192,7 +192,7 @@ class Model:
         batch_size: int = 32,
         save_latents: bool = True,
         save_reconstructions: bool = True,
-    ) -> None:
+    ) -> dict[str, Any]:
         """Run inference on a single video.
 
         Parameters
@@ -203,11 +203,15 @@ class Model:
         save_latents: save latents for each image as a numpy file
         save_reconstructions: save reconstructed images
 
+        Returns
+        -------
+        Inference results dict from the video prediction handler
+
         """
         video_file = Path(video_file)
         if self.model_dir is None:
             raise ValueError('model_dir is None; call train() before predict_video()')
-        predict_video(
+        return predict_video(
             model=self.model,
             output_dir=output_dir or self.model_dir / 'video_predictions',
             video_file=video_file,

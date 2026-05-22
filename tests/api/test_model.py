@@ -279,3 +279,12 @@ class TestModelPredictVideo:
         expected_output = model_dir / 'video_predictions'
         mock_predict.assert_called_once()
         assert mock_predict.call_args.kwargs['output_dir'] == expected_output
+
+    def test_returns_predict_video_output(self, tmp_path: Path) -> None:
+        model_dir = tmp_path / 'model'
+        model_dir.mkdir()
+        m = self._make_model(model_dir=model_dir)
+        sentinel = {'frames_processed': 42}
+        with patch('beast.api.model.predict_video', return_value=sentinel):
+            result = m.predict_video(video_file=tmp_path / 'vid.mp4')
+        assert result is sentinel

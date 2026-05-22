@@ -531,7 +531,7 @@ def predict_video(
     batch_size: int = 32,
     save_latents: bool = True,
     save_reconstructions: bool = True,
-) -> None:
+) -> dict[str, Any]:
     """Run inference on video using a trained model and save results.
 
     Parameters
@@ -542,6 +542,16 @@ def predict_video(
     batch_size: number of images to process in each batch
     save_latents: whether to save latent representations as .npy files in a 'latents/' subdirectory
     save_reconstructions: whether to save reconstructed images as PNG files
+
+    Returns
+    -------
+    Dictionary containing inference results with keys:
+        - 'output_dir': path to output directory
+        - 'video_file': path to source video file
+        - 'frames_processed': total number of frames processed
+        - 'reconstruction_video': path to reconstruction video (if enabled, else None)
+        - 'latents_file': path to saved latents array (if enabled, else None)
+        - 'latents_shape': shape of latents array (if enabled, else None)
 
     """
 
@@ -566,7 +576,7 @@ def predict_video(
     assert predictions is not None
 
     # process outputs
-    handler.process_predictions(
+    return handler.process_predictions(
         predictions,
         save_reconstructions=save_reconstructions,
         save_latents=save_latents,
