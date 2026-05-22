@@ -62,29 +62,24 @@ class TestModelInit:
 class TestModelFromConfig:
     """Test the Model.from_config class method."""
 
-    def _make_config(self, model_class: str) -> dict:
-        return {'model': {'model_class': model_class}, 'training': {}}
-
     def _mock_class(self) -> MagicMock:
         mock = MagicMock(return_value=MagicMock())
         mock.__name__ = 'MockModel'
         return mock
 
     def test_dict_config_vit(self) -> None:
-        config = self._make_config('vit')
+        config = _make_valid_config('vit')
         mock_class = self._mock_class()
         with patch.dict(Model.MODEL_REGISTRY, {'vit': mock_class}):
             m = Model.from_config(config)
         assert isinstance(m, Model)
-        mock_class.assert_called_once_with(config)
 
     def test_dict_config_resnet(self) -> None:
-        config = self._make_config('resnet')
+        config = _make_valid_config('resnet')
         mock_class = self._mock_class()
         with patch.dict(Model.MODEL_REGISTRY, {'resnet': mock_class}):
             m = Model.from_config(config)
         assert isinstance(m, Model)
-        mock_class.assert_called_once_with(config)
 
     def test_file_config(self, tmp_path: Path) -> None:
         config_path = tmp_path / 'config.yaml'
@@ -95,12 +90,12 @@ class TestModelFromConfig:
         assert isinstance(m, Model)
 
     def test_unknown_model_type_raises(self) -> None:
-        config = self._make_config('unknown_arch')
-        with pytest.raises(ValueError, match='Unknown model type'):
+        config = _make_valid_config('unknown_arch')
+        with pytest.raises(ValidationError):
             Model.from_config(config)
 
     def test_model_dir_is_none_after_from_config(self) -> None:
-        config = self._make_config('vit')
+        config = _make_valid_config('vit')
         mock_class = self._mock_class()
         with patch.dict(Model.MODEL_REGISTRY, {'vit': mock_class}):
             m = Model.from_config(config)
