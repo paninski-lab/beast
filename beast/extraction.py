@@ -198,8 +198,10 @@ def select_frame_idxs_kmeans(
     """
 
     # check inputs
-    assert frame_range[0] >= 0
-    assert frame_range[1] <= 1
+    if frame_range[0] < 0:
+        raise ValueError(f'frame_range[0] must be >= 0, got {frame_range[0]}')
+    if frame_range[1] > 1:
+        raise ValueError(f'frame_range[1] must be <= 1, got {frame_range[1]}')
 
     # read all frames, reshape, chop off unwanted portions of beginning/end
     print('computing motion energy...')
@@ -211,7 +213,8 @@ def select_frame_idxs_kmeans(
     frame_count = me.shape[0]
     beg_frame = int(float(frame_range[0]) * frame_count)
     end_frame = int(float(frame_range[1]) * frame_count) - 2  # leave room for context
-    assert (end_frame - beg_frame) >= n_frames_to_select, 'valid video segment too short!'
+    if (end_frame - beg_frame) < n_frames_to_select:
+        raise ValueError('valid video segment too short!')
 
     # find high me frames, defined as those with me larger than nth percentile me
     prctile = 50 if frame_count < 1e5 else 75  # take fewer frames if there are many

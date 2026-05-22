@@ -37,7 +37,8 @@ def reencode_video(input_file: str | Path, output_file: str | Path) -> None:
     input_file = Path(input_file)
     output_file = Path(output_file)
     # check input file exists
-    assert input_file.is_file(), 'input video does not exist.'
+    if not input_file.is_file():
+        raise FileNotFoundError(f'{input_file} does not exist')
     # check directory for saving outputs exists
     output_file.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg_cmd = (

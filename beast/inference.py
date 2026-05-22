@@ -358,7 +358,8 @@ class VideoPredictionHandler:
 
                 if self.reconstruction_writer is None:
                     self._init_video_writer()
-                assert self.reconstruction_writer is not None
+                if self.reconstruction_writer is None:
+                    raise RuntimeError('reconstruction_writer was not initialized')
 
                 # convert tensor to BGR numpy array
                 frame_bgr = self.tensor_to_numpy_bgr(reconstructions[i])
@@ -512,7 +513,8 @@ def predict_images(
     # run inference
     trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
     predictions = trainer.predict(model, dataloaders=dataloader, return_predictions=True)
-    assert predictions is not None
+    if predictions is None:
+        raise RuntimeError('trainer.predict() returned None')
 
     # process outputs
     results = handler.process_predictions(
@@ -573,7 +575,8 @@ def predict_video(
     # run inference
     trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
     predictions = trainer.predict(model, dataloaders=dataloader, return_predictions=True)
-    assert predictions is not None
+    if predictions is None:
+        raise RuntimeError('trainer.predict() returned None')
 
     # process outputs
     return handler.process_predictions(

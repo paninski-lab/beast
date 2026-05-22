@@ -90,7 +90,8 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
         if self.dataset.imgaug_pipeline is None:
-            assert not self.use_sampler, 'Sampler cannot be used without augmentations'
+            if self.use_sampler:
+                raise ValueError('Sampler cannot be used without augmentations')
             # no augmentations in the pipeline; subsets can share same underlying dataset
             self.train_dataset, self.val_dataset, self.test_dataset = random_split(
                 self.dataset,
@@ -155,7 +156,8 @@ class BaseDataModule(pl.LightningDataModule):
 
     def train_dataloader(self) -> torch.utils.data.DataLoader:
         """Return the training data loader."""
-        assert self.train_dataset is not None, 'call setup() before train_dataloader()'
+        if self.train_dataset is None:
+            raise RuntimeError('call setup() before train_dataloader()')
         if self.use_sampler:
             return _make_contrastive_dataloader(
                 dataset=cast(BaseDataset, self.train_dataset),
@@ -178,7 +180,8 @@ class BaseDataModule(pl.LightningDataModule):
 
     def val_dataloader(self) -> torch.utils.data.DataLoader:
         """Return the validation data loader."""
-        assert self.val_dataset is not None, 'call setup() before val_dataloader()'
+        if self.val_dataset is None:
+            raise RuntimeError('call setup() before val_dataloader()')
         return DataLoader(
             self.val_dataset,
             batch_size=self.val_batch_size,
@@ -192,7 +195,8 @@ class BaseDataModule(pl.LightningDataModule):
 
     def test_dataloader(self) -> torch.utils.data.DataLoader:
         """Return the test data loader."""
-        assert self.test_dataset is not None, 'call setup() before test_dataloader()'
+        if self.test_dataset is None:
+            raise RuntimeError('call setup() before test_dataloader()')
         return DataLoader(
             self.test_dataset,
             batch_size=self.test_batch_size,
@@ -282,14 +286,21 @@ def split_sizes_from_probabilities(
         val_probability = round(remaining_probability / 2, 5)
         test_probability = round(remaining_probability / 2, 5)
     elif test_probability is None:
-        assert val_probability is not None
+        if val_probability is None:
+            raise RuntimeError('val_probability should have been set')
         test_probability = 1.0 - train_probability - val_probability
 
-    assert val_probability is not None
-    assert test_probability is not None
+    if val_probability is None:
+        raise RuntimeError('val_probability should have been set')
+    if test_probability is None:
+        raise RuntimeError('test_probability should have been set')
 
     # probabilities should add to one
-    assert test_probability + train_probability + val_probability == 1.0
+    if test_probability + train_probability + val_probability != 1.0:
+        raise ValueError(
+            f'train, val, and test probabilities must sum to 1.0, '
+            f'got {train_probability + val_probability + test_probability}'
+        )
 
     # compute numbers from probabilities
     train_number = int(np.floor(train_probability * total_number))
@@ -311,7 +322,10 @@ def split_sizes_from_probabilities(
         if train_number < 1:
             raise ValueError('Must have at least two labeled frames, one train and one validation')
 
-    # assert that we're using all datapoints
-    assert train_number + test_number + val_number == total_number
+    if train_number + test_number + val_number != total_number:
+        raise RuntimeError(
+            f'split sizes {train_number}, {val_number}, {test_number} '
+            f'do not sum to total {total_number}'
+        )
 
     return [train_number, val_number, test_number]
