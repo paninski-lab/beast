@@ -1,6 +1,7 @@
 """Data modules split a dataset into train, val, and test modules."""
 
 import copy
+import logging
 import multiprocessing
 import os
 from typing import cast
@@ -13,6 +14,8 @@ from torch.utils.data import DataLoader, Subset, random_split
 
 from beast.data.datasets import BaseDataset
 from beast.data.samplers import ContrastBatchSampler, contrastive_collate_fn
+
+_logger = logging.getLogger(__name__)
 
 
 class BaseDataModule(pl.LightningDataModule):
@@ -125,7 +128,7 @@ class BaseDataModule(pl.LightningDataModule):
             cast(BaseDataset, self.test_dataset.dataset).imgaug_pipeline = None
 
         if rank_zero_only.rank == 0:
-            print(
+            _logger.info(
                 f'Number of images in the full dataset (train+val+test): {datalen}\n'
                 f'Dataset splits -- '
                 f'train: {len(self.train_dataset)}, '

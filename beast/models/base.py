@@ -1,5 +1,6 @@
 """Base Lightning module shared by all BEAST model architectures."""
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from typing import Literal
@@ -8,6 +9,8 @@ import lightning.pytorch as pl
 import torch
 from lightning.pytorch.utilities import rank_zero_only
 from torch.optim.lr_scheduler import MultiStepLR, OneCycleLR
+
+_logger = logging.getLogger(__name__)
 
 
 class BaseLightningModel(ABC, pl.LightningModule):
@@ -19,7 +22,7 @@ class BaseLightningModel(ABC, pl.LightningModule):
         super().__init__()
 
         if rank_zero_only.rank == 0:
-            print(f'\nInitializing a {self._get_name()} instance.')
+            _logger.info(f'Initializing a {self._get_name()} instance.')
 
         self.config = config
         self.seed = config['model']['seed']

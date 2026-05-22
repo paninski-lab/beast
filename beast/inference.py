@@ -1,5 +1,6 @@
 """Inference handlers for saving model predictions on images and videos."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,8 @@ from PIL import Image
 from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD, BaseDataset
 from beast.data.video import VideoFrameIterator
 from beast.models.base import BaseLightningModel
+
+_logger = logging.getLogger(__name__)
 
 
 class ImagePredictionHandler:
@@ -221,14 +224,13 @@ class ImagePredictionHandler:
             results['latents_saved'] = len(all_saved_files['latents'])
             results['latents_dir'] = str(self.output_dir / "latents")
 
-        # Print summary
-        print(f"✓ Processed {results['num_images_processed']} images")
+        _logger.info(f"Processed {results['num_images_processed']} images")
         if save_reconstructions:
-            print(f"✓ Saved {results['reconstructions_saved']} reconstructions")
+            _logger.info(f"Saved {results['reconstructions_saved']} reconstructions")
         if save_latents:
-            print(f"✓ Saved {results['latents_saved']} latent representations")
-        print(f"✓ Results saved to: {self.output_dir}")
-        print(f"✓ Metadata saved to: {metadata_path}")
+            _logger.info(f"Saved {results['latents_saved']} latent representations")
+        _logger.info(f'Results saved to: {self.output_dir}')
+        _logger.info(f'Metadata saved to: {metadata_path}')
 
         return results
 
@@ -433,13 +435,12 @@ class VideoPredictionHandler:
         else:
             results['reconstruction_video'] = None
 
-        # print summary
-        print(f'✓ Processed {self.frames_processed} frames from {self.video_file.name}')
+        _logger.info(f'Processed {self.frames_processed} frames from {self.video_file.name}')
         if save_reconstructions:
-            print(f'✓ Saved reconstruction video: {results.get("reconstruction_video")}')
+            _logger.info(f'Saved reconstruction video: {results.get("reconstruction_video")}')
         if save_latents:
-            print(
-                f'✓ Saved latents array {results.get("latents_shape")} to: '
+            _logger.info(
+                f'Saved latents array {results.get("latents_shape")} to: '
                 f'{results.get("latents_file")}'
             )
 

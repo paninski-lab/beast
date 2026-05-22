@@ -1,6 +1,6 @@
-"""Unified logging utility for the BEAST package."""
+"""Logging utilities for the BEAST package."""
 
-import time
+import logging
 from typing import Any
 
 
@@ -10,31 +10,20 @@ def log_step(
     flush: bool = True,
     logger: Any = None,
 ) -> None:
-    """Unified logging function with optional level.
+    """Log a message at the given level.
 
     Parameters
     ----------
     msg: message to log
-    level: None (plain timestamp + msg), 'info', 'debug', or 'error'
-    flush: whether to flush stdout after printing
-    logger: if provided, delegate to logger.info/debug/error instead of printing
+    level: 'info', 'debug', or 'error'; defaults to 'info'
+    flush: unused; retained for backward compatibility
+    logger: if provided, use this logger instead of the default beast logger
 
     """
-    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    if level == 'info':
-        if logger is not None:
-            logger.info(msg)
-        else:
-            print(f'[{timestamp}] INFO: {msg}', flush=flush)
-    elif level == 'debug':
-        if logger is not None:
-            logger.debug(msg)
-        else:
-            print(f'[{timestamp}] DEBUG: {msg}', flush=flush)
+    _logger = logger if logger is not None else logging.getLogger('beast')
+    if level == 'debug':
+        _logger.debug(msg)
     elif level == 'error':
-        if logger is not None:
-            logger.error(msg)
-        else:
-            print(f'[{timestamp}] ERROR: {msg}', flush=flush)
+        _logger.error(msg)
     else:
-        print(f'[{timestamp}] {msg}', flush=flush)
+        _logger.info(msg)

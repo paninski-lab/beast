@@ -1,5 +1,6 @@
 """Frame extraction from videos using motion energy and PCA-kmeans clustering."""
 
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -14,6 +15,8 @@ from beast.video import (
 )
 
 ExtractionMethod = Literal['pca_kmeans']  # used by CLI for argument choice list
+
+_logger = logging.getLogger(__name__)
 
 
 def extract_frames(
@@ -105,10 +108,10 @@ def extract_frames(
 
     input_path = Path(input_path)
     output_dir = Path(output_dir)
-    print(f'Extracting frames from: {input_path}')
-    print(f'Saving to: {output_dir}')
-    print(f'Method: {method}')
-    print(f'Frames per video: {frames_per_video}')
+    _logger.info(f'Extracting frames from: {input_path}')
+    _logger.info(f'Saving to: {output_dir}')
+    _logger.info(f'Method: {method}')
+    _logger.info(f'Frames per video: {frames_per_video}')
 
     video_files = list(input_path.glob('*.mp4')) + list(input_path.glob('*.avi'))
     total_videos = 0
@@ -141,7 +144,7 @@ def extract_frames(
         ])
         csv_path = save_dir / 'selected_frames.csv'
         np.savetxt(csv_path, np.sort(frames_to_label), delimiter=',', fmt='%s')
-        print(f'Saved selected frame list to: {csv_path}')
+        _logger.info(f'Saved selected frame list to: {csv_path}')
 
         total_videos += 1
         total_frames += len(idxs)
@@ -204,7 +207,7 @@ def select_frame_idxs_kmeans(
         raise ValueError(f'frame_range[1] must be <= 1, got {frame_range[1]}')
 
     # read all frames, reshape, chop off unwanted portions of beginning/end
-    print('computing motion energy...')
+    _logger.info('computing motion energy...')
     me, frames = compute_video_motion_energy(
         video_file=video_file,
         resize_dims=resize_dims,
@@ -225,13 +228,13 @@ def select_frame_idxs_kmeans(
         idxs_high_me = np.arange(me.shape[0])
 
     # compute pca over high me frames
-    print('performing pca over high motion energy frames...')
+    _logger.info('performing pca over high motion energy frames...')
     pca_obj = PCA(n_components=np.min([frames[idxs_high_me].shape[0], 32]))
     embedding = pca_obj.fit_transform(X=frames[idxs_high_me])
     del frames  # free up memory
 
     # cluster low-d pca embeddings
-    print('performing kmeans clustering...')
+    _logger.info('performing kmeans clustering...')
     _, centers = _run_kmeans(data=embedding, n_clusters=n_frames_to_select)
     # centers is initially of shape (n_clusters, n_pcs); reformat
     centers = centers.T[None, :]

@@ -1,5 +1,6 @@
 """Tests for the beast.logging module."""
 
+import logging
 from unittest.mock import MagicMock
 
 from beast.logging import log_step
@@ -8,34 +9,38 @@ from beast.logging import log_step
 class TestLogStep:
     """Test the log_step function."""
 
-    def test_plain_message_printed_with_timestamp(self, capsys) -> None:
-        log_step('hello world')
-        captured = capsys.readouterr()
-        assert 'hello world' in captured.out
-        assert 'INFO' not in captured.out
-        assert 'DEBUG' not in captured.out
-        assert 'ERROR' not in captured.out
+    def test_plain_message_logs_at_info(self, caplog) -> None:
+        with caplog.at_level(logging.INFO, logger='beast'):
+            log_step('hello world')
+        assert 'hello world' in caplog.text
 
-    def test_info_level_prints_info_prefix(self, capsys) -> None:
-        log_step('info message', level='info')
-        captured = capsys.readouterr()
-        assert 'INFO: info message' in captured.out
+    def test_info_level_logs_at_info(self, caplog) -> None:
+        with caplog.at_level(logging.INFO, logger='beast'):
+            log_step('info message', level='info')
+        assert 'info message' in caplog.text
+        assert caplog.records[-1].levelno == logging.INFO
 
-    def test_debug_level_prints_debug_prefix(self, capsys) -> None:
-        log_step('debug message', level='debug')
-        captured = capsys.readouterr()
-        assert 'DEBUG: debug message' in captured.out
+    def test_debug_level_logs_at_debug(self, caplog) -> None:
+        with caplog.at_level(logging.DEBUG, logger='beast'):
+            log_step('debug message', level='debug')
+        assert 'debug message' in caplog.text
+        assert caplog.records[-1].levelno == logging.DEBUG
 
-    def test_error_level_prints_error_prefix(self, capsys) -> None:
-        log_step('error message', level='error')
-        captured = capsys.readouterr()
-        assert 'ERROR: error message' in captured.out
+    def test_error_level_logs_at_error(self, caplog) -> None:
+        with caplog.at_level(logging.ERROR, logger='beast'):
+            log_step('error message', level='error')
+        assert 'error message' in caplog.text
+        assert caplog.records[-1].levelno == logging.ERROR
 
-    def test_unknown_level_falls_through_to_plain(self, capsys) -> None:
-        log_step('plain', level='warning')
-        captured = capsys.readouterr()
-        assert 'plain' in captured.out
-        assert 'WARNING' not in captured.out
+    def test_unknown_level_falls_through_to_info(self, caplog) -> None:
+        with caplog.at_level(logging.INFO, logger='beast'):
+            log_step('plain', level='warning')
+        assert 'plain' in caplog.text
+        assert caplog.records[-1].levelno == logging.INFO
+
+    def test_flush_param_accepted(self) -> None:
+        # flush is a no-op but must not raise
+        log_step('msg', flush=False)
 
     def test_info_with_logger_delegates_to_logger_info(self) -> None:
         mock_logger = MagicMock()
@@ -56,8 +61,8 @@ class TestLogStep:
         mock_logger.error.assert_called_once_with('msg')
         mock_logger.info.assert_not_called()
 
-    def test_with_logger_does_not_print(self, capsys) -> None:
+    def test_with_logger_does_not_use_default_logger(self, caplog) -> None:
         mock_logger = MagicMock()
-        log_step('msg', level='info', logger=mock_logger)
-        captured = capsys.readouterr()
-        assert captured.out == ''
+        with caplog.at_level(logging.DEBUG, logger='beast'):
+            log_step('msg', level='info', logger=mock_logger)
+        assert 'msg' not in caplog.text

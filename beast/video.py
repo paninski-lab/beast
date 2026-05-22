@@ -1,5 +1,6 @@
 """Video I/O utilities: codec checking, re-encoding, frame extraction, and motion energy."""
 
+import logging
 import shutil
 import subprocess
 from pathlib import Path
@@ -7,6 +8,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 from tqdm import tqdm
+
+_logger = logging.getLogger(__name__)
 
 
 def check_codec_format(input_file: str | Path) -> bool:
@@ -76,7 +79,7 @@ def copy_and_reformat_video_file(
 
     # check 1: does file exist?
     if not src.is_file():
-        print(f'{src} does not exist! skipping')
+        _logger.warning(f'{src} does not exist, skipping')
         return None
 
     # check 2: is file in the correct format for DALI?
@@ -84,7 +87,7 @@ def copy_and_reformat_video_file(
 
     # reencode/rename
     if not video_file_correct_codec:
-        print(f're-encoding {src} to be compatable with DALI video reader')
+        _logger.info(f're-encoding {src} to be compatible with DALI video reader')
         reencode_video(src, dst)
         # remove old video
         if remove_old:
@@ -169,8 +172,8 @@ def get_frames_from_idxs(
                     frames = np.zeros((n_frames, 3, height, width), dtype='uint8')
                 frames[fr] = frame_rgb.transpose(2, 0, 1)
             else:
-                print(
-                    'warning! reached end of video; returning blank frames for remainder of '
+                _logger.warning(
+                    'reached end of video; returning blank frames for remainder of '
                     'requested indices'
                 )
                 break
