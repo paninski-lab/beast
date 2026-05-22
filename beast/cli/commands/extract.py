@@ -3,9 +3,10 @@
 import argparse
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 from beast.cli.types import output_dir
+from beast.extraction import ExtractionMethod
 
 _logger = logging.getLogger('BEAST.CLI.EXTRACT')
 
@@ -44,7 +45,7 @@ def register_parser(subparsers: Any) -> None:
     )
     optional.add_argument(
         '--method', '-m',
-        choices=['uniform', 'random', 'pca_kmeans'],
+        choices=list(get_args(ExtractionMethod)),
         default='pca_kmeans',
         help='Frame extraction method (default: pca_kmeans)',
     )

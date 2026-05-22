@@ -100,7 +100,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
     pipe_params = config.get('training', {}).get('imgaug', 'none')
     if isinstance(pipe_params, str):
         from beast.data.augmentations import expand_imgaug_str_to_dict
-        pipe_params = expand_imgaug_str_to_dict(pipe_params)
+        pipe_params = expand_imgaug_str_to_dict(pipe_params)  # type: ignore[arg-type]
     imgaug_pipeline_ = imgaug_pipeline(pipe_params)
     if rank_zero_only.rank == 0:
         log_step("Imgaug pipeline created", level='debug')

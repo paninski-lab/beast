@@ -117,4 +117,4 @@ class TestExpandImgaugStrToDict:
     def test_unknown_preset_raises(self) -> None:
 
         with pytest.raises(NotImplementedError):
-            expand_imgaug_str_to_dict('invalid-preset')
+            expand_imgaug_str_to_dict('invalid-preset')  # type: ignore[arg-type]

@@ -13,12 +13,14 @@ from beast.video import (
     get_frames_from_idxs,
 )
 
+ExtractionMethod = Literal['pca_kmeans']  # used by CLI for argument choice list
+
 
 def extract_frames(
     input_path: Path | str,
     output_dir: Path | str,
     frames_per_video: int = 500,
-    method: Literal['pca_kmeans'] = 'pca_kmeans',
+    method: ExtractionMethod = 'pca_kmeans',
     num_workers: int = 8,
 ) -> dict:
     """Extract representative frames from videos using intelligent sampling methods.

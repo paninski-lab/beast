@@ -32,23 +32,13 @@ class TestRegisterParser:
             '--input', '/p',
             '--output', str(tmp_path),
             '--frames-per-video', '100',
-            '--method', 'uniform',
+            '--method', 'pca_kmeans',
             '--workers', '2',
         ])
         # Assert
         assert args.frames_per_video == 100
-        assert args.method == 'uniform'
+        assert args.method == 'pca_kmeans'
         assert args.workers == 2
-
-    def test_random_method_accepted(self, tmp_path: Path) -> None:
-        # Arrange
-        parser = build_parser()
-        # Act
-        args = parser.parse_args([
-            'extract', '--input', '/p', '--output', str(tmp_path), '--method', 'random',
-        ])
-        # Assert
-        assert args.method == 'random'
 
     def test_invalid_method_exits(self, tmp_path: Path) -> None:
         # Arrange

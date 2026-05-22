@@ -31,7 +31,7 @@ class TestExtractFrames:
                 input_path=video_file.parent,
                 output_dir=tmp_path,
                 frames_per_video=5,
-                method='uniform',
+                method='uniform',  # type: ignore[arg-type]
             )
 
 
