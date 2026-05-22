@@ -215,6 +215,27 @@ class TestHandle:
         assert args.output.exists()
 
 
+    def test_checkpoint_arg_is_logged_but_not_fatal(self, tmp_path: Path) -> None:
+        # Arrange — args with an unsupported checkpoint attribute
+        from beast.cli.commands.train import handle
+        config = tmp_path / 'config.yaml'
+        config.touch()
+        args = self._make_args(tmp_path, config)
+        args.checkpoint = '/some/checkpoint.ckpt'
+        mock_config = {'data': {}, 'training': {}}
+        mock_model = MagicMock()
+        # Act — should log a warning but still train
+        with (
+            patch('beast.io.load_config', return_value=mock_config),
+            patch('beast.api.model.Model') as MockModel,
+            patch('beast.cli.commands.train._setup_model_logging'),
+        ):
+            MockModel.from_config.return_value = mock_model
+            handle(args)
+        # Assert — training still completed despite the unsupported arg
+        mock_model.train.assert_called_once()
+
+
 class TestSetupModelLogging:
     """Test the _setup_model_logging function."""
 

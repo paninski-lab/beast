@@ -1,68 +1,120 @@
-from pathlib import Path
+"""Tests for video I/O utilities."""
 
 import cv2
 import numpy as np
+import pytest
 
 from beast.video import check_codec_format
 
 
-def test_check_codec_format(video_file):
-    assert check_codec_format(video_file)
+class TestCheckCodecFormat:
+    """Test the check_codec_format function."""
+
+    def test_valid_h264_video(self, video_file) -> None:
+        assert check_codec_format(video_file)
 
 
-def test_reencode_video(video_file, tmpdir):
-    from beast.video import reencode_video
-    video_file_new = Path(tmpdir).joinpath('test.mp4')
-    reencode_video(video_file, video_file_new)
-    assert check_codec_format(video_file_new)
+class TestReencodeVideo:
+    """Test the reencode_video function."""
+
+    def test_reencoded_video_is_h264(self, video_file, tmp_path) -> None:
+        from beast.video import reencode_video
+        video_file_new = tmp_path / 'test.mp4'
+        reencode_video(video_file, video_file_new)
+        assert check_codec_format(video_file_new)
 
 
-def test_copy_and_reformat_video_file(video_file, tmpdir):
-    from beast.video import copy_and_reformat_video_file
-    tmpdir = Path(tmpdir)
-    # check when dst_dir exists
-    video_file_new_1 = copy_and_reformat_video_file(video_file, tmpdir, remove_old=False)
-    assert video_file.is_file()
-    assert video_file_new_1 is not None
-    assert check_codec_format(video_file_new_1)
-    # check when dst_dir does not exist
-    dst_dir = tmpdir.joinpath('subdir')
-    video_file_new_2 = copy_and_reformat_video_file(video_file, dst_dir, remove_old=False)
-    assert video_file.is_file()
-    assert video_file_new_2 is not None
-    assert check_codec_format(video_file_new_2)
+class TestCopyAndReformatVideoFile:
+    """Test the copy_and_reformat_video_file function."""
+
+    def test_copy_valid_video(self, video_file, tmp_path) -> None:
+        from beast.video import copy_and_reformat_video_file
+        result = copy_and_reformat_video_file(video_file, tmp_path, remove_old=False)
+        assert video_file.is_file()
+        assert result is not None
+        assert check_codec_format(result)
+
+    def test_copy_to_nonexistent_subdir(self, video_file, tmp_path) -> None:
+        from beast.video import copy_and_reformat_video_file
+        dst_dir = tmp_path / 'subdir'
+        result = copy_and_reformat_video_file(video_file, dst_dir, remove_old=False)
+        assert video_file.is_file()
+        assert result is not None
+        assert check_codec_format(result)
+
+    def test_dst_already_exists_returns_early(self, video_file, tmp_path) -> None:
+        # Arrange — copy once so the destination already exists
+        from beast.video import copy_and_reformat_video_file
+        result_first = copy_and_reformat_video_file(video_file, tmp_path, remove_old=False)
+        assert result_first is not None
+        # Act — second call with same dst should return early (line 74)
+        result_second = copy_and_reformat_video_file(video_file, tmp_path, remove_old=False)
+        # Assert — returns the existing path without re-copying
+        assert result_second == result_first
+
+    def test_nonexistent_src_returns_none(self, tmp_path) -> None:
+        # Arrange — source file does not exist
+        from beast.video import copy_and_reformat_video_file
+        nonexistent = tmp_path / 'ghost.mp4'
+        # Act
+        result = copy_and_reformat_video_file(nonexistent, tmp_path)
+        # Assert — function prints a warning and returns None
+        assert result is None
 
 
-def test_copy_and_reformat_video_directory(video_file, tmpdir):
-    from beast.video import copy_and_reformat_video_directory
-    src_dir = video_file.parent
-    dst_dir = Path(tmpdir)
-    copy_and_reformat_video_directory(src_dir, dst_dir)
-    assert video_file.is_file()
-    files = dst_dir.glob('*')
-    for file in files:
-        assert check_codec_format(file)
+class TestCopyAndReformatVideoDirectory:
+    """Test the copy_and_reformat_video_directory function."""
+
+    def test_copies_videos_in_directory(self, video_file, tmp_path) -> None:
+        from beast.video import copy_and_reformat_video_directory
+        src_dir = video_file.parent
+        dst_dir = tmp_path
+        copy_and_reformat_video_directory(src_dir, dst_dir)
+        assert video_file.is_file()
+        for file in dst_dir.glob('*'):
+            assert check_codec_format(file)
 
 
-def test_get_frames_from_idxs(video_file):
-    from beast.video import get_frames_from_idxs
-    n_frames = 3
-    frames = get_frames_from_idxs(video_file, np.arange(n_frames))
-    assert frames.shape == (n_frames, 3, 406, 396)
-    assert frames.dtype == np.uint8
+class TestGetFramesFromIdxs:
+    """Test the get_frames_from_idxs function."""
+
+    def test_basic_frame_loading(self, video_file) -> None:
+        from beast.video import get_frames_from_idxs
+        n_frames = 3
+        frames = get_frames_from_idxs(video_file, np.arange(n_frames))
+        assert frames.shape == (n_frames, 3, 406, 396)
+        assert frames.dtype == np.uint8
+
+    def test_no_video_file_or_cap_raises(self) -> None:
+        # Arrange — both video_file and cap are None
+        from beast.video import get_frames_from_idxs
+        # Act / Assert
+        with pytest.raises(ValueError, match='video_file must be provided when cap is None'):
+            get_frames_from_idxs(video_file=None, idxs=np.arange(3))
 
 
-def test_compute_video_motion_energy(video_file):
-    from beast.video import compute_video_motion_energy
-    me = compute_video_motion_energy(video_file)
-    cap = cv2.VideoCapture(video_file)
-    n_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-    assert n_frames == len(me)
-    assert np.isnan(me).sum() == 0
+class TestComputeVideoMotionEnergy:
+    """Test the compute_video_motion_energy function."""
+
+    def test_motion_energy_shape_and_values(self, video_file) -> None:
+        from beast.video import compute_video_motion_energy
+        me = compute_video_motion_energy(video_file)
+        cap = cv2.VideoCapture(video_file)
+        n_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        assert n_frames == len(me)
+        assert np.isnan(me).sum() == 0
 
 
-def test_read_nth_frames(video_file):
-    from beast.video import read_nth_frames
-    resize_dims = 8
-    frames = read_nth_frames(video_file=video_file, n=10, resize_dims=resize_dims)
-    assert frames.shape == (100, resize_dims, resize_dims, 3)
+class TestReadNthFrames:
+    """Test the read_nth_frames function."""
+
+    def test_basic_frame_reading(self, video_file) -> None:
+        from beast.video import read_nth_frames
+        resize_dims = 8
+        frames = read_nth_frames(video_file=video_file, n=10, resize_dims=resize_dims)
+        assert frames.shape == (100, resize_dims, resize_dims, 3)
+
+    def test_invalid_video_file_raises(self) -> None:
+        from beast.video import read_nth_frames
+        with pytest.raises(OSError, match='Error opening video file'):
+            read_nth_frames('/nonexistent/video.mp4')

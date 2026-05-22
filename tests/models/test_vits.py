@@ -50,21 +50,22 @@ class TestVisionTransformer:
         assert 'reconstructions' not in result
 
 
-def test_vit_autoencoder_integration(config_vit, run_model_test):
-    """Test ViT autoencoder with basic masked autoencoder loss."""
-    config = copy.deepcopy(config_vit)
-    run_model_test(config=config)
+class TestVisionTransformerIntegration:
+    """Integration tests that train and run inference on a ViT autoencoder."""
 
+    def test_integration_basic(self, config_vit, run_model_test) -> None:
+        """Test ViT autoencoder with basic masked autoencoder loss."""
+        config = copy.deepcopy(config_vit)
+        run_model_test(config=config)
 
-def test_vit_autoencoder_contrastive_integration(config_vit, run_model_test):
-    """Test ViT autoencoder with contrastive learning (infoNCE) enabled."""
-    config = copy.deepcopy(config_vit)
-    config['model']['model_params']['use_infoNCE'] = True
-    run_model_test(config=config)
+    def test_integration_contrastive(self, config_vit, run_model_test) -> None:
+        """Test ViT autoencoder with contrastive learning (infoNCE) enabled."""
+        config = copy.deepcopy(config_vit)
+        config['model']['model_params']['use_infoNCE'] = True
+        run_model_test(config=config)
 
-
-def test_alex_perceptual_integration(config_vit, run_model_test):
-    """Test ViT autoencoder with AlexNet perceptual loss enabled."""
-    config = copy.deepcopy(config_vit)
-    config['model']['model_params']['use_perceptual_loss'] = True
-    run_model_test(config=config)
+    def test_integration_perceptual_loss(self, config_vit, run_model_test) -> None:
+        """Test ViT autoencoder with AlexNet perceptual loss enabled."""
+        config = copy.deepcopy(config_vit)
+        config['model']['model_params']['use_perceptual_loss'] = True
+        run_model_test(config=config)

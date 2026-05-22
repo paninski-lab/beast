@@ -106,20 +106,19 @@ class TestResnetAutoencoder:
         assert 'reconstructions' not in result
 
 
-def test_resnet_autoencoder_integration_features(config_ae, run_model_test):
-    """Test ResNet autoencoder with spatial features, no bottleneck."""
-    config = copy.deepcopy(config_ae)
-    config['model']['model_params']['backbone'] = 'resnet18'
-    config['model']['model_params']['num_latents'] = None  # no latents, just 2D features
+class TestResnetAutoencoderIntegration:
+    """Integration tests that train and run inference on a ResNet autoencoder."""
 
-    run_model_test(config=config)
+    def test_integration_features(self, config_ae, run_model_test) -> None:
+        """Test ResNet autoencoder with spatial features, no bottleneck."""
+        config = copy.deepcopy(config_ae)
+        config['model']['model_params']['backbone'] = 'resnet18'
+        config['model']['model_params']['num_latents'] = None
+        run_model_test(config=config)
 
-
-def test_resnet_autoencoder_integration_latents(config_ae, run_model_test):
-    """Test ResNet autoencoder with low-dimensional latent bottleneck."""
-
-    config = copy.deepcopy(config_ae)
-    config['model']['model_params']['backbone'] = 'resnet18'
-    config['model']['model_params']['num_latents'] = 16
-
-    run_model_test(config=config)
+    def test_integration_latents(self, config_ae, run_model_test) -> None:
+        """Test ResNet autoencoder with low-dimensional latent bottleneck."""
+        config = copy.deepcopy(config_ae)
+        config['model']['model_params']['backbone'] = 'resnet18'
+        config['model']['model_params']['num_latents'] = 16
+        run_model_test(config=config)
