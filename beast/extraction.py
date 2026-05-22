@@ -1,6 +1,7 @@
 """Frame extraction from videos using motion energy and PCA-kmeans clustering."""
 
 from pathlib import Path
+from typing import Literal
 
 import cv2
 import numpy as np
@@ -17,7 +18,7 @@ def extract_frames(
     input_path: Path | str,
     output_dir: Path | str,
     frames_per_video: int = 500,
-    method: str = 'pca_kmeans',
+    method: Literal['pca_kmeans'] = 'pca_kmeans',
     num_workers: int = 8,
 ) -> dict:
     """Extract representative frames from videos using intelligent sampling methods.

@@ -1,7 +1,7 @@
 """Functions to build augmentation pipeline."""
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 import imgaug.augmenters as iaa
 
@@ -84,7 +84,9 @@ def imgaug_pipeline(params_dict: dict) -> Callable:
     return iaa.Sequential(data_transform)
 
 
-def expand_imgaug_str_to_dict(params: str) -> dict[str, Any]:
+def expand_imgaug_str_to_dict(
+    params: Literal['none', 'default', 'top-down'],
+) -> dict[str, Any]:
     """Expand a named augmentation preset string into an imgaug params dict.
 
     Parameters
