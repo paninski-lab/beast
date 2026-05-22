@@ -5,6 +5,8 @@ import pytest
 import torch
 from torch.utils.data import DataLoader, RandomSampler
 
+from beast.data.datamodules import BaseDataModule, split_sizes_from_probabilities
+from beast.data.datasets import BaseDataset
 from beast.data.samplers import ContrastBatchSampler
 
 
@@ -60,8 +62,7 @@ class TestBaseDataModule:
 
     def test_setup_without_augmentations(self, data_dir) -> None:
         # Arrange — dataset with no augmentation pipeline → random_split path
-        from beast.data.datamodules import BaseDataModule
-        from beast.data.datasets import BaseDataset
+
         dataset = BaseDataset(data_dir=data_dir, imgaug_pipeline=None)
         dm = BaseDataModule(dataset=dataset, train_probability=0.8)
         # Act
@@ -73,8 +74,7 @@ class TestBaseDataModule:
 
     def test_use_sampler_without_augmentations_raises(self, data_dir) -> None:
         # Arrange — sampler requires an augmentation pipeline; None pipeline should assert
-        from beast.data.datamodules import BaseDataModule
-        from beast.data.datasets import BaseDataset
+
         dataset = BaseDataset(data_dir=data_dir, imgaug_pipeline=None)
         dm = BaseDataModule(dataset=dataset, train_probability=0.8, use_sampler=True)
         # Act / Assert
@@ -83,8 +83,7 @@ class TestBaseDataModule:
 
     def test_slurm_env_var_sets_num_workers(self, data_dir, monkeypatch) -> None:
         # Arrange — SLURM_CPUS_PER_TASK present; num_workers should be read from it
-        from beast.data.datamodules import BaseDataModule
-        from beast.data.datasets import BaseDataset
+
         monkeypatch.setenv('SLURM_CPUS_PER_TASK', '4')
         dataset = BaseDataset(data_dir=data_dir, imgaug_pipeline=None)
         # Act
@@ -140,29 +139,29 @@ class TestSplitSizesFromProbabilities:
     """Test the split_sizes_from_probabilities function."""
 
     def test_basic_splits(self) -> None:
-        from beast.data.datamodules import split_sizes_from_probabilities
+
         out = split_sizes_from_probabilities(100, train_probability=0.8)
         assert out[0] == 80 and out[1] == 10 and out[2] == 10
 
     def test_explicit_val_probability(self) -> None:
-        from beast.data.datamodules import split_sizes_from_probabilities
+
         out = split_sizes_from_probabilities(100, train_probability=0.8, val_probability=0.1)
         assert out[0] == 80 and out[1] == 10 and out[2] == 10
 
     def test_all_three_probabilities(self) -> None:
-        from beast.data.datamodules import split_sizes_from_probabilities
+
         out = split_sizes_from_probabilities(
             100, train_probability=0.8, val_probability=0.1, test_probability=0.1,
         )
         assert out[0] == 80 and out[1] == 10 and out[2] == 10
 
     def test_leftover_samples_go_to_test(self) -> None:
-        from beast.data.datamodules import split_sizes_from_probabilities
+
         out = split_sizes_from_probabilities(101, train_probability=0.7)
         assert out[0] == 70 and out[1] == 15 and out[2] == 16
 
     def test_minimum_val_sample(self) -> None:
-        from beast.data.datamodules import split_sizes_from_probabilities
+
         out = split_sizes_from_probabilities(10, train_probability=0.95, val_probability=0.05)
         assert sum(out) == 10
         assert out[0] == 9
@@ -170,6 +169,6 @@ class TestSplitSizesFromProbabilities:
         assert out[2] == 0
 
     def test_too_few_samples_raises(self) -> None:
-        from beast.data.datamodules import split_sizes_from_probabilities
+
         with pytest.raises(ValueError):
             split_sizes_from_probabilities(1, train_probability=0.95)

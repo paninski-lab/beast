@@ -11,8 +11,8 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
-from beast import log_step
 from beast.data.types import ExampleDict
+from beast.logging import log_step
 
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from beast.cli.commands.predict import handle
 from beast.cli.main import build_parser
 
 
@@ -66,7 +67,6 @@ class TestHandle:
 
     def test_single_video_calls_predict_video(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.predict import handle
         video_file = tmp_path / 'test.mp4'
         video_file.touch()
         args = argparse.Namespace(
@@ -93,7 +93,6 @@ class TestHandle:
 
     def test_directory_of_videos_calls_predict_video_per_file(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.predict import handle
         video_dir = tmp_path / 'videos'
         video_dir.mkdir()
         (video_dir / 'vid1.mp4').touch()
@@ -116,7 +115,6 @@ class TestHandle:
 
     def test_directory_of_images_calls_predict_images(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.predict import handle
         img_dir = tmp_path / 'images'
         img_dir.mkdir()
         (img_dir / 'img1.png').touch()
@@ -145,7 +143,6 @@ class TestHandle:
 
     def test_mixed_input_neither_predict_method_called(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.predict import handle
         mixed_dir = tmp_path / 'mixed'
         mixed_dir.mkdir()
         (mixed_dir / 'vid.mp4').touch()
@@ -169,7 +166,6 @@ class TestHandle:
 
     def test_no_save_flags_logs_warning(self, tmp_path: Path, caplog) -> None:
         # Arrange
-        from beast.cli.commands.predict import handle
         video_file = tmp_path / 'test.mp4'
         video_file.touch()
         args = argparse.Namespace(

@@ -11,7 +11,7 @@ from transformers import (
     ViTMAEForPreTraining,
 )
 
-from beast import log_step
+from beast.logging import log_step
 from beast.models.base import BaseLightningModel
 from beast.models.perceptual import AlexPerceptual
 

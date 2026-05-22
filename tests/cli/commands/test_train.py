@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from beast.cli.commands.train import _setup_model_logging, handle
 from beast.cli.main import build_parser
 
 
@@ -86,7 +87,6 @@ class TestHandle:
 
     def test_calls_model_train(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.train import handle
         config = tmp_path / 'config.yaml'
         config.touch()
         output = tmp_path / 'output'
@@ -106,7 +106,6 @@ class TestHandle:
 
     def test_applies_config_overrides(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.train import handle
         config = tmp_path / 'config.yaml'
         config.touch()
         args = self._make_args(tmp_path, config)
@@ -127,7 +126,6 @@ class TestHandle:
 
     def test_data_override_applied_to_config(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.train import handle
         config = tmp_path / 'config.yaml'
         config.touch()
         args = self._make_args(tmp_path, config)
@@ -147,7 +145,6 @@ class TestHandle:
 
     def test_gpus_override_applied_to_config(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.train import handle
         config = tmp_path / 'config.yaml'
         config.touch()
         args = self._make_args(tmp_path, config)
@@ -167,7 +164,6 @@ class TestHandle:
 
     def test_nodes_override_applied_to_config(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.train import handle
         config = tmp_path / 'config.yaml'
         config.touch()
         args = self._make_args(tmp_path, config)
@@ -187,7 +183,6 @@ class TestHandle:
 
     def test_auto_output_dir_created_under_runs(self, tmp_path: Path, monkeypatch) -> None:
         # Arrange
-        from beast.cli.commands.train import handle
         monkeypatch.chdir(tmp_path)
         config = tmp_path / 'config.yaml'
         config.touch()
@@ -214,10 +209,8 @@ class TestHandle:
         assert 'runs' in str(args.output)
         assert args.output.exists()
 
-
     def test_checkpoint_arg_is_logged_but_not_fatal(self, tmp_path: Path) -> None:
         # Arrange — args with an unsupported checkpoint attribute
-        from beast.cli.commands.train import handle
         config = tmp_path / 'config.yaml'
         config.touch()
         args = self._make_args(tmp_path, config)
@@ -241,7 +234,6 @@ class TestSetupModelLogging:
 
     def test_creates_log_file(self, tmp_path: Path) -> None:
         # Arrange
-        from beast.cli.commands.train import _setup_model_logging
         root_logger = logging.getLogger()
         count_before = len(root_logger.handlers)
         # Act
