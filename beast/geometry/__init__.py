@@ -1,1 +1,1 @@
-"""Geometry utilities: camera math, rotations, positional encodings, and point cloud alignment."""
+"""Geometry utilities: camera math, positional encodings, and point cloud alignment."""

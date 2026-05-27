@@ -10,10 +10,8 @@ import numpy as np
 import torch
 from gsplat import rasterization
 from plyfile import PlyData, PlyElement
-from torch import nn
 
 _logger = logging.getLogger(__name__)
-
 
 
 def strip_lowerdiag(L: torch.Tensor) -> torch.Tensor:
@@ -147,63 +145,6 @@ def SH2RGB(sh: torch.Tensor) -> torch.Tensor:
     """
     return sh * C0 + 0.5
 
-
-
-class Camera(nn.Module):
-    """Camera model (OpenCV convention) for Gaussian splatting rendering."""
-
-    def __init__(
-        self,
-        C2W: torch.Tensor,
-        fxfycxcy: torch.Tensor,
-        h: int,
-        w: int,
-    ) -> None:
-        """Initialize camera.
-
-        Parameters
-        ----------
-        C2W: 4x4 camera-to-world matrix (OpenCV convention).
-        fxfycxcy: intrinsics vector of length 4.
-        h: image height.
-        w: image width.
-
-        """
-        super().__init__()
-        self.C2W = C2W.clone().float()
-        self.W2C = self.C2W.inverse()
-        self.h = h
-        self.w = w
-
-        self.znear = 0.01
-        self.zfar = 100.0
-
-        fx, fy, cx, cy = fxfycxcy[0], fxfycxcy[1], fxfycxcy[2], fxfycxcy[3]
-        self.tanfovX = w / (2 * fx)
-        self.tanfovY = h / (2 * fy)
-
-        def getProjectionMatrix(W, H, fx, fy, cx, cy, znear, zfar):
-            """Build an OpenGL-style projection matrix from intrinsics."""
-            P = torch.zeros(4, 4, device=fx.device)
-            P[0, 0] = 2 * fx / W
-            P[1, 1] = 2 * fy / H
-            P[0, 2] = 2 * (cx / W) - 1
-            P[1, 2] = 2 * (cy / H) - 1
-            P[2, 2] = -(zfar + znear) / (zfar - znear)
-            P[3, 2] = 1.0
-            P[2, 3] = -(2 * zfar * znear) / (zfar - znear)
-            return P
-
-        self.world_view_transform = self.W2C.transpose(0, 1)
-        self.projection_matrix = getProjectionMatrix(
-            self.w, self.h, fx, fy, cx, cy, self.znear, self.zfar,
-        ).transpose(0, 1)
-        self.full_proj_transform = (
-            self.world_view_transform.unsqueeze(0).bmm(
-                self.projection_matrix.unsqueeze(0)
-            )
-        ).squeeze(0)
-        self.camera_center = self.C2W[:3, 3]
 
 
 class GaussianModel:
