@@ -10,35 +10,6 @@ import torch.nn.functional as F
 from torchvision.models import VGG19_Weights, vgg19
 
 
-def subspace_overlap(
-    A: torch.Tensor,
-    B: torch.Tensor,
-    C: torch.Tensor | None = None,
-) -> torch.Tensor:
-    """Compute inner product between subspaces defined by matrices A and B.
-
-    Reference: https://github.com/themattinthehatt/behavenet
-
-    Parameters
-    ----------
-    A: matrix of shape (a, d).
-    B: matrix of shape (b, d).
-    C: optional background subspace projection matrix of shape (c, d).
-
-    Returns
-    -------
-    scalar Frobenius norm of UU^T divided by number of entries.
-
-    """
-    if C is None:
-        U = torch.cat([A, B], dim=0)
-    else:
-        U = torch.cat([A, B, C], dim=0)
-    d = U.shape[0]
-    eye = torch.eye(d, device=U.device)
-    return torch.mean((torch.matmul(U, torch.transpose(U, 1, 0)) - eye).pow(2))
-
-
 class PerceptualLoss(nn.Module):
     """RayZer-style perceptual loss with a torchvision VGG19 fallback."""
 

@@ -47,7 +47,6 @@ dependencies = [
     "torchvision",
     "tqdm",
     "transformers",
-    "videoio",
 ]
 
 [project.urls]
