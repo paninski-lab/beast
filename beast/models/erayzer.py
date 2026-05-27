@@ -1,9 +1,10 @@
-"""Gaussian splatting renderer wrapper and depth range function factory."""
+"""ERayZer model components: renderer, loss computer, and depth range utilities."""
 
 from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from beast.rendering.gaussians_renderer import (
     GaussianModel,
@@ -11,6 +12,12 @@ from beast.rendering.gaussians_renderer import (
     render_opencv_cam,
     render_opencv_cam_gsplat,
 )
+from beast.rendering.losses import PerceptualLoss, masked_mse_loss
+
+try:
+    import lpips
+except ImportError:
+    lpips = None
 
 
 class Renderer(nn.Module):
@@ -159,3 +166,103 @@ def get_point_range_func(gaussians_config: dict):
         return rangefunc
     else:
         raise NotImplementedError(f'Unknown range_setting type: {range_setting["type"]}')
+
+
+class LossComputer(nn.Module):
+    """Composite render loss: L2 + gs_reg + optional LPIPS + optional perceptual."""
+
+    def __init__(self, config: dict, device: str = 'cpu') -> None:
+        """Initialize.
+
+        Parameters
+        ----------
+        config: full training config dict; reads config['training'] for loss weights.
+        device: device to place loss modules on.
+
+        """
+        super().__init__()
+        self.config = config
+        self.device = device
+
+        self.lpips_loss_module = None
+        if self.config['training'].get('lpips_loss_weight', 0.0) > 0.0:
+            if lpips is None:
+                raise ImportError('lpips is not installed but lpips_loss_weight > 0')
+            self.lpips_loss_module = lpips.LPIPS(net='vgg').to(device).eval()
+            for param in self.lpips_loss_module.parameters():
+                param.requires_grad = False
+
+        self.perceptual_loss_module = None
+        if self.config['training'].get('perceptual_loss_weight', 0.0) > 0.0:
+            self.perceptual_loss_module = PerceptualLoss(device).eval()
+
+    def forward(
+        self,
+        rendering: torch.Tensor,
+        target: torch.Tensor,
+        xyz_norm: torch.Tensor | None,
+        xyz_init_norm: torch.Tensor | None,
+        pixel_mask: torch.Tensor | None = None,
+    ) -> SimpleNamespace:
+        """Compute composite render loss.
+
+        Parameters
+        ----------
+        rendering: predicted images of shape [B, V, 3, H, W].
+        target: ground-truth images of shape [B, V, 3 or 4, H, W].
+        xyz_norm: normalized xyz coordinates of shape [B, N, 3] or None.
+        xyz_init_norm: normalized initial xyz coordinates of shape [B, N, 3] or None.
+        pixel_mask: optional foreground mask of shape [B, V, H, W] or [B*V, 1, H, W].
+
+        Returns
+        -------
+        SimpleNamespace with fields: loss, l2_loss, psnr, gs_reg_loss, lpips_loss,
+        perceptual_loss.
+
+        """
+        batch_size, num_views, _, height, width = rendering.shape
+        rendering = rendering.reshape(batch_size * num_views, 3, height, width)
+        target = target.reshape(batch_size * num_views, target.shape[2], height, width)
+
+        if target.shape[1] == 4:
+            target = target[:, :3]
+
+        if pixel_mask is not None:
+            pixel_mask = pixel_mask.reshape(batch_size * num_views, 1, height, width)
+            l2_loss = masked_mse_loss(rendering, target, pixel_mask)
+        else:
+            l2_loss = F.mse_loss(rendering, target)
+        gs_reg_loss = (
+            F.mse_loss(xyz_norm, xyz_init_norm)
+            if xyz_norm is not None and xyz_init_norm is not None
+            else rendering.new_zeros(())
+        )
+
+        psnr = -10.0 * torch.log10(l2_loss.clamp_min(1e-8))
+
+        lpips_loss = rendering.new_zeros(())
+        if self.lpips_loss_module is not None:
+            lpips_loss = self.lpips_loss_module(
+                rendering * 2.0 - 1.0,
+                target * 2.0 - 1.0,
+            ).mean()
+
+        perceptual_loss = rendering.new_zeros(())
+        if self.perceptual_loss_module is not None:
+            perceptual_loss = self.perceptual_loss_module(rendering, target)
+
+        total_loss = (
+            self.config['training'].get('l2_loss_weight', 1.0) * l2_loss
+            + self.config['training'].get('gs_reg_loss_weight', 0.0) * gs_reg_loss
+            + self.config['training'].get('lpips_loss_weight', 0.0) * lpips_loss
+            + self.config['training'].get('perceptual_loss_weight', 0.0) * perceptual_loss
+        )
+
+        return SimpleNamespace(
+            loss=total_loss,
+            l2_loss=l2_loss,
+            gs_reg_loss=gs_reg_loss,
+            psnr=psnr,
+            lpips_loss=lpips_loss,
+            perceptual_loss=perceptual_loss,
+        )
