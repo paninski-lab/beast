@@ -30,17 +30,20 @@ def get_turntable_cameras(
 ) -> tuple[int, int, int, np.ndarray, np.ndarray]:
     """Generate a set of turntable camera poses around the origin.
 
-    Args:
-        hfov: horizontal field of view in degrees.
-        num_views: number of cameras to generate.
-        w: image width in pixels.
-        h: image height in pixels.
-        radius: distance from origin to camera.
-        elevation: camera elevation angle in degrees.
-        up_vector: world up vector; defaults to [0, 0, 1].
+    Parameters
+    ----------
+    hfov: horizontal field of view in degrees.
+    num_views: number of cameras to generate.
+    w: image width in pixels.
+    h: image height in pixels.
+    radius: distance from origin to camera.
+    elevation: camera elevation angle in degrees.
+    up_vector: world up vector; defaults to [0, 0, 1].
 
-    Returns:
-        tuple of (w, h, num_views, fxfycxcy [V, 4], c2ws [V, 4, 4]).
+    Returns
+    -------
+    tuple of (w, h, num_views, fxfycxcy [V, 4], c2ws [V, 4, 4]).
+
     """
     if up_vector is None:
         up_vector = np.array([0, 0, 1])
@@ -74,10 +77,12 @@ def get_turntable_cameras(
 def imageseq2video(images: np.ndarray, filename: str | Path, fps: int = 24) -> None:
     """Save an image sequence to a video file.
 
-    Args:
-        images: image array of shape [T, H, W, 3], uint8 or float32.
-        filename: output video path.
-        fps: frames per second.
+    Parameters
+    ----------
+    images: image array of shape [T, H, W, 3], uint8 or float32.
+    filename: output video path.
+    fps: frames per second.
+
     """
     if images.dtype == np.uint8:
         images = images.astype(np.float32) / 255.0
@@ -88,11 +93,14 @@ def imageseq2video(images: np.ndarray, filename: str | Path, fps: int = 24) -> N
 def strip_lowerdiag(L: torch.Tensor) -> torch.Tensor:
     """Extract lower-diagonal elements of a batch of matrices.
 
-    Args:
-        L: input tensor of shape [N, 3, 3].
+    Parameters
+    ----------
+    L: input tensor of shape [N, 3, 3].
 
-    Returns:
-        uncertainty tensor of shape [N, 6].
+    Returns
+    -------
+    uncertainty tensor of shape [N, 6].
+
     """
     uncertainty = torch.zeros((L.shape[0], 6), dtype=torch.float, device=L.device)
 
@@ -108,11 +116,14 @@ def strip_lowerdiag(L: torch.Tensor) -> torch.Tensor:
 def strip_symmetric(sym: torch.Tensor) -> torch.Tensor:
     """Extract symmetric lower-diagonal elements.
 
-    Args:
-        sym: symmetric matrix batch of shape [N, 3, 3].
+    Parameters
+    ----------
+    sym: symmetric matrix batch of shape [N, 3, 3].
 
-    Returns:
-        lower-diagonal elements of shape [N, 6].
+    Returns
+    -------
+    lower-diagonal elements of shape [N, 6].
+
     """
     return strip_lowerdiag(sym)
 
@@ -120,11 +131,14 @@ def strip_symmetric(sym: torch.Tensor) -> torch.Tensor:
 def build_rotation(r: torch.Tensor) -> torch.Tensor:
     """Build rotation matrices from quaternions.
 
-    Args:
-        r: quaternion tensor of shape [N, 4].
+    Parameters
+    ----------
+    r: quaternion tensor of shape [N, 4].
 
-    Returns:
-        rotation matrices of shape [N, 3, 3].
+    Returns
+    -------
+    rotation matrices of shape [N, 3, 3].
+
     """
     norm = torch.sqrt(
         r[:, 0] * r[:, 0] + r[:, 1] * r[:, 1] + r[:, 2] * r[:, 2] + r[:, 3] * r[:, 3]
@@ -154,12 +168,15 @@ def build_rotation(r: torch.Tensor) -> torch.Tensor:
 def build_scaling_rotation(s: torch.Tensor, r: torch.Tensor) -> torch.Tensor:
     """Build scaling+rotation covariance matrix.
 
-    Args:
-        s: scale tensor of shape [N, 3].
-        r: rotation quaternion tensor of shape [N, 4].
+    Parameters
+    ----------
+    s: scale tensor of shape [N, 3].
+    r: rotation quaternion tensor of shape [N, 4].
 
-    Returns:
-        covariance factor tensor of shape [N, 3, 3].
+    Returns
+    -------
+    covariance factor tensor of shape [N, 3, 3].
+
     """
     L = torch.zeros((s.shape[0], 3, 3), dtype=torch.float, device=s.device)
     R = build_rotation(r)
@@ -208,13 +225,16 @@ def eval_sh(deg: int, sh: torch.Tensor, dirs: torch.Tensor) -> torch.Tensor:
 
     Uses hardcoded SH polynomials. Works with torch/np/jnp.
 
-    Args:
-        deg: int SH degree (0-4 supported).
-        sh: SH coefficients of shape [..., C, (deg + 1) ** 2].
-        dirs: unit directions of shape [..., 3].
+    Parameters
+    ----------
+    deg: int SH degree (0-4 supported).
+    sh: SH coefficients of shape [..., C, (deg + 1) ** 2].
+    dirs: unit directions of shape [..., 3].
 
-    Returns:
-        SH-evaluated values of shape [..., C].
+    Returns
+    -------
+    SH-evaluated values of shape [..., C].
+
     """
     assert deg <= 4 and deg >= 0
     coeff = (deg + 1) ** 2
@@ -272,11 +292,14 @@ def eval_sh(deg: int, sh: torch.Tensor, dirs: torch.Tensor) -> torch.Tensor:
 def RGB2SH(rgb: torch.Tensor) -> torch.Tensor:
     """Convert RGB to SH coefficients.
 
-    Args:
-        rgb: RGB tensor in [0, 1].
+    Parameters
+    ----------
+    rgb: RGB tensor in [0, 1].
 
-    Returns:
-        SH coefficient tensor.
+    Returns
+    -------
+    SH coefficient tensor.
+
     """
     return (rgb - 0.5) / C0
 
@@ -284,11 +307,14 @@ def RGB2SH(rgb: torch.Tensor) -> torch.Tensor:
 def SH2RGB(sh: torch.Tensor) -> torch.Tensor:
     """Convert SH coefficients to RGB.
 
-    Args:
-        sh: SH coefficient tensor.
+    Parameters
+    ----------
+    sh: SH coefficient tensor.
 
-    Returns:
-        RGB tensor.
+    Returns
+    -------
+    RGB tensor.
+
     """
     return sh * C0 + 0.5
 
@@ -300,10 +326,12 @@ def create_video(
 ) -> None:
     """Create a video from a folder of PNG images.
 
-    Args:
-        image_folder: directory containing PNG images sorted by name.
-        output_video_file: output video file path.
-        framerate: frames per second.
+    Parameters
+    ----------
+    image_folder: directory containing PNG images sorted by name.
+    output_video_file: output video file path.
+    framerate: frames per second.
+
     """
     image_folder = Path(image_folder)
     images = sorted(p.name for p in image_folder.iterdir() if p.suffix == '.png')
@@ -334,11 +362,13 @@ class Camera(nn.Module):
     ) -> None:
         """Initialize camera.
 
-        Args:
-            C2W: 4x4 camera-to-world matrix (OpenCV convention).
-            fxfycxcy: intrinsics vector of length 4.
-            h: image height.
-            w: image width.
+        Parameters
+        ----------
+        C2W: 4x4 camera-to-world matrix (OpenCV convention).
+        fxfycxcy: intrinsics vector of length 4.
+        h: image height.
+        w: image width.
+
         """
         super().__init__()
         self.C2W = C2W.clone().float()
@@ -398,9 +428,11 @@ class GaussianModel:
     def __init__(self, sh_degree: int, scaling_modifier: float | None = None) -> None:
         """Initialize with SH degree and optional scaling modifier.
 
-        Args:
-            sh_degree: spherical harmonics degree.
-            scaling_modifier: optional global scale factor applied at render time.
+        Parameters
+        ----------
+        sh_degree: spherical harmonics degree.
+        scaling_modifier: optional global scale factor applied at render time.
+
         """
         self.sh_degree = sh_degree
         self._xyz = torch.empty(0)
@@ -430,15 +462,18 @@ class GaussianModel:
     ) -> 'GaussianModel':
         """Set Gaussian data from tensors.
 
-        Args:
-            xyz: positions of shape (N, 3).
-            features: SH features of shape (N, (sh_degree + 1) ** 2, 3).
-            scaling: log-scale values of shape (N, 3).
-            rotation: quaternions of shape (N, 4).
-            opacity: logit-opacity of shape (N, 1).
+        Parameters
+        ----------
+        xyz: positions of shape (N, 3).
+        features: SH features of shape (N, (sh_degree + 1) ** 2, 3).
+        scaling: log-scale values of shape (N, 3).
+        rotation: quaternions of shape (N, 4).
+        opacity: logit-opacity of shape (N, 1).
 
-        Returns:
-            self (for chaining).
+        Returns
+        -------
+        self (for chaining).
+
         """
         self._xyz = xyz
         self._features_dc = features[:, :1, :].contiguous()
@@ -454,11 +489,14 @@ class GaussianModel:
     def to(self, device: str | torch.device) -> 'GaussianModel':
         """Move all tensors to device.
 
-        Args:
-            device: target device.
+        Parameters
+        ----------
+        device: target device.
 
-        Returns:
-            self (for chaining).
+        Returns
+        -------
+        self (for chaining).
+
         """
         self._xyz = self._xyz.to(device)
         self._features_dc = self._features_dc.to(device)
@@ -472,11 +510,14 @@ class GaussianModel:
     def filter(self, valid_mask: torch.Tensor) -> 'GaussianModel':
         """Keep only the Gaussians indicated by valid_mask.
 
-        Args:
-            valid_mask: boolean tensor of shape (N,).
+        Parameters
+        ----------
+        valid_mask: boolean tensor of shape (N,).
 
-        Returns:
-            self (for chaining).
+        Returns
+        -------
+        self (for chaining).
+
         """
         self._xyz = self._xyz[valid_mask]
         self._features_dc = self._features_dc[valid_mask]
@@ -490,11 +531,14 @@ class GaussianModel:
     def crop(self, crop_bbx: list[float] | None = None) -> 'GaussianModel':
         """Remove Gaussians outside the given bounding box.
 
-        Args:
-            crop_bbx: [x_min, x_max, y_min, y_max, z_min, z_max]; defaults to unit cube.
+        Parameters
+        ----------
+        crop_bbx: [x_min, x_max, y_min, y_max, z_min, z_max]; defaults to unit cube.
 
-        Returns:
-            self (for chaining).
+        Returns
+        -------
+        self (for chaining).
+
         """
         if crop_bbx is None:
             crop_bbx = [-1, 1, -1, 1, -1, 1]
@@ -515,11 +559,14 @@ class GaussianModel:
     def prune(self, opacity_thres: float = 0.05) -> 'GaussianModel':
         """Remove low-opacity Gaussians.
 
-        Args:
-            opacity_thres: opacity threshold below which Gaussians are removed.
+        Parameters
+        ----------
+        opacity_thres: opacity threshold below which Gaussians are removed.
 
-        Returns:
-            self (for chaining).
+        Returns
+        -------
+        self (for chaining).
+
         """
         opacity = self.get_opacity.squeeze(1)
         valid_mask = opacity > opacity_thres
@@ -533,12 +580,15 @@ class GaussianModel:
     ) -> 'GaussianModel':
         """Remove Gaussians that are too close or too far from any camera.
 
-        Args:
-            cam_origins: camera origin positions of shape [V, 3].
-            nearfar_percent: (near_pct, far_pct) quantile thresholds in [0, 1].
+        Parameters
+        ----------
+        cam_origins: camera origin positions of shape [V, 3].
+        nearfar_percent: (near_pct, far_pct) quantile thresholds in [0, 1].
 
-        Returns:
-            self (for chaining).
+        Returns
+        -------
+        self (for chaining).
+
         """
         assert len(nearfar_percent) == 2
         assert nearfar_percent[0] < nearfar_percent[1]
@@ -566,14 +616,17 @@ class GaussianModel:
     ) -> 'GaussianModel':
         """Apply opacity pruning, bounding-box crop, and near/far pruning.
 
-        Args:
-            opacity_thres: opacity threshold for pruning.
-            crop_bbx: optional bounding box [x_min, x_max, y_min, y_max, z_min, z_max].
-            cam_origins: optional camera origins for near/far pruning.
-            nearfar_percent: (near_pct, far_pct) quantile thresholds.
+        Parameters
+        ----------
+        opacity_thres: opacity threshold for pruning.
+        crop_bbx: optional bounding box [x_min, x_max, y_min, y_max, z_min, z_max].
+        cam_origins: optional camera origins for near/far pruning.
+        nearfar_percent: (near_pct, far_pct) quantile thresholds.
 
-        Returns:
-            self (for chaining).
+        Returns
+        -------
+        self (for chaining).
+
         """
         if crop_bbx is None:
             crop_bbx = [-1, 1, -1, 1, -1, 1]
@@ -587,11 +640,14 @@ class GaussianModel:
     def shrink_bbx(self, drop_ratio: float = 0.05) -> 'GaussianModel':
         """Shrink the bounding box by dropping outlier Gaussians.
 
-        Args:
-            drop_ratio: fraction of extreme values to drop from each side.
+        Parameters
+        ----------
+        drop_ratio: fraction of extreme values to drop from each side.
 
-        Returns:
-            self (for chaining).
+        Returns
+        -------
+        self (for chaining).
+
         """
         xyz = self._xyz
         xyz_min, xyz_max = torch.quantile(
@@ -699,11 +755,14 @@ class GaussianModel:
     def get_covariance(self, scaling_modifier: float = 1) -> torch.Tensor:
         """Return covariance matrices from scaling and rotation.
 
-        Args:
-            scaling_modifier: global scale multiplier.
+        Parameters
+        ----------
+        scaling_modifier: global scale multiplier.
 
-        Returns:
-            covariance tensor of shape [N, 6].
+        Returns
+        -------
+        covariance tensor of shape [N, 6].
+
         """
         return self.covariance_activation(
             self.get_scaling, scaling_modifier, self._rotation,
@@ -716,12 +775,15 @@ class GaussianModel:
     ) -> list[tuple[str, str]]:
         """Build PLY element dtype list for save_ply.
 
-        Args:
-            use_fp16: use float16 instead of float32 for PLY storage.
-            enable_gs_viewer: pad SH to degree 3 for GS viewer compatibility.
+        Parameters
+        ----------
+        use_fp16: use float16 instead of float32 for PLY storage.
+        enable_gs_viewer: pad SH to degree 3 for GS viewer compatibility.
 
-        Returns:
-            list of (name, dtype_str) pairs.
+        Returns
+        -------
+        list of (name, dtype_str) pairs.
+
         """
         if not use_fp16:
             dtype_list = [
@@ -786,12 +848,14 @@ class GaussianModel:
     ) -> None:
         """Save Gaussians to a PLY file.
 
-        Args:
-            path: output file path.
-            use_fp16: use float16 storage.
-            enable_gs_viewer: pad SH to degree 3 for viewer compatibility.
-            color_code: replace RGB with viridis colormap based on index.
-            filter_mask: optional boolean mask to select a subset.
+        Parameters
+        ----------
+        path: output file path.
+        use_fp16: use float16 storage.
+        enable_gs_viewer: pad SH to degree 3 for viewer compatibility.
+        color_code: replace RGB with viridis colormap based on index.
+        filter_mask: optional boolean mask to select a subset.
+
         """
         Path(path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -865,8 +929,10 @@ class GaussianModel:
     def load_ply(self, path: str | Path) -> None:
         """Load Gaussians from a PLY file.
 
-        Args:
-            path: path to the PLY file.
+        Parameters
+        ----------
+        path: path to the PLY file.
+
         """
         plydata = PlyData.read(path)
 
@@ -950,19 +1016,22 @@ def render_opencv_cam_gsplat(
 ) -> dict[str, torch.Tensor | None]:
     """Render a batch of views using gsplat rasterisation.
 
-    Args:
-        pc: Gaussian point cloud model.
-        height: render height in pixels.
-        width: render width in pixels.
-        C2W: camera-to-world matrices of shape [V, 4, 4].
-        fxfycxcy: intrinsics of shape [V, 4].
-        sh_degree: SH degree to evaluate; defaults to pc.sh_degree.
-        near_plane: near clipping plane distance.
-        bg_color: background colour (1-D or 2-D tensor or tuple).
-        render_depth: whether to also render a depth map.
+    Parameters
+    ----------
+    pc: Gaussian point cloud model.
+    height: render height in pixels.
+    width: render width in pixels.
+    C2W: camera-to-world matrices of shape [V, 4, 4].
+    fxfycxcy: intrinsics of shape [V, 4].
+    sh_degree: SH degree to evaluate; defaults to pc.sh_degree.
+    near_plane: near clipping plane distance.
+    bg_color: background colour (1-D or 2-D tensor or tuple).
+    render_depth: whether to also render a depth map.
 
-    Returns:
-        dict with keys 'render' ([V, 3, H, W]) and 'depth' ([V, 1, H, W] or None).
+    Returns
+    -------
+    dict with keys 'render' ([V, 3, H, W]) and 'depth' ([V, 1, H, W] or None).
+
     """
     means3D = pc.get_xyz
     opacity = pc.get_opacity
@@ -1045,19 +1114,22 @@ def render_opencv_cam(
 
     Routes calls through the batched gsplat implementation.
 
-    Args:
-        pc: Gaussian point cloud model.
-        height: render height in pixels.
-        width: render width in pixels.
-        C2W: camera-to-world matrix of shape [4, 4] or [1, 4, 4].
-        fxfycxcy: intrinsics of shape [4] or [1, 4].
-        sh_degree: SH degree to evaluate; defaults to pc.sh_degree.
-        near_plane: near clipping plane distance.
-        bg_color: background colour.
-        render_depth: whether to also render a depth map.
+    Parameters
+    ----------
+    pc: Gaussian point cloud model.
+    height: render height in pixels.
+    width: render width in pixels.
+    C2W: camera-to-world matrix of shape [4, 4] or [1, 4, 4].
+    fxfycxcy: intrinsics of shape [4] or [1, 4].
+    sh_degree: SH degree to evaluate; defaults to pc.sh_degree.
+    near_plane: near clipping plane distance.
+    bg_color: background colour.
+    render_depth: whether to also render a depth map.
 
-    Returns:
-        dict with keys 'render', 'depth', 'alpha'.
+    Returns
+    -------
+    dict with keys 'render', 'depth', 'alpha'.
+
     """
     squeeze_view = C2W.ndim == 2
     if squeeze_view:
@@ -1106,21 +1178,24 @@ class DeferredGaussianRender(torch.autograd.Function):
     ):
         """Forward pass: render all views and return image tensor.
 
-        Args:
-            ctx: autograd context.
-            xyz: Gaussian positions of shape [b, n_gaussians, 3].
-            features: SH features of shape [b, n_gaussians, (sh_degree+1)^2, 3].
-            scaling: log-scale of shape [b, n_gaussians, 3].
-            rotation: quaternions of shape [b, n_gaussians, 4].
-            opacity: logit-opacity of shape [b, n_gaussians, 1].
-            height: render height.
-            width: render width.
-            C2W: camera-to-world matrices of shape [b, v, 4, 4].
-            fxfycxcy: intrinsics of shape [b, v, 4].
-            scaling_modifier: optional global scaling factor.
+        Parameters
+        ----------
+        ctx: autograd context.
+        xyz: Gaussian positions of shape [b, n_gaussians, 3].
+        features: SH features of shape [b, n_gaussians, (sh_degree+1)^2, 3].
+        scaling: log-scale of shape [b, n_gaussians, 3].
+        rotation: quaternions of shape [b, n_gaussians, 4].
+        opacity: logit-opacity of shape [b, n_gaussians, 1].
+        height: render height.
+        width: render width.
+        C2W: camera-to-world matrices of shape [b, v, 4, 4].
+        fxfycxcy: intrinsics of shape [b, v, 4].
+        scaling_modifier: optional global scaling factor.
 
-        Returns:
-            renders of shape [b, v, 3, height, width].
+        Returns
+        -------
+        renders of shape [b, v, 3, height, width].
+
         """
         ctx.scaling_modifier = scaling_modifier
 
@@ -1158,13 +1233,16 @@ class DeferredGaussianRender(torch.autograd.Function):
     def backward(ctx, grad_output):
         """Backward pass: compute gradients w.r.t. Gaussian parameters.
 
-        Args:
-            ctx: autograd context.
-            grad_output: upstream gradient tensor.
+        Parameters
+        ----------
+        ctx: autograd context.
+        grad_output: upstream gradient tensor.
 
-        Returns:
-            gradients w.r.t. xyz, features, scaling, rotation, opacity, and None for
-            height, width, C2W, fxfycxcy, scaling_modifier.
+        Returns
+        -------
+        gradients w.r.t. xyz, features, scaling, rotation, opacity, and None for
+        height, width, C2W, fxfycxcy, scaling_modifier.
+
         """
         xyz, features, scaling, rotation, opacity, C2W, fxfycxcy = ctx.saved_tensors
         height, width = ctx.rendering_size
@@ -1214,13 +1292,16 @@ def render_turntable(
 ) -> np.ndarray:
     """Render a turntable sequence around the Gaussian cloud.
 
-    Args:
-        pc: Gaussian point cloud model.
-        rendering_resolution: square render resolution in pixels.
-        num_views: number of equally-spaced viewpoints.
+    Parameters
+    ----------
+    pc: Gaussian point cloud model.
+    rendering_resolution: square render resolution in pixels.
+    num_views: number of equally-spaced viewpoints.
 
-    Returns:
-        uint8 numpy array of shape [H, V*W, 3].
+    Returns
+    -------
+    uint8 numpy array of shape [H, V*W, 3].
+
     """
     w, h, v, fxfycxcy, c2w = get_turntable_cameras(
         h=rendering_resolution, w=rendering_resolution, num_views=num_views,
@@ -1250,9 +1331,11 @@ class GaussianRenderer(nn.Module):
     ) -> None:
         """Initialize with SH degree and optional scaling modifier.
 
-        Args:
-            sh_degree: spherical harmonics degree.
-            scaling_modifier: optional global scale factor applied at render time.
+        Parameters
+        ----------
+        sh_degree: spherical harmonics degree.
+        scaling_modifier: optional global scale factor applied at render time.
+
         """
         super().__init__()
 
@@ -1275,20 +1358,23 @@ class GaussianRenderer(nn.Module):
     ):
         """Render Gaussians for all batch items and views.
 
-        Args:
-            xyz: [b, n_gaussians, 3].
-            features: [b, n_gaussians, (sh_degree+1)^2, 3].
-            scaling: [b, n_gaussians, 3].
-            rotation: [b, n_gaussians, 4].
-            opacity: [b, n_gaussians, 1].
-            height: render height.
-            width: render width.
-            C2W: [b, v, 4, 4].
-            fxfycxcy: [b, v, 4].
-            deferred: use deferred rendering (default True).
+        Parameters
+        ----------
+        xyz: [b, n_gaussians, 3].
+        features: [b, n_gaussians, (sh_degree+1)^2, 3].
+        scaling: [b, n_gaussians, 3].
+        rotation: [b, n_gaussians, 4].
+        opacity: [b, n_gaussians, 1].
+        height: render height.
+        width: render width.
+        C2W: [b, v, 4, 4].
+        fxfycxcy: [b, v, 4].
+        deferred: use deferred rendering (default True).
 
-        Returns:
-            tuple of (renderings [b, v, 3, H, W], list of GaussianModel per batch item).
+        Returns
+        -------
+        tuple of (renderings [b, v, 3, H, W], list of GaussianModel per batch item).
+
         """
         if deferred:
             renderings = deferred_gaussian_render(
@@ -1343,15 +1429,18 @@ def render_generic(
 ) -> np.ndarray:
     """Render a sequence of views and return uint8 numpy images.
 
-    Args:
-        pc: Gaussian point cloud model.
-        c2ws: camera-to-world matrices of shape [v, 4, 4].
-        fxfycxcy: intrinsics of shape [v, 4].
-        h: render height.
-        w: render width.
+    Parameters
+    ----------
+    pc: Gaussian point cloud model.
+    c2ws: camera-to-world matrices of shape [v, 4, 4].
+    fxfycxcy: intrinsics of shape [v, 4].
+    h: render height.
+    w: render width.
 
-    Returns:
-        uint8 numpy array of shape [v, H, W, 3].
+    Returns
+    -------
+    uint8 numpy array of shape [v, H, W, 3].
+
     """
     v = c2ws.shape[0]
     device = pc._xyz.device

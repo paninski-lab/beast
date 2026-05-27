@@ -25,13 +25,16 @@ def subspace_overlap(
 
     Reference: https://github.com/themattinthehatt/behavenet
 
-    Args:
-        A: matrix of shape (a, d).
-        B: matrix of shape (b, d).
-        C: optional background subspace projection matrix of shape (c, d).
+    Parameters
+    ----------
+    A: matrix of shape (a, d).
+    B: matrix of shape (b, d).
+    C: optional background subspace projection matrix of shape (c, d).
 
-    Returns:
-        scalar Frobenius norm of UU^T divided by number of entries.
+    Returns
+    -------
+    scalar Frobenius norm of UU^T divided by number of entries.
+
     """
     if C is None:
         U = torch.cat([A, B], dim=0)
@@ -48,8 +51,10 @@ class PerceptualLoss(nn.Module):
     def __init__(self, device: str = 'cpu') -> None:
         """Initialize.
 
-        Args:
-            device: device to place the VGG model on.
+        Parameters
+        ----------
+        device: device to place the VGG model on.
+
         """
         super().__init__()
         self.device = device
@@ -77,11 +82,14 @@ class PerceptualLoss(nn.Module):
     def _load_matconvnet_weights(self, model: nn.Module) -> bool:
         """Attempt to load matconvnet VGG19 weights, downloading if needed.
 
-        Args:
-            model: the VGG19 model to load weights into.
+        Parameters
+        ----------
+        model: the VGG19 model to load weights into.
 
-        Returns:
-            True if weights were loaded successfully, False otherwise.
+        Returns
+        -------
+        True if weights were loaded successfully, False otherwise.
+
         """
         weight_file = Path('metric_checkpoint/imagenet-vgg-verydeep-19.mat')
         weight_file.parent.mkdir(parents=True, exist_ok=True)
@@ -132,11 +140,14 @@ class PerceptualLoss(nn.Module):
     def _extract_features(self, x: torch.Tensor) -> list[torch.Tensor]:
         """Run input through all feature blocks and collect intermediate outputs.
 
-        Args:
-            x: input image tensor.
+        Parameters
+        ----------
+        x: input image tensor.
 
-        Returns:
-            list of feature tensors, one per block.
+        Returns
+        -------
+        list of feature tensors, one per block.
+
         """
         features = []
         for block in self.blocks:
@@ -147,11 +158,14 @@ class PerceptualLoss(nn.Module):
     def _preprocess_images(self, images: torch.Tensor) -> torch.Tensor:
         """Subtract ImageNet channel means from images scaled to [0, 255].
 
-        Args:
-            images: image tensor in [0, 1] range.
+        Parameters
+        ----------
+        images: image tensor in [0, 1] range.
 
-        Returns:
-            preprocessed image tensor.
+        Returns
+        -------
+        preprocessed image tensor.
+
         """
         mean = torch.tensor([123.68, 116.779, 103.939], device=images.device)
         mean = mean.view(1, 3, 1, 1)
@@ -160,12 +174,15 @@ class PerceptualLoss(nn.Module):
     def forward(self, pred_img: torch.Tensor, target_img: torch.Tensor) -> torch.Tensor:
         """Compute perceptual loss between predicted and target images.
 
-        Args:
-            pred_img: predicted image tensor in [0, 1].
-            target_img: target image tensor in [0, 1].
+        Parameters
+        ----------
+        pred_img: predicted image tensor in [0, 1].
+        target_img: target image tensor in [0, 1].
 
-        Returns:
-            scalar perceptual loss.
+        Returns
+        -------
+        scalar perceptual loss.
+
         """
         pred_img = self._preprocess_images(pred_img)
         target_img = self._preprocess_images(target_img)
@@ -189,13 +206,16 @@ def masked_mse_loss(
 ) -> torch.Tensor:
     """Compute weighted MSE over RGB pixels using a foreground mask.
 
-    Args:
-        rendering: predicted image tensor.
-        target: target image tensor.
-        pixel_mask: binary mask tensor; sum(w*(p-t)^2) / sum(w), w repeated across channels.
+    Parameters
+    ----------
+    rendering: predicted image tensor.
+    target: target image tensor.
+    pixel_mask: binary mask tensor; sum(w*(p-t)^2) / sum(w), w repeated across channels.
 
-    Returns:
-        scalar masked MSE loss.
+    Returns
+    -------
+    scalar masked MSE loss.
+
     """
     m = pixel_mask.to(dtype=rendering.dtype, device=rendering.device)
     if m.ndim == 3:
@@ -212,9 +232,11 @@ class LossComputer(nn.Module):
     def __init__(self, config: dict, device: str = 'cpu') -> None:
         """Initialize.
 
-        Args:
-            config: full training config dict; reads config['training'] for loss weights.
-            device: device to place loss modules on.
+        Parameters
+        ----------
+        config: full training config dict; reads config['training'] for loss weights.
+        device: device to place loss modules on.
+
         """
         super().__init__()
         self.config = config
@@ -242,16 +264,19 @@ class LossComputer(nn.Module):
     ) -> SimpleNamespace:
         """Compute composite render loss.
 
-        Args:
-            rendering: predicted images of shape [B, V, 3, H, W].
-            target: ground-truth images of shape [B, V, 3 or 4, H, W].
-            xyz_norm: normalized xyz coordinates of shape [B, N, 3] or None.
-            xyz_init_norm: normalized initial xyz coordinates of shape [B, N, 3] or None.
-            pixel_mask: optional foreground mask of shape [B, V, H, W] or [B*V, 1, H, W].
+        Parameters
+        ----------
+        rendering: predicted images of shape [B, V, 3, H, W].
+        target: ground-truth images of shape [B, V, 3 or 4, H, W].
+        xyz_norm: normalized xyz coordinates of shape [B, N, 3] or None.
+        xyz_init_norm: normalized initial xyz coordinates of shape [B, N, 3] or None.
+        pixel_mask: optional foreground mask of shape [B, V, H, W] or [B*V, 1, H, W].
 
-        Returns:
-            SimpleNamespace with fields: loss, l2_loss, psnr, gs_reg_loss, lpips_loss,
-            perceptual_loss.
+        Returns
+        -------
+        SimpleNamespace with fields: loss, l2_loss, psnr, gs_reg_loss, lpips_loss,
+        perceptual_loss.
+
         """
         batch_size, num_views, _, height, width = rendering.shape
         rendering = rendering.reshape(batch_size * num_views, 3, height, width)

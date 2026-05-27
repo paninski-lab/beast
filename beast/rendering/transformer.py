@@ -14,8 +14,10 @@ except ImportError:
 def _init_weights(module: nn.Module) -> None:
     """Apply standard weight initialisation to Linear, Embedding, and Conv2d layers.
 
-    Args:
-        module: module to initialise.
+    Parameters
+    ----------
+    module: module to initialise.
+
     """
     if isinstance(module, nn.Linear):
         torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
@@ -32,9 +34,11 @@ def _init_weights(module: nn.Module) -> None:
 def _init_weights_layerwise(module: nn.Module, weight_init_std: float) -> None:
     """Apply layerwise weight initialisation with a custom standard deviation.
 
-    Args:
-        module: module to initialise.
-        weight_init_std: standard deviation for normal initialisation.
+    Parameters
+    ----------
+    module: module to initialise.
+    weight_init_std: standard deviation for normal initialisation.
+
     """
     if isinstance(module, nn.Linear):
         torch.nn.init.normal_(module.weight, mean=0.0, std=weight_init_std)
@@ -47,9 +51,11 @@ def _init_weights_layerwise(module: nn.Module, weight_init_std: float) -> None:
 def _init_weights_layerwise_correct(module: nn.Module, weight_init_std: float) -> None:
     """Apply layerwise weight initialisation with a custom standard deviation.
 
-    Args:
-        module: module to initialise.
-        weight_init_std: standard deviation for normal initialisation.
+    Parameters
+    ----------
+    module: module to initialise.
+    weight_init_std: standard deviation for normal initialisation.
+
     """
     if isinstance(module, nn.Linear):
         torch.nn.init.normal_(module.weight, mean=0.0, std=weight_init_std)
@@ -63,6 +69,7 @@ class ImageTokenizer(nn.Module):
     """Patch-based image tokenizer.
 
     Reference: https://github.com/facebookresearch/dino/blob/7c446df5b9f45747937fb0d72314eb9f7b66930a/vision_transformer.py#L134-L214
+
     """
 
     def __init__(
@@ -76,13 +83,15 @@ class ImageTokenizer(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            image_size: spatial size of the input image (assumed square).
-            patch_size: spatial size of each patch (assumed square).
-            d: token embedding dimension.
-            in_channels: number of input image channels.
-            conv_bias: whether to include bias in the patch embedding convolution.
-            patch_token_dropout: dropout probability applied to patch tokens.
+        Parameters
+        ----------
+        image_size: spatial size of the input image (assumed square).
+        patch_size: spatial size of each patch (assumed square).
+        d: token embedding dimension.
+        in_channels: number of input image channels.
+        conv_bias: whether to include bias in the patch embedding convolution.
+        patch_token_dropout: dropout probability applied to patch tokens.
+
         """
         super().__init__()
         assert (
@@ -112,6 +121,7 @@ class MLP(nn.Module):
     """MLP layer.
 
     Reference: https://github.com/facebookresearch/dino/blob/7c446df5b9f45747937fb0d72314eb9f7b66930a/vision_transformer.py#L49-L65
+
     """
 
     def __init__(
@@ -124,12 +134,14 @@ class MLP(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            mlp_ratio: hidden dimension multiplier when mlp_dim is None.
-            mlp_bias: whether to include bias in linear layers.
-            mlp_dropout: dropout probability after the output projection.
-            mlp_dim: optional explicit hidden dimension; overrides mlp_ratio.
+        Parameters
+        ----------
+        d: token dimension.
+        mlp_ratio: hidden dimension multiplier when mlp_dim is None.
+        mlp_bias: whether to include bias in linear layers.
+        mlp_dropout: dropout probability after the output projection.
+        mlp_dim: optional explicit hidden dimension; overrides mlp_ratio.
+
         """
         super().__init__()
         if mlp_dim is None:
@@ -151,6 +163,7 @@ class SelfAttention(nn.Module):
     """Self-attention layer.
 
     Reference: https://github.com/facebookresearch/dino/blob/7c446df5b9f45747937fb0d72314eb9f7b66930a/vision_transformer.py#L68-L92
+
     """
 
     def __init__(
@@ -165,14 +178,16 @@ class SelfAttention(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension; must evenly divide d.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the output projection.
-            attn_fc_dropout: dropout probability after the output projection.
-            use_flashatt_v2: use xformers flash-attention v2 when available.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension; must evenly divide d.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the output projection.
+        attn_fc_dropout: dropout probability after the output projection.
+        use_flashatt_v2: use xformers flash-attention v2 when available.
+
         """
         super().__init__()
         assert (
@@ -191,9 +206,11 @@ class SelfAttention(nn.Module):
     def forward(self, x: torch.Tensor, subset_attention_size: int | None = None) -> torch.Tensor:
         """Forward pass with optional subset attention.
 
-        Args:
-            x: input tensor of shape (b, l, d).
-            subset_attention_size: if set, restrict attention to a token subset.
+        Parameters
+        ----------
+        x: input tensor of shape (b, l, d).
+        subset_attention_size: if set, restrict attention to a token subset.
+
         """
         q, k, v = self.to_qkv(x).split(self.d, dim=2)
 
@@ -263,9 +280,11 @@ class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-5) -> None:
         """Initialize.
 
-        Args:
-            dim: feature dimension to normalise over.
-            eps: epsilon added to variance for numerical stability.
+        Parameters
+        ----------
+        dim: feature dimension to normalise over.
+        eps: epsilon added to variance for numerical stability.
+
         """
         super().__init__()
         self.eps = eps
@@ -274,11 +293,14 @@ class RMSNorm(nn.Module):
     def _norm(self, x: torch.Tensor) -> torch.Tensor:
         """Apply RMS normalisation without the learnable scale.
 
-        Args:
-            x: input tensor.
+        Parameters
+        ----------
+        x: input tensor.
 
-        Returns:
-            normalised tensor with the same shape as x.
+        Returns
+        -------
+        normalised tensor with the same shape as x.
+
         """
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
 
@@ -303,14 +325,16 @@ class QK_Norm_SelfAttention(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension; must evenly divide d.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_fc_bias: whether to include bias in the output projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_dropout: dropout probability after the output projection.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension; must evenly divide d.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_fc_bias: whether to include bias in the output projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_dropout: dropout probability after the output projection.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         assert (
@@ -332,9 +356,11 @@ class QK_Norm_SelfAttention(nn.Module):
     def forward(self, x: torch.Tensor, attn_bias=None) -> torch.Tensor:
         """Forward pass.
 
-        Args:
-            x: input tensor of shape (b, l, d).
-            attn_bias: xformers BlockDiagonalMask.
+        Parameters
+        ----------
+        x: input tensor of shape (b, l, d).
+        attn_bias: xformers BlockDiagonalMask.
+
         """
         q, k, v = self.to_qkv(x).split(self.d, dim=2)
 
@@ -387,14 +413,16 @@ class QK_Norm_CrossAttention(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension; must evenly divide d.
-            attn_qkv_bias: whether to include bias in the Q/K/V projections.
-            attn_fc_bias: whether to include bias in the output projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_dropout: dropout probability after the output projection.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension; must evenly divide d.
+        attn_qkv_bias: whether to include bias in the Q/K/V projections.
+        attn_fc_bias: whether to include bias in the output projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_dropout: dropout probability after the output projection.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         assert (
@@ -423,10 +451,12 @@ class QK_Norm_CrossAttention(nn.Module):
     ) -> torch.Tensor:
         """Forward pass.
 
-        Args:
-            q_input: query tensor of shape (b, l, d).
-            kv_input: key/value tensor; defaults to q_input for self-attention.
-            attn_bias: xformers BlockDiagonalMask.
+        Parameters
+        ----------
+        q_input: query tensor of shape (b, l, d).
+        kv_input: key/value tensor; defaults to q_input for self-attention.
+        attn_bias: xformers BlockDiagonalMask.
+
         """
         if kv_input is None:
             kv_input = q_input
@@ -485,14 +515,16 @@ class QK_Norm_Attention(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension; must evenly divide d.
-            attn_qkv_bias: whether to include bias in the Q/K/V projections.
-            attn_fc_bias: whether to include bias in the output projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_dropout: dropout probability after the output projection.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension; must evenly divide d.
+        attn_qkv_bias: whether to include bias in the Q/K/V projections.
+        attn_fc_bias: whether to include bias in the output projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_dropout: dropout probability after the output projection.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         assert (
@@ -522,11 +554,13 @@ class QK_Norm_Attention(nn.Module):
     ) -> torch.Tensor:
         """Forward pass.
 
-        Args:
-            q_input: query input tensor of shape (b, l, d).
-            k_input: key input; defaults to q_input.
-            v_input: value input; defaults to q_input.
-            attn_bias: xformers BlockDiagonalMask.
+        Parameters
+        ----------
+        q_input: query input tensor of shape (b, l, d).
+        k_input: key input; defaults to q_input.
+        v_input: value input; defaults to q_input.
+        attn_bias: xformers BlockDiagonalMask.
+
         """
         if k_input is None and v_input is None:
             k_input = v_input = q_input
@@ -585,14 +619,16 @@ class MaskedSelfAttention(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension; must evenly divide d.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the output projection.
-            attn_fc_dropout: dropout probability after the output projection.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension; must evenly divide d.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the output projection.
+        attn_fc_dropout: dropout probability after the output projection.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         assert (
@@ -619,10 +655,12 @@ class MaskedSelfAttention(nn.Module):
     ) -> torch.Tensor:
         """Forward pass.
 
-        Args:
-            x: input tensor of shape (b, l, d).
-            mask: boolean attention mask of shape (l, l).
-            subset_attention_size: optional subset token count.
+        Parameters
+        ----------
+        x: input tensor of shape (b, l, d).
+        mask: boolean attention mask of shape (l, l).
+        subset_attention_size: optional subset token count.
+
         """
         q, k, v = self.to_qkv(x).split(self.d, dim=2)
 
@@ -678,15 +716,17 @@ class FastMaskAttention(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension; must evenly divide d.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the output projection.
-            attn_fc_dropout: dropout probability after the output projection.
-            use_flashatt_v2: use xformers flash-attention v2 when available.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension; must evenly divide d.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the output projection.
+        attn_fc_dropout: dropout probability after the output projection.
+        use_flashatt_v2: use xformers flash-attention v2 when available.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         assert (
@@ -710,9 +750,11 @@ class FastMaskAttention(nn.Module):
     def forward(self, x: torch.Tensor, subset_kv_size: int | None = None) -> torch.Tensor:
         """Forward pass.
 
-        Args:
-            x: input tensor of shape (b, l, d).
-            subset_kv_size: if set, restrict KV to a subset of tokens.
+        Parameters
+        ----------
+        x: input tensor of shape (b, l, d).
+        subset_kv_size: if set, restrict KV to a subset of tokens.
+
         """
         q, k, v = self.to_qkv(x).split(self.d, dim=2)
 
@@ -788,15 +830,17 @@ class SubsetAttention(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension; must evenly divide d.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the output projection.
-            attn_fc_dropout: dropout probability after the output projection.
-            use_flashatt_v2: use xformers flash-attention v2 when available.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension; must evenly divide d.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the output projection.
+        attn_fc_dropout: dropout probability after the output projection.
+        use_flashatt_v2: use xformers flash-attention v2 when available.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         assert (
@@ -825,10 +869,12 @@ class SubsetAttention(nn.Module):
     ) -> torch.Tensor:
         """Forward pass.
 
-        Args:
-            x: input tensor of shape (b, l, d).
-            subset_kv_size: restrict KV to a token subset.
-            subset_q_size: restrict Q to a token subset.
+        Parameters
+        ----------
+        x: input tensor of shape (b, l, d).
+        subset_kv_size: restrict KV to a token subset.
+        subset_q_size: restrict Q to a token subset.
+
         """
         q, k, v = self.to_qkv(x).split(self.d, dim=2)
 
@@ -919,17 +965,19 @@ class TransformerBlock(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension.
-            ln_bias: whether to include bias in LayerNorm.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the attention output projection.
-            attn_fc_dropout: dropout probability after the attention output projection.
-            mlp_ratio: MLP hidden dimension multiplier.
-            mlp_bias: whether to include bias in MLP linear layers.
-            mlp_dropout: dropout probability in the MLP.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension.
+        ln_bias: whether to include bias in LayerNorm.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the attention output projection.
+        attn_fc_dropout: dropout probability after the attention output projection.
+        mlp_ratio: MLP hidden dimension multiplier.
+        mlp_bias: whether to include bias in MLP linear layers.
+        mlp_dropout: dropout probability in the MLP.
+
         """
         super().__init__()
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
@@ -965,18 +1013,20 @@ class QK_Norm_TransformerBlock(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension.
-            ln_bias: whether to include bias in LayerNorm.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the attention output projection.
-            attn_fc_dropout: dropout probability after the attention output projection.
-            mlp_ratio: MLP hidden dimension multiplier.
-            mlp_bias: whether to include bias in MLP linear layers.
-            mlp_dropout: dropout probability in the MLP.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension.
+        ln_bias: whether to include bias in LayerNorm.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the attention output projection.
+        attn_fc_dropout: dropout probability after the attention output projection.
+        mlp_ratio: MLP hidden dimension multiplier.
+        mlp_bias: whether to include bias in MLP linear layers.
+        mlp_dropout: dropout probability in the MLP.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
@@ -1012,18 +1062,20 @@ class QK_Norm_Cross_TransformerBlock(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension.
-            ln_bias: whether to include bias in LayerNorm.
-            attn_qkv_bias: whether to include bias in the Q/K/V projections.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the attention output projection.
-            attn_fc_dropout: dropout probability after the attention output projection.
-            mlp_ratio: MLP hidden dimension multiplier.
-            mlp_bias: whether to include bias in MLP linear layers.
-            mlp_dropout: dropout probability in the MLP.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension.
+        ln_bias: whether to include bias in LayerNorm.
+        attn_qkv_bias: whether to include bias in the Q/K/V projections.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the attention output projection.
+        attn_fc_dropout: dropout probability after the attention output projection.
+        mlp_ratio: MLP hidden dimension multiplier.
+        mlp_bias: whether to include bias in MLP linear layers.
+        mlp_dropout: dropout probability in the MLP.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
@@ -1036,9 +1088,11 @@ class QK_Norm_Cross_TransformerBlock(nn.Module):
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """Forward pass.
 
-        Args:
-            x: query input.
-            y: key/value input.
+        Parameters
+        ----------
+        x: query input.
+        y: key/value input.
+
         """
         x = x + self.attn(self.norm1(x), self.norm1(y))
         x = x + self.mlp(self.norm2(x))
@@ -1049,6 +1103,7 @@ class PAPR_QK_Norm_TransformerBlock(nn.Module):
     """PAPR-style transformer block with separate Q/K/V norms.
 
     Reference: https://github.com/zvict/papr/blob/main/models/model.py
+
     """
 
     def __init__(
@@ -1067,18 +1122,20 @@ class PAPR_QK_Norm_TransformerBlock(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension.
-            ln_bias: whether to include bias in LayerNorm.
-            attn_qkv_bias: whether to include bias in the Q/K/V projections.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the attention output projection.
-            attn_fc_dropout: dropout probability after the attention output projection.
-            mlp_ratio: MLP hidden dimension multiplier.
-            mlp_bias: whether to include bias in MLP linear layers.
-            mlp_dropout: dropout probability in the MLP.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension.
+        ln_bias: whether to include bias in LayerNorm.
+        attn_qkv_bias: whether to include bias in the Q/K/V projections.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the attention output projection.
+        attn_fc_dropout: dropout probability after the attention output projection.
+        mlp_ratio: MLP hidden dimension multiplier.
+        mlp_bias: whether to include bias in MLP linear layers.
+        mlp_dropout: dropout probability in the MLP.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         self.norm1_q = nn.LayerNorm(d, bias=ln_bias)
@@ -1117,18 +1174,20 @@ class MaskedTransformerBlock(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension.
-            ln_bias: whether to include bias in LayerNorm.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the attention output projection.
-            attn_fc_dropout: dropout probability after the attention output projection.
-            mlp_ratio: MLP hidden dimension multiplier.
-            mlp_bias: whether to include bias in MLP linear layers.
-            mlp_dropout: dropout probability in the MLP.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension.
+        ln_bias: whether to include bias in LayerNorm.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the attention output projection.
+        attn_fc_dropout: dropout probability after the attention output projection.
+        mlp_ratio: MLP hidden dimension multiplier.
+        mlp_bias: whether to include bias in MLP linear layers.
+        mlp_dropout: dropout probability in the MLP.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
@@ -1169,18 +1228,20 @@ class FaskMaskedTransformerBlock(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension.
-            ln_bias: whether to include bias in LayerNorm.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the attention output projection.
-            attn_fc_dropout: dropout probability after the attention output projection.
-            mlp_ratio: MLP hidden dimension multiplier.
-            mlp_bias: whether to include bias in MLP linear layers.
-            mlp_dropout: dropout probability in the MLP.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension.
+        ln_bias: whether to include bias in LayerNorm.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the attention output projection.
+        attn_fc_dropout: dropout probability after the attention output projection.
+        mlp_ratio: MLP hidden dimension multiplier.
+        mlp_bias: whether to include bias in MLP linear layers.
+        mlp_dropout: dropout probability in the MLP.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
@@ -1217,18 +1278,20 @@ class QSubsetTransformerBlock(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension.
-            ln_bias: whether to include bias in LayerNorm.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the attention output projection.
-            attn_fc_dropout: dropout probability after the attention output projection.
-            mlp_ratio: MLP hidden dimension multiplier.
-            mlp_bias: whether to include bias in MLP linear layers.
-            mlp_dropout: dropout probability in the MLP.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension.
+        ln_bias: whether to include bias in LayerNorm.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the attention output projection.
+        attn_fc_dropout: dropout probability after the attention output projection.
+        mlp_ratio: MLP hidden dimension multiplier.
+        mlp_bias: whether to include bias in MLP linear layers.
+        mlp_dropout: dropout probability in the MLP.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
@@ -1267,18 +1330,20 @@ class KVSubsetTransformerBlock(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension.
-            ln_bias: whether to include bias in LayerNorm.
-            attn_qkv_bias: whether to include bias in the QKV projection.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the attention output projection.
-            attn_fc_dropout: dropout probability after the attention output projection.
-            mlp_ratio: MLP hidden dimension multiplier.
-            mlp_bias: whether to include bias in MLP linear layers.
-            mlp_dropout: dropout probability in the MLP.
-            use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension.
+        ln_bias: whether to include bias in LayerNorm.
+        attn_qkv_bias: whether to include bias in the QKV projection.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the attention output projection.
+        attn_fc_dropout: dropout probability after the attention output projection.
+        mlp_ratio: MLP hidden dimension multiplier.
+        mlp_bias: whether to include bias in MLP linear layers.
+        mlp_dropout: dropout probability in the MLP.
+        use_qk_norm: whether to apply RMSNorm to Q and K before attention.
+
         """
         super().__init__()
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
@@ -1314,17 +1379,19 @@ class CrossAttention(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            input_dim: query token dimension.
-            d_head: per-head dimension.
-            attn_qkv_bias: whether to include bias in the Q/K/V projections.
-            attn_dropout: dropout probability on attention weights (must be 0.0).
-            attn_fc_bias: whether to include bias in the output projection.
-            attn_fc_dropout: dropout probability after the output projection.
-            use_flashatt_v2: use xformers flash-attention v2 when available.
-            num_heads: number of attention heads; defaults to input_dim // d_head.
-            ctx_dim: key/value context dimension; defaults to input_dim.
-            causal: whether to apply a causal (lower-triangular) mask.
+        Parameters
+        ----------
+        input_dim: query token dimension.
+        d_head: per-head dimension.
+        attn_qkv_bias: whether to include bias in the Q/K/V projections.
+        attn_dropout: dropout probability on attention weights (must be 0.0).
+        attn_fc_bias: whether to include bias in the output projection.
+        attn_fc_dropout: dropout probability after the output projection.
+        use_flashatt_v2: use xformers flash-attention v2 when available.
+        num_heads: number of attention heads; defaults to input_dim // d_head.
+        ctx_dim: key/value context dimension; defaults to input_dim.
+        causal: whether to apply a causal (lower-triangular) mask.
+
         """
         super().__init__()
         self.input_dim = input_dim
@@ -1347,9 +1414,11 @@ class CrossAttention(nn.Module):
     def forward(self, x: torch.Tensor, y: torch.Tensor | None = None) -> torch.Tensor:
         """Forward pass: x cross-attends to y.
 
-        Args:
-            x: query input of shape (b, l, d).
-            y: key/value input of shape (b, l', d); defaults to x.
+        Parameters
+        ----------
+        x: query input of shape (b, l, d).
+        y: key/value input of shape (b, l', d); defaults to x.
+
         """
         if y is None:
             y = x
@@ -1421,17 +1490,19 @@ class CrossTransformerBlock(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            d: token dimension.
-            d_head: per-head dimension.
-            ln_bias: whether to include bias in LayerNorm.
-            attn_qkv_bias: whether to include bias in the Q/K/V projections.
-            attn_dropout: dropout probability on attention weights.
-            attn_fc_bias: whether to include bias in the attention output projection.
-            attn_fc_dropout: dropout probability after the attention output projection.
-            mlp_ratio: MLP hidden dimension multiplier.
-            mlp_bias: whether to include bias in MLP linear layers.
-            mlp_dropout: dropout probability in the MLP.
+        Parameters
+        ----------
+        d: token dimension.
+        d_head: per-head dimension.
+        ln_bias: whether to include bias in LayerNorm.
+        attn_qkv_bias: whether to include bias in the Q/K/V projections.
+        attn_dropout: dropout probability on attention weights.
+        attn_fc_bias: whether to include bias in the attention output projection.
+        attn_fc_dropout: dropout probability after the attention output projection.
+        mlp_ratio: MLP hidden dimension multiplier.
+        mlp_bias: whether to include bias in MLP linear layers.
+        mlp_dropout: dropout probability in the MLP.
+
         """
         super().__init__()
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
@@ -1464,14 +1535,16 @@ class FixedLengthTransformerLayer(nn.Module):
     ) -> None:
         """Initialize.
 
-        Args:
-            dim: the input dim of x.
-            context_dim: the input dim of context.
-            fixed_length: the length of attention tokens.
-            num_heads: the number of attention heads.
-            head_dim: the dim of each attention head.
-            use_ln_context: whether to apply LayerNorm to context.
-            mlp_dim: optional MLP hidden dimension.
+        Parameters
+        ----------
+        dim: the input dim of x.
+        context_dim: the input dim of context.
+        fixed_length: the length of attention tokens.
+        num_heads: the number of attention heads.
+        head_dim: the dim of each attention head.
+        use_ln_context: whether to apply LayerNorm to context.
+        mlp_dim: optional MLP hidden dimension.
+
         """
         super().__init__()
         self.has_cross_att = context_dim is not None
@@ -1525,9 +1598,11 @@ class FixedLengthTransformerLayer(nn.Module):
     ) -> torch.Tensor:
         """Forward pass.
 
-        Args:
-            x: input of shape (b, orig_length, orig_dim).
-            context: optional cross-attention context of shape (b, context_length, context_dim).
+        Parameters
+        ----------
+        x: input of shape (b, orig_length, orig_dim).
+        context: optional cross-attention context of shape (b, context_length, context_dim).
+
         """
         batch_size, orig_length, orig_dim = x.shape
         context = context or x

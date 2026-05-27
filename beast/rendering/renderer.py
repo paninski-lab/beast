@@ -19,8 +19,10 @@ class Renderer(nn.Module):
     def __init__(self, config: dict) -> None:
         """Initialize renderer from model config.
 
-        Args:
-            config: full model config dict; reads config['model']['gaussians'].
+        Parameters
+        ----------
+        config: full model config dict; reads config['model']['gaussians'].
+
         """
         super().__init__()
         self.config = config
@@ -43,20 +45,23 @@ class Renderer(nn.Module):
     ):
         """Render Gaussians for all batch items and views.
 
-        Args:
-            xyz: [b, n_gaussians, 3].
-            features: [b, n_gaussians, (sh_degree+1)^2, 3].
-            scaling: [b, n_gaussians, 3].
-            rotation: [b, n_gaussians, 4].
-            opacity: [b, n_gaussians, 1].
-            height: render height in pixels.
-            width: render width in pixels.
-            C2W: camera-to-world matrices of shape [b, v, 4, 4].
-            fxfycxcy: intrinsics of shape [b, v, 4].
-            deferred: use deferred rendering (default True).
+        Parameters
+        ----------
+        xyz: [b, n_gaussians, 3].
+        features: [b, n_gaussians, (sh_degree+1)^2, 3].
+        scaling: [b, n_gaussians, 3].
+        rotation: [b, n_gaussians, 4].
+        opacity: [b, n_gaussians, 1].
+        height: render height in pixels.
+        width: render width in pixels.
+        C2W: camera-to-world matrices of shape [b, v, 4, 4].
+        fxfycxcy: intrinsics of shape [b, v, 4].
+        deferred: use deferred rendering (default True).
 
-        Returns:
-            SimpleNamespace with fields render, depth, alpha.
+        Returns
+        -------
+        SimpleNamespace with fields render, depth, alpha.
+
         """
         if self.config['model'].get('use_deferred_rendering', False):
             renderings = deferred_gaussian_render(
@@ -114,14 +119,19 @@ class Renderer(nn.Module):
 def get_point_range_func(gaussians_config: dict):
     """Return a depth range mapping function based on the gaussians config.
 
-    Args:
-        gaussians_config: config dict for the gaussians sub-section.
+    Parameters
+    ----------
+    gaussians_config: config dict for the gaussians sub-section.
 
-    Returns:
-        callable mapping raw network output to depth values.
+    Returns
+    -------
+    callable mapping raw network output to depth values.
 
-    Raises:
-        NotImplementedError: if range_setting type is unrecognised.
+    Raises
+    ------
+    NotImplementedError
+        if range_setting type is unrecognised.
+
     """
     range_setting = gaussians_config.get('range_setting', {'type': 'object_centric_depth'})
 

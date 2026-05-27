@@ -2,6 +2,7 @@
 
 Copyright 2022 the Regents of the University of California, Nerfstudio Team and contributors.
 Licensed under the Apache License, Version 2.0.
+
 """
 
 import math
@@ -11,7 +12,6 @@ import numpy as np
 import torch
 from einops import rearrange
 from jaxtyping import Float
-from numpy.typing import NDArray
 from torch import Tensor
 
 from beast.geometry.rotations import quat2mat, rot6d2mat
@@ -19,12 +19,14 @@ from beast.geometry.rotations import quat2mat, rot6d2mat
 _EPS = np.finfo(float).eps * 4.0
 
 
-def unit_vector(data: NDArray, axis: int | None = None) -> np.ndarray:
+def unit_vector(data: np.ndarray, axis: int | None = None) -> np.ndarray:
     """Return ndarray normalized by Euclidean norm along axis.
 
-    Args:
-        data: input array.
-        axis: the axis along which to normalize into unit vector.
+    Parameters
+    ----------
+    data: input array.
+    axis: the axis along which to normalize into unit vector.
+
     """
     data = np.array(data, dtype=np.float64, copy=True)
     if data.ndim == 1:
@@ -38,13 +40,15 @@ def unit_vector(data: NDArray, axis: int | None = None) -> np.ndarray:
     return data
 
 
-def quaternion_from_matrix(matrix: NDArray, isprecise: bool = False) -> np.ndarray:
+def quaternion_from_matrix(matrix: np.ndarray, isprecise: bool = False) -> np.ndarray:
     """Return quaternion from rotation matrix.
 
-    Args:
-        matrix: rotation matrix to obtain quaternion.
-        isprecise: if True, input matrix is assumed to be a precise rotation matrix
-            and a faster algorithm is used.
+    Parameters
+    ----------
+    matrix: rotation matrix to obtain quaternion.
+    isprecise: if True, input matrix is assumed to be a precise rotation matrix
+        and a faster algorithm is used.
+
     """
     M = np.asarray(matrix, dtype=np.float64)[:4, :4]
     if isprecise:
@@ -93,20 +97,22 @@ def quaternion_from_matrix(matrix: NDArray, isprecise: bool = False) -> np.ndarr
 
 
 def quaternion_slerp(
-    quat0: NDArray,
-    quat1: NDArray,
+    quat0: np.ndarray,
+    quat1: np.ndarray,
     fraction: float,
     spin: int = 0,
     shortestpath: bool = True,
 ) -> np.ndarray:
     """Return spherical linear interpolation between two quaternions.
 
-    Args:
-        quat0: first quaternion.
-        quat1: second quaternion.
-        fraction: interpolation parameter (0 → quat0, 1 → quat1).
-        spin: additional spin to place on the interpolation.
-        shortestpath: whether to return the short or long path to rotation.
+    Parameters
+    ----------
+    quat0: first quaternion.
+    quat1: second quaternion.
+    fraction: interpolation parameter (0 → quat0, 1 → quat1).
+    spin: additional spin to place on the interpolation.
+    shortestpath: whether to return the short or long path to rotation.
+
     """
     q0 = unit_vector(quat0[:4])
     q1 = unit_vector(quat1[:4])
@@ -132,11 +138,13 @@ def quaternion_slerp(
     return q0
 
 
-def quaternion_matrix(quaternion: NDArray) -> np.ndarray:
+def quaternion_matrix(quaternion: np.ndarray) -> np.ndarray:
     """Return homogeneous rotation matrix from quaternion.
 
-    Args:
-        quaternion: value to convert to matrix.
+    Parameters
+    ----------
+    quaternion: value to convert to matrix.
+
     """
     q = np.array(quaternion, dtype=np.float64, copy=True)
     n = np.dot(q, q)
@@ -155,16 +163,18 @@ def quaternion_matrix(quaternion: NDArray) -> np.ndarray:
 
 
 def get_interpolated_poses(
-    pose_a: NDArray,
-    pose_b: NDArray,
+    pose_a: np.ndarray,
+    pose_b: np.ndarray,
     steps: int = 10,
 ) -> list[float]:
     """Return interpolation of poses with the specified number of steps.
 
-    Args:
-        pose_a: first pose.
-        pose_b: second pose.
-        steps: number of steps the interpolated pose path should contain.
+    Parameters
+    ----------
+    pose_a: first pose.
+    pose_b: second pose.
+    steps: number of steps the interpolated pose path should contain.
+
     """
     quat_a = quaternion_from_matrix(pose_a[:3, :3])
     quat_b = quaternion_from_matrix(pose_b[:3, :3])
@@ -189,13 +199,16 @@ def get_interpolated_k(
 ) -> list[Float[Tensor, '3 4']]:
     """Return interpolated path between two camera intrinsic matrices.
 
-    Args:
-        k_a: camera matrix 1.
-        k_b: camera matrix 2.
-        steps: number of steps the interpolated path should contain.
+    Parameters
+    ----------
+    k_a: camera matrix 1.
+    k_b: camera matrix 2.
+    steps: number of steps the interpolated path should contain.
 
-    Returns:
-        list of interpolated camera matrices.
+    Returns
+    -------
+    list of interpolated camera matrices.
+
     """
     Ks: list[Float[Tensor, '3 3']] = []
     ts = np.linspace(0, 1, steps)
@@ -211,12 +224,15 @@ def get_ordered_poses_and_k(
 ) -> tuple[Float[Tensor, 'num_poses 3 4'], Float[Tensor, 'num_poses 3 3']]:
     """Return poses and intrinsics ordered by Euclidean distance between poses.
 
-    Args:
-        poses: list of camera poses.
-        Ks: list of camera intrinsics.
+    Parameters
+    ----------
+    poses: list of camera poses.
+    Ks: list of camera intrinsics.
 
-    Returns:
-        tuple of ordered poses and intrinsics.
+    Returns
+    -------
+    tuple of ordered poses and intrinsics.
+
     """
     poses_num = len(poses)
 
@@ -245,14 +261,17 @@ def get_interpolated_poses_many(
 ) -> tuple[Float[Tensor, 'num_poses 3 4'], Float[Tensor, 'num_poses 3 3']]:
     """Return interpolated poses for many camera poses.
 
-    Args:
-        poses: list of camera poses.
-        Ks: list of camera intrinsics.
-        steps_per_transition: number of steps per transition.
-        order_poses: whether to order poses by Euclidean distance.
+    Parameters
+    ----------
+    poses: list of camera poses.
+    Ks: list of camera intrinsics.
+    steps_per_transition: number of steps per transition.
+    order_poses: whether to order poses by Euclidean distance.
 
-    Returns:
-        tuple of (new poses, intrinsics).
+    Returns
+    -------
+    tuple of (new poses, intrinsics).
+
     """
     traj = []
     k_interp = []
@@ -298,16 +317,19 @@ def get_forward_facing_trajectory(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Generate a forward-facing spiral trajectory around the central object.
 
-    Args:
-        c2w: 4x4 camera-to-world matrices in OpenCV format.
-        Ks: 3x3 camera intrinsics.
-        N: number of poses to generate.
-        N_rots: number of rotations.
-        zrate: z movement rate.
-        focal: focal distance for look-at.
+    Parameters
+    ----------
+    c2w: 4x4 camera-to-world matrices in OpenCV format.
+    Ks: 3x3 camera intrinsics.
+    N: number of poses to generate.
+    N_rots: number of rotations.
+    zrate: z movement rate.
+    focal: focal distance for look-at.
 
-    Returns:
-        tuple of (poses [N, 4, 4], intrinsics [N, 3, 3]).
+    Returns
+    -------
+    tuple of (poses [N, 4, 4], intrinsics [N, 3, 3]).
+
     """
     poses = []
     Ks_list = []
@@ -341,12 +363,15 @@ def normalize_with_norm(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Normalize tensor along axis and return normalized value with norms.
 
-    Args:
-        x: tensor to normalize.
-        dim: axis along which to normalize.
+    Parameters
+    ----------
+    x: tensor to normalize.
+    dim: axis along which to normalize.
 
-    Returns:
-        tuple of (normalized tensor, corresponding norms).
+    Returns
+    -------
+    tuple of (normalized tensor, corresponding norms).
+
     """
     norm = torch.maximum(
         torch.linalg.vector_norm(x, dim=dim, keepdims=True),
@@ -362,13 +387,16 @@ def viewmatrix(
 ) -> Float[Tensor, '*batch']:
     """Return a camera transformation matrix.
 
-    Args:
-        lookat: the direction the camera is looking.
-        up: the upward direction of the camera.
-        pos: the position of the camera.
+    Parameters
+    ----------
+    lookat: the direction the camera is looking.
+    up: the upward direction of the camera.
+    pos: the position of the camera.
 
-    Returns:
-        camera transformation matrix.
+    Returns
+    -------
+    camera transformation matrix.
+
     """
     vec2 = normalize(lookat)
     vec1_avg = normalize(up)
@@ -388,16 +416,19 @@ def get_distortion_params(
 ) -> Float[Tensor, '*batch']:
     """Return a distortion parameters tensor.
 
-    Args:
-        k1: first radial distortion parameter.
-        k2: second radial distortion parameter.
-        k3: third radial distortion parameter.
-        k4: fourth radial distortion parameter.
-        p1: first tangential distortion parameter.
-        p2: second tangential distortion parameter.
+    Parameters
+    ----------
+    k1: first radial distortion parameter.
+    k2: second radial distortion parameter.
+    k3: third radial distortion parameter.
+    k4: fourth radial distortion parameter.
+    p1: first tangential distortion parameter.
+    p2: second tangential distortion parameter.
 
-    Returns:
-        distortion parameters tensor of shape (6,).
+    Returns
+    -------
+    distortion parameters tensor of shape (6,).
+
     """
     return torch.Tensor([k1, k2, k3, k4, p1, p2])
 
@@ -413,15 +444,18 @@ def _compute_residual_and_jacobian(
 
     Adapted from MultiNeRF.
 
-    Args:
-        x: updated x coordinates.
-        y: updated y coordinates.
-        xd: distorted x coordinates.
-        yd: distorted y coordinates.
-        distortion_params: distortion parameters [k1, k2, k3, k4, p1, p2].
+    Parameters
+    ----------
+    x: updated x coordinates.
+    y: updated y coordinates.
+    xd: distorted x coordinates.
+    yd: distorted y coordinates.
+    distortion_params: distortion parameters [k1, k2, k3, k4, p1, p2].
 
-    Returns:
-        tuple of (fx, fy, fx_x, fx_y, fy_x, fy_y).
+    Returns
+    -------
+    tuple of (fx, fy, fx_x, fx_y, fy_x, fy_y).
+
     """
     k1 = distortion_params[..., 0]
     k2 = distortion_params[..., 1]
@@ -459,14 +493,17 @@ def radial_and_tangential_undistort(
 
     Adapted from MultiNeRF.
 
-    Args:
-        coords: distorted coordinates.
-        distortion_params: distortion parameters [k1, k2, k3, k4, p1, p2].
-        eps: convergence epsilon.
-        max_iterations: maximum number of Newton iterations.
+    Parameters
+    ----------
+    coords: distorted coordinates.
+    distortion_params: distortion parameters [k1, k2, k3, k4, p1, p2].
+    eps: convergence epsilon.
+    max_iterations: maximum number of Newton iterations.
 
-    Returns:
-        undistorted coordinates.
+    Returns
+    -------
+    undistorted coordinates.
+
     """
     x = coords[..., 0]
     y = coords[..., 1]
@@ -501,12 +538,15 @@ def rotation_matrix(
 ) -> Float[Tensor, '3 3']:
     """Compute the rotation matrix that rotates vector a to vector b.
 
-    Args:
-        a: the vector to rotate.
-        b: the vector to rotate to.
+    Parameters
+    ----------
+    a: the vector to rotate.
+    b: the vector to rotate to.
 
-    Returns:
-        rotation matrix of shape (3, 3).
+    Returns
+    -------
+    rotation matrix of shape (3, 3).
+
     """
     a = a / torch.linalg.norm(a)
     b = b / torch.linalg.norm(b)
@@ -534,12 +574,15 @@ def focus_of_attention(
 
     Only cameras that have the focus of attention in front of them are considered.
 
-    Args:
-        poses: camera poses of shape (num_poses, 4, 4).
-        initial_focus: initial 3D point to activate cameras.
+    Parameters
+    ----------
+    poses: camera poses of shape (num_poses, 4, 4).
+    initial_focus: initial 3D point to activate cameras.
 
-    Returns:
-        3D position of the focus of attention.
+    Returns
+    -------
+    3D position of the focus of attention.
+
     """
     active_directions = -poses[:, :3, 2:3]
     active_origins = poses[:, :3, 3:4]
@@ -569,13 +612,16 @@ def auto_orient_and_center_poses(
 ) -> tuple[Float[Tensor, '*num_poses 3 4'], Float[Tensor, '3 4']]:
     """Orient and center camera poses.
 
-    Args:
-        poses: camera poses of shape (num_poses, 4, 4).
-        method: orientation method — 'pca', 'up', 'vertical', or 'none'.
-        center_method: centering method — 'poses', 'focus', or 'none'.
+    Parameters
+    ----------
+    poses: camera poses of shape (num_poses, 4, 4).
+    method: orientation method — 'pca', 'up', 'vertical', or 'none'.
+    center_method: centering method — 'poses', 'focus', or 'none'.
 
-    Returns:
-        tuple of (oriented poses [num_poses, 3, 4], transform [3, 4]).
+    Returns
+    -------
+    tuple of (oriented poses [num_poses, 3, 4], transform [3, 4]).
+
     """
     origins = poses[..., :3, 3]
 
@@ -634,12 +680,15 @@ def auto_orient_and_center_poses(
 def fisheye624_project(xyz, params):
     """Batched FisheyeRadTanThinPrism (Fisheye624) projection.
 
-    Args:
-        xyz: BxNx3 tensor of 3D points to be projected.
-        params: Bx16 or Bx15 tensor of Fisheye624 parameters.
+    Parameters
+    ----------
+    xyz: BxNx3 tensor of 3D points to be projected.
+    params: Bx16 or Bx15 tensor of Fisheye624 parameters.
 
-    Returns:
-        uv: BxNx2 tensor of 2D projections.
+    Returns
+    -------
+    uv: BxNx2 tensor of 2D projections.
+
     """
     assert xyz.ndim == 3
     assert params.ndim == 2
@@ -694,13 +743,16 @@ def fisheye624_project(xyz, params):
 def fisheye624_unproject_helper(uv, params, max_iters: int = 5):
     """Batched FisheyeRadTanThinPrism unprojection via Newton's method.
 
-    Args:
-        uv: BxNx2 tensor of 2D pixels to be unprojected.
-        params: Bx16 or Bx15 tensor of Fisheye624 parameters.
-        max_iters: number of Newton iterations.
+    Parameters
+    ----------
+    uv: BxNx2 tensor of 2D pixels to be unprojected.
+    params: Bx16 or Bx15 tensor of Fisheye624 parameters.
+    max_iters: number of Newton iterations.
 
-    Returns:
-        xyz: BxNx3 tensor of 3D rays with z=1.
+    Returns
+    -------
+    xyz: BxNx3 tensor of 3D rays with z=1.
+
     """
     assert uv.ndim == 3, 'Expected batched input shaped BxNx3'
     assert params.ndim == 2
@@ -799,12 +851,15 @@ def fisheye624_unproject(
 ) -> torch.Tensor:
     """Unproject 2D point to 3D with Fisheye624 model.
 
-    Args:
-        coords: 2D coordinates tensor.
-        distortion_params: Fisheye624 distortion parameters.
+    Parameters
+    ----------
+    coords: 2D coordinates tensor.
+    distortion_params: Fisheye624 distortion parameters.
 
-    Returns:
-        3D ray directions.
+    Returns
+    -------
+    3D ray directions.
+
     """
     dirs = fisheye624_unproject_helper(
         coords.unsqueeze(0), distortion_params[0].unsqueeze(0),
@@ -819,15 +874,20 @@ def get_cam_se3(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Convert encoded camera info to SE(3) matrix and intrinsics.
 
-    Args:
-        cam_info: tensor of shape [b, n] where n=13 uses 6D rotation or n=11
-            uses quaternion. Layout is [rot, 3D trans, 4D fxfycxcy].
+    Parameters
+    ----------
+    cam_info: tensor of shape [b, n] where n=13 uses 6D rotation or n=11
+        uses quaternion. Layout is [rot, 3D trans, 4D fxfycxcy].
 
-    Returns:
-        tuple of (c2w [b, 4, 4], fxfycxcy [b, 4]).
+    Returns
+    -------
+    tuple of (c2w [b, 4, 4], fxfycxcy [b, 4]).
 
-    Raises:
-        NotImplementedError: if cam_info width is not 11 or 13.
+    Raises
+    ------
+    NotImplementedError
+        if cam_info width is not 11 or 13.
+
     """
     b, n = cam_info.shape
 
@@ -863,16 +923,19 @@ def cam_info_to_plucker(
 ) -> torch.Tensor:
     """Compute per-pixel Plucker ray embeddings from camera parameters.
 
-    Args:
-        c2w: camera-to-world matrices of shape [b, 4, 4] or [b, v, 4, 4].
-        fxfycxcy: intrinsics of shape [b, 4] or [b, v, 4].
-        target_imgs_info: dict with keys 'height' and 'width'.
-        normalized: if True, scale fxfycxcy by image resolution before use.
-        return_moment: if True, return moment+direction encoding; otherwise
-            origin+direction.
+    Parameters
+    ----------
+    c2w: camera-to-world matrices of shape [b, 4, 4] or [b, v, 4, 4].
+    fxfycxcy: intrinsics of shape [b, 4] or [b, v, 4].
+    target_imgs_info: dict with keys 'height' and 'width'.
+    normalized: if True, scale fxfycxcy by image resolution before use.
+    return_moment: if True, return moment+direction encoding; otherwise
+        origin+direction.
 
-    Returns:
-        Plucker ray tensor of shape [b, 6, h, w].
+    Returns
+    -------
+    Plucker ray tensor of shape [b, 6, h, w].
+
     """
     if len(c2w.shape) == 3:
         b = c2w.shape[0]

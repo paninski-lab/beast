@@ -14,9 +14,11 @@ class DinoV3(nn.Module):
     ) -> None:
         """Initialize DINOv3.
 
-        Args:
-            model_name: HuggingFace model identifier.
-            freeze: whether to freeze all parameters (default True).
+        Parameters
+        ----------
+        model_name: HuggingFace model identifier.
+        freeze: whether to freeze all parameters (default True).
+
         """
         super().__init__()
 
@@ -31,11 +33,14 @@ class DinoV3(nn.Module):
     def forward(self, images):
         """Extract patch and CLS tokens from multi-view images.
 
-        Args:
-            images: float tensor of shape (B, V, 3, H, W) in [0, 1].
+        Parameters
+        ----------
+        images: float tensor of shape (B, V, 3, H, W) in [0, 1].
 
-        Returns:
-            tuple of (patch_tokens [B, V, N, embed_dim], cls_tokens [B, V, embed_dim]).
+        Returns
+        -------
+        tuple of (patch_tokens [B, V, N, embed_dim], cls_tokens [B, V, embed_dim]).
+
         """
         B, V = images.shape[:2]
 

@@ -10,11 +10,14 @@ def rot6d2mat(x: torch.Tensor) -> torch.Tensor:
     Based on Zhou et al., "On the Continuity of Rotation Representations in Neural Networks",
     CVPR 2019.
 
-    Args:
-        x: tensor of shape [B, 6] with 6D rotation representation.
+    Parameters
+    ----------
+    x: tensor of shape [B, 6] with 6D rotation representation.
 
-    Returns:
-        rotation matrices of shape [B, 3, 3].
+    Returns
+    -------
+    rotation matrices of shape [B, 3, 3].
+
     """
     a1 = x[:, 0:3]
     a2 = x[:, 3:6]
@@ -28,11 +31,14 @@ def rot6d2mat(x: torch.Tensor) -> torch.Tensor:
 def mat2rot6d(x: torch.Tensor) -> torch.Tensor:
     """Convert SE(3) matrices to 6D rotation + translation.
 
-    Args:
-        x: tensor of shape [B, 4, 4], batch of SE(3) matrices.
+    Parameters
+    ----------
+    x: tensor of shape [B, 4, 4], batch of SE(3) matrices.
 
-    Returns:
-        tensor of shape [B, 9] = [6D rot, 3D trans].
+    Returns
+    -------
+    tensor of shape [B, 9] = [6D rot, 3D trans].
+
     """
     if x.shape[-2:] != (4, 4):
         raise ValueError(f'Input must be of shape [B, 4, 4], got {x.shape}')
@@ -46,11 +52,14 @@ def mat2rot6d(x: torch.Tensor) -> torch.Tensor:
 def quat2mat(quat: torch.Tensor) -> torch.Tensor:
     """Convert quaternion coefficients to rotation matrix.
 
-    Args:
-        quat: tensor of shape [B, 4] with quaternion coefficients (w, x, y, z).
+    Parameters
+    ----------
+    quat: tensor of shape [B, 4] with quaternion coefficients (w, x, y, z).
 
-    Returns:
-        rotation matrices of shape [B, 3, 3].
+    Returns
+    -------
+    rotation matrices of shape [B, 3, 3].
+
     """
     norm_quat = quat
     norm_quat = norm_quat / norm_quat.norm(p=2, dim=1, keepdim=True)
@@ -73,11 +82,14 @@ def quat2mat(quat: torch.Tensor) -> torch.Tensor:
 def mat2quat(x: torch.Tensor) -> torch.Tensor:
     """Convert SE(3) matrix to quaternion + translation.
 
-    Args:
-        x: tensor of shape [B, 4, 4], batch of SE(3) matrices.
+    Parameters
+    ----------
+    x: tensor of shape [B, 4, 4], batch of SE(3) matrices.
 
-    Returns:
-        tensor of shape [B, 7] = [4D quaternion, 3D trans].
+    Returns
+    -------
+    tensor of shape [B, 7] = [4D quaternion, 3D trans].
+
     """
     trans = x[:, :3, 3]
     rot = x[:, :3, :3]
@@ -88,16 +100,22 @@ def mat2quat(x: torch.Tensor) -> torch.Tensor:
 def mat2quat_transform(rotation_matrix: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     """Convert 3x3 rotation matrix to 4D quaternion vector.
 
-    Args:
-        rotation_matrix: tensor of shape [B, 3, 3].
-        eps: small value for numerical stability.
+    Parameters
+    ----------
+    rotation_matrix: tensor of shape [B, 3, 3].
+    eps: small value for numerical stability.
 
-    Returns:
-        quaternion tensor of shape [B, 4].
+    Returns
+    -------
+    quaternion tensor of shape [B, 4].
 
-    Raises:
-        TypeError: if input is not a torch.Tensor.
-        ValueError: if input has wrong shape.
+    Raises
+    ------
+    TypeError
+        if input is not a torch.Tensor.
+    ValueError
+        if input has wrong shape.
+
     """
     if not torch.is_tensor(rotation_matrix):
         raise TypeError(f'Input type is not a torch.Tensor. Got {type(rotation_matrix)}')

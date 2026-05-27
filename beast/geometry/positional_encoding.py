@@ -10,13 +10,16 @@ def get_1d_sincos_pos_emb_from_grid(
 ) -> torch.Tensor:
     """Generate 1D sinusoidal positional embeddings from grid positions.
 
-    Args:
-        embed_dim: the embedding dimension (must be even).
-        pos: the grid positions, shape [b * gh * gw] or [batch_size, sequence_length].
-        device: device for the output tensor.
+    Parameters
+    ----------
+    embed_dim: the embedding dimension (must be even).
+    pos: the grid positions, shape [b * gh * gw] or [batch_size, sequence_length].
+    device: device for the output tensor.
 
-    Returns:
-        sinusoidal positional embeddings of shape [len(pos), embed_dim].
+    Returns
+    -------
+    sinusoidal positional embeddings of shape [len(pos), embed_dim].
+
     """
     assert embed_dim % 2 == 0, 'Embedding dimension must be even for sine and cosine.'
 
@@ -40,13 +43,16 @@ def get_2d_sincos_pos_embed(
 ) -> torch.Tensor:
     """Generate 2D sine-cosine positional embeddings with separate grid height and width.
 
-    Args:
-        embed_dim: the embedding dimension.
-        grid_size: tuple specifying the grid height and width (grid_h, grid_w).
-        device: the device to place the embeddings on.
+    Parameters
+    ----------
+    embed_dim: the embedding dimension.
+    grid_size: tuple specifying the grid height and width (grid_h, grid_w).
+    device: the device to place the embeddings on.
 
-    Returns:
-        positional embeddings of shape [grid_h*grid_w, embed_dim].
+    Returns
+    -------
+    positional embeddings of shape [grid_h*grid_w, embed_dim].
+
     """
     grid_h_size, grid_w_size = grid_size
 
@@ -69,13 +75,16 @@ def get_2d_sincos_pos_embed_from_grid(
 ) -> torch.Tensor:
     """Generate 2D sine-cosine positional embeddings from a grid.
 
-    Args:
-        embed_dim: the embedding dimension.
-        grid: the grid of shape [2, 1, grid_h, grid_w].
-        device: the device to place the embeddings on.
+    Parameters
+    ----------
+    embed_dim: the embedding dimension.
+    grid: the grid of shape [2, 1, grid_h, grid_w].
+    device: the device to place the embeddings on.
 
-    Returns:
-        positional embeddings of shape [grid_h*grid_w, embed_dim].
+    Returns
+    -------
+    positional embeddings of shape [grid_h*grid_w, embed_dim].
+
     """
     assert embed_dim % 2 == 0, 'Embedding dimension must be even.'
 
