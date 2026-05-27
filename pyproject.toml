@@ -34,7 +34,6 @@ dependencies = [
     "imaug",
     "jaxtyping",
     "lightning (~=2.5)",
-    "lpips",
     "matplotlib",
     "numpy (>=2.0.0)",
     "opencv-python-headless",

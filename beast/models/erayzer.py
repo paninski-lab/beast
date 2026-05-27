@@ -27,11 +27,6 @@ from beast.rendering.transformer import (
     _init_weights_layerwise,
 )
 
-try:
-    import lpips
-except ImportError:
-    lpips = None
-
 
 def imagenet_normalize(x: torch.Tensor) -> torch.Tensor:
     """Normalize a tensor using ImageNet channel mean and std.
@@ -340,14 +335,6 @@ class LossComputer(nn.Module):
         self.config = config
         self.device = device
 
-        self.lpips_loss_module = None
-        if self.config['training'].get('lpips_loss_weight', 0.0) > 0.0:
-            if lpips is None:
-                raise ImportError('lpips is not installed but lpips_loss_weight > 0')
-            self.lpips_loss_module = lpips.LPIPS(net='vgg').to(device).eval()
-            for param in self.lpips_loss_module.parameters():
-                param.requires_grad = False
-
         self.perceptual_loss_module = None
         if self.config['training'].get('perceptual_loss_weight', 0.0) > 0.0:
             self.perceptual_loss_module = PerceptualLoss(device).eval()
@@ -372,8 +359,7 @@ class LossComputer(nn.Module):
 
         Returns
         -------
-        SimpleNamespace with fields: loss, l2_loss, psnr, gs_reg_loss, lpips_loss,
-        perceptual_loss.
+        SimpleNamespace with fields: loss, l2_loss, psnr, gs_reg_loss, perceptual_loss.
 
         """
         batch_size, num_views, _, height, width = rendering.shape
@@ -396,13 +382,6 @@ class LossComputer(nn.Module):
 
         psnr = -10.0 * torch.log10(l2_loss.clamp_min(1e-8))
 
-        lpips_loss = rendering.new_zeros(())
-        if self.lpips_loss_module is not None:
-            lpips_loss = self.lpips_loss_module(
-                rendering * 2.0 - 1.0,
-                target * 2.0 - 1.0,
-            ).mean()
-
         perceptual_loss = rendering.new_zeros(())
         if self.perceptual_loss_module is not None:
             perceptual_loss = self.perceptual_loss_module(rendering, target)
@@ -410,7 +389,6 @@ class LossComputer(nn.Module):
         total_loss = (
             self.config['training'].get('l2_loss_weight', 1.0) * l2_loss
             + self.config['training'].get('gs_reg_loss_weight', 0.0) * gs_reg_loss
-            + self.config['training'].get('lpips_loss_weight', 0.0) * lpips_loss
             + self.config['training'].get('perceptual_loss_weight', 0.0) * perceptual_loss
         )
 
@@ -419,7 +397,6 @@ class LossComputer(nn.Module):
             l2_loss=l2_loss,
             gs_reg_loss=gs_reg_loss,
             psnr=psnr,
-            lpips_loss=lpips_loss,
             perceptual_loss=perceptual_loss,
         )
 
@@ -585,8 +562,6 @@ class ERayZer(BaseLightningModel):
             {'name': f'{stage}_psnr', 'value': result.psnr, 'prog_bar': True},
             {'name': f'{stage}_gs_reg', 'value': result.gs_reg_loss},
         ]
-        if result.lpips_loss.item() != 0.0:
-            log_list.append({'name': f'{stage}_lpips', 'value': result.lpips_loss})
         if result.perceptual_loss.item() != 0.0:
             log_list.append({'name': f'{stage}_perceptual', 'value': result.perceptual_loss})
         return result.loss, log_list
