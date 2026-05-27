@@ -5,11 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-try:
-    import xformers.ops as xops
-except ImportError:
-    xops = None
-
 
 def _init_weights(module: nn.Module) -> None:
     """Apply standard weight initialisation to Linear, Embedding, and Conv2d layers.
@@ -174,7 +169,6 @@ class SelfAttention(nn.Module):
         attn_dropout: float = 0.0,
         attn_fc_bias: bool = False,
         attn_fc_dropout: float = 0.0,
-        use_flashatt_v2: bool = False,
     ) -> None:
         """Initialize.
 
@@ -186,7 +180,6 @@ class SelfAttention(nn.Module):
         attn_dropout: dropout probability on attention weights.
         attn_fc_bias: whether to include bias in the output projection.
         attn_fc_dropout: dropout probability after the output projection.
-        use_flashatt_v2: use xformers flash-attention v2 when available.
 
         """
         super().__init__()
@@ -201,8 +194,6 @@ class SelfAttention(nn.Module):
         self.fc = nn.Linear(d, d, bias=attn_fc_bias)
         self.attn_fc_dropout = nn.Dropout(attn_fc_dropout)
 
-        self.use_flashatt_v2 = use_flashatt_v2
-
     def forward(self, x: torch.Tensor, subset_attention_size: int | None = None) -> torch.Tensor:
         """Forward pass with optional subset attention.
 
@@ -214,61 +205,29 @@ class SelfAttention(nn.Module):
         """
         q, k, v = self.to_qkv(x).split(self.d, dim=2)
 
-        if self.use_flashatt_v2:
-            q, k, v = map(
-                lambda t: rearrange(t, 'b l (nh dh) -> b l nh dh', dh=self.d_head),
-                (q, k, v),
+        q, k, v = (
+            rearrange(q, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
+            rearrange(k, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
+            rearrange(v, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
+        )
+        dropout_p = self.attn_dropout if self.training else 0.0
+        if subset_attention_size is not None and subset_attention_size < q.shape[2]:
+            x = F.scaled_dot_product_attention(
+                q[:, :, :subset_attention_size, :].contiguous(),
+                k[:, :, :subset_attention_size, :].contiguous(),
+                v[:, :, :subset_attention_size, :].contiguous(),
+                dropout_p=dropout_p,
             )
-
-            if subset_attention_size is not None and subset_attention_size < q.shape[1]:
-                x_subset = xops.memory_efficient_attention(
-                    q[:, :subset_attention_size, :, :].contiguous(),
-                    k[:, :subset_attention_size, :, :].contiguous(),
-                    v[:, :subset_attention_size, :, :].contiguous(),
-                    attn_bias=None,
-                    op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-                )
-                x_rest = xops.memory_efficient_attention(
-                    q[:, subset_attention_size:, :, :].contiguous(),
-                    k,
-                    v,
-                    attn_bias=None,
-                    op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-                )
-                x = torch.cat([x_subset, x_rest], dim=1)
-            else:
-                x = xops.memory_efficient_attention(
-                    q,
-                    k,
-                    v,
-                    attn_bias=None,
-                    op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-                )
-            x = rearrange(x, 'b l nh dh -> b l (nh dh)')
+            x_rest = F.scaled_dot_product_attention(
+                q[:, :, subset_attention_size:, :].contiguous(),
+                k,
+                v,
+                dropout_p=dropout_p,
+            )
+            x = torch.cat([x, x_rest], dim=2)
         else:
-            q, k, v = (
-                rearrange(q, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
-                rearrange(k, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
-                rearrange(v, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
-            )
-            dropout_p = self.attn_dropout if self.training else 0.0
-            if subset_attention_size is not None and subset_attention_size < q.shape[2]:
-                x = F.scaled_dot_product_attention(
-                    q[:, :, :subset_attention_size, :].contiguous(),
-                    k[:, :, :subset_attention_size, :].contiguous(),
-                    v[:, :, :subset_attention_size, :].contiguous(),
-                    dropout_p=dropout_p,
-                )
-                x_rest = F.scaled_dot_product_attention(
-                    q[:, :, subset_attention_size:, :].contiguous(),
-                    k,
-                    v,
-                    dropout_p=dropout_p,
-                )
-                x = torch.cat([x, x_rest], dim=2)
-            else:
-                x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
-                x = rearrange(x, 'b nh l dh -> b l (nh dh)')
+            x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
+            x = rearrange(x, 'b nh l dh -> b l (nh dh)')
 
         x = self.attn_fc_dropout(self.fc(x))
         return x
@@ -353,47 +312,25 @@ class QK_Norm_SelfAttention(nn.Module):
             self.q_norm = RMSNorm(d_head)
             self.k_norm = RMSNorm(d_head)
 
-    def forward(self, x: torch.Tensor, attn_bias=None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
 
         Parameters
         ----------
         x: input tensor of shape (b, l, d).
-        attn_bias: xformers BlockDiagonalMask.
 
         """
         q, k, v = self.to_qkv(x).split(self.d, dim=2)
 
-        q, k, v = (rearrange(t, 'b l (nh dh) -> b l nh dh', dh=self.d_head) for t in (q, k, v))
+        q, k, v = (rearrange(t, 'b l (nh dh) -> b nh l dh', dh=self.d_head) for t in (q, k, v))
 
         if self.use_qk_norm:
             q = self.q_norm(q)
             k = self.k_norm(k)
 
-        use_xformers = (
-            xops is not None and x.is_cuda and x.dtype in (torch.float16, torch.bfloat16)
-        )
-        if use_xformers:
-            x = xops.memory_efficient_attention(
-                q,
-                k,
-                v,
-                attn_bias=attn_bias,
-                p=self.attn_dropout if self.training else 0.0,
-                op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-            )
-            x = rearrange(x, 'b l nh dh -> b l (nh dh)')
-        else:
-            if attn_bias is not None:
-                raise ValueError('attn_bias fallback requires xformers flash attention support')
-            q, k, v = (
-                rearrange(q, 'b l nh dh -> b nh l dh'),
-                rearrange(k, 'b l nh dh -> b nh l dh'),
-                rearrange(v, 'b l nh dh -> b nh l dh'),
-            )
-            dropout_p = self.attn_dropout if self.training else 0.0
-            x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
-            x = rearrange(x, 'b nh l dh -> b l (nh dh)')
+        dropout_p = self.attn_dropout if self.training else 0.0
+        x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
+        x = rearrange(x, 'b nh l dh -> b l (nh dh)')
         x = self.attn_fc_dropout(self.fc(x))
         return x
 
@@ -447,7 +384,6 @@ class QK_Norm_CrossAttention(nn.Module):
         self,
         q_input: torch.Tensor,
         kv_input: torch.Tensor | None = None,
-        attn_bias=None,
     ) -> torch.Tensor:
         """Forward pass.
 
@@ -455,7 +391,6 @@ class QK_Norm_CrossAttention(nn.Module):
         ----------
         q_input: query tensor of shape (b, l, d).
         kv_input: key/value tensor; defaults to q_input for self-attention.
-        attn_bias: xformers BlockDiagonalMask.
 
         """
         if kv_input is None:
@@ -464,38 +399,15 @@ class QK_Norm_CrossAttention(nn.Module):
         k = self.to_k(kv_input)
         v = self.to_v(kv_input)
 
-        q, k, v = (rearrange(t, 'b l (nh dh) -> b l nh dh', dh=self.d_head) for t in (q, k, v))
+        q, k, v = (rearrange(t, 'b l (nh dh) -> b nh l dh', dh=self.d_head) for t in (q, k, v))
 
         if self.use_qk_norm:
             q = self.q_norm(q)
             k = self.k_norm(k)
 
-        use_xformers = (
-            xops is not None
-            and q_input.is_cuda
-            and q_input.dtype in (torch.float16, torch.bfloat16)
-        )
-        if use_xformers:
-            x = xops.memory_efficient_attention(
-                q,
-                k,
-                v,
-                attn_bias=attn_bias,
-                p=self.attn_dropout if self.training else 0.0,
-                op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-            )
-            x = rearrange(x, 'b l nh dh -> b l (nh dh)')
-        else:
-            if attn_bias is not None:
-                raise ValueError('attn_bias fallback requires xformers flash attention support')
-            q, k, v = (
-                rearrange(q, 'b l nh dh -> b nh l dh'),
-                rearrange(k, 'b l nh dh -> b nh l dh'),
-                rearrange(v, 'b l nh dh -> b nh l dh'),
-            )
-            dropout_p = self.attn_dropout if self.training else 0.0
-            x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
-            x = rearrange(x, 'b nh l dh -> b l (nh dh)')
+        dropout_p = self.attn_dropout if self.training else 0.0
+        x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
+        x = rearrange(x, 'b nh l dh -> b l (nh dh)')
         x = self.attn_fc_dropout(self.fc(x))
         return x
 
@@ -550,7 +462,6 @@ class QK_Norm_Attention(nn.Module):
         q_input: torch.Tensor,
         k_input: torch.Tensor | None = None,
         v_input: torch.Tensor | None = None,
-        attn_bias=None,
     ) -> torch.Tensor:
         """Forward pass.
 
@@ -559,7 +470,6 @@ class QK_Norm_Attention(nn.Module):
         q_input: query input tensor of shape (b, l, d).
         k_input: key input; defaults to q_input.
         v_input: value input; defaults to q_input.
-        attn_bias: xformers BlockDiagonalMask.
 
         """
         if k_input is None and v_input is None:
@@ -568,38 +478,15 @@ class QK_Norm_Attention(nn.Module):
         k = self.to_k(k_input)
         v = self.to_v(v_input)
 
-        q, k, v = (rearrange(t, 'b l (nh dh) -> b l nh dh', dh=self.d_head) for t in (q, k, v))
+        q, k, v = (rearrange(t, 'b l (nh dh) -> b nh l dh', dh=self.d_head) for t in (q, k, v))
 
         if self.use_qk_norm:
             q = self.q_norm(q)
             k = self.k_norm(k)
 
-        use_xformers = (
-            xops is not None
-            and q_input.is_cuda
-            and q_input.dtype in (torch.float16, torch.bfloat16)
-        )
-        if use_xformers:
-            x = xops.memory_efficient_attention(
-                q,
-                k,
-                v,
-                attn_bias=attn_bias,
-                p=self.attn_dropout if self.training else 0.0,
-                op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-            )
-            x = rearrange(x, 'b l nh dh -> b l (nh dh)')
-        else:
-            if attn_bias is not None:
-                raise ValueError('attn_bias fallback requires xformers flash attention support')
-            q, k, v = (
-                rearrange(q, 'b l nh dh -> b nh l dh'),
-                rearrange(k, 'b l nh dh -> b nh l dh'),
-                rearrange(v, 'b l nh dh -> b nh l dh'),
-            )
-            dropout_p = self.attn_dropout if self.training else 0.0
-            x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
-            x = rearrange(x, 'b nh l dh -> b l (nh dh)')
+        dropout_p = self.attn_dropout if self.training else 0.0
+        x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
+        x = rearrange(x, 'b nh l dh -> b l (nh dh)')
         x = self.attn_fc_dropout(self.fc(x))
         return x
 
@@ -701,7 +588,7 @@ class MaskedSelfAttention(nn.Module):
 
 
 class FastMaskAttention(nn.Module):
-    """Self-attention with optional KV subset and xformers flash-attention support."""
+    """Self-attention with optional KV subset masking."""
 
     def __init__(
         self,
@@ -711,7 +598,6 @@ class FastMaskAttention(nn.Module):
         attn_dropout: float = 0.0,
         attn_fc_bias: bool = False,
         attn_fc_dropout: float = 0.0,
-        use_flashatt_v2: bool = True,
         use_qk_norm: bool = False,
     ) -> None:
         """Initialize.
@@ -724,7 +610,6 @@ class FastMaskAttention(nn.Module):
         attn_dropout: dropout probability on attention weights.
         attn_fc_bias: whether to include bias in the output projection.
         attn_fc_dropout: dropout probability after the output projection.
-        use_flashatt_v2: use xformers flash-attention v2 when available.
         use_qk_norm: whether to apply RMSNorm to Q and K before attention.
 
         """
@@ -739,8 +624,6 @@ class FastMaskAttention(nn.Module):
         self.to_qkv = nn.Linear(d, 3 * d, bias=attn_qkv_bias)
         self.fc = nn.Linear(d, d, bias=attn_fc_bias)
         self.attn_fc_dropout = nn.Dropout(attn_fc_dropout)
-
-        self.use_flashatt_v2 = use_flashatt_v2
 
         self.use_qk_norm = use_qk_norm
         if self.use_qk_norm:
@@ -758,57 +641,27 @@ class FastMaskAttention(nn.Module):
         """
         q, k, v = self.to_qkv(x).split(self.d, dim=2)
 
-        if self.use_flashatt_v2:
-            q, k, v = map(
-                lambda t: rearrange(t, 'b l (nh dh) -> b l nh dh', dh=self.d_head),
-                (q, k, v),
+        q, k, v = (
+            rearrange(q, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
+            rearrange(k, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
+            rearrange(v, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
+        )
+
+        if self.use_qk_norm:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
+
+        dropout_p = self.attn_dropout if self.training else 0.0
+        if subset_kv_size is not None and subset_kv_size < q.shape[2]:
+            x = F.scaled_dot_product_attention(
+                q,
+                k[:, :, subset_kv_size:, :].contiguous(),
+                v[:, :, subset_kv_size:, :].contiguous(),
+                dropout_p=dropout_p,
             )
-
-            if self.use_qk_norm:
-                q = self.q_norm(q)
-                k = self.k_norm(k)
-
-            if subset_kv_size is not None and subset_kv_size < q.shape[1]:
-                x = xops.memory_efficient_attention(
-                    q,
-                    k[:, subset_kv_size:, :, :].contiguous(),
-                    v[:, subset_kv_size:, :, :].contiguous(),
-                    attn_bias=None,
-                    p=self.attn_dropout if self.training else 0.0,
-                    op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-                )
-            else:
-                x = xops.memory_efficient_attention(
-                    q,
-                    k,
-                    v,
-                    attn_bias=None,
-                    p=self.attn_dropout if self.training else 0.0,
-                    op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-                )
-            x = rearrange(x, 'b l nh dh -> b l (nh dh)')
         else:
-            q, k, v = (
-                rearrange(q, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
-                rearrange(k, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
-                rearrange(v, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
-            )
-
-            if self.use_qk_norm:
-                q = self.q_norm(q)
-                k = self.k_norm(k)
-
-            dropout_p = self.attn_dropout if self.training else 0.0
-            if subset_kv_size is not None and subset_kv_size < q.shape[2]:
-                x = F.scaled_dot_product_attention(
-                    q,
-                    k[:, :, subset_kv_size:, :].contiguous(),
-                    v[:, :, subset_kv_size:, :].contiguous(),
-                    dropout_p=dropout_p,
-                )
-            else:
-                x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
-                x = rearrange(x, 'b nh l dh -> b l (nh dh)')
+            x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
+            x = rearrange(x, 'b nh l dh -> b l (nh dh)')
 
         x = self.attn_fc_dropout(self.fc(x))
         return x
@@ -825,7 +678,6 @@ class SubsetAttention(nn.Module):
         attn_dropout: float = 0.0,
         attn_fc_bias: bool = False,
         attn_fc_dropout: float = 0.0,
-        use_flashatt_v2: bool = True,
         use_qk_norm: bool = False,
     ) -> None:
         """Initialize.
@@ -838,7 +690,6 @@ class SubsetAttention(nn.Module):
         attn_dropout: dropout probability on attention weights.
         attn_fc_bias: whether to include bias in the output projection.
         attn_fc_dropout: dropout probability after the output projection.
-        use_flashatt_v2: use xformers flash-attention v2 when available.
         use_qk_norm: whether to apply RMSNorm to Q and K before attention.
 
         """
@@ -853,8 +704,6 @@ class SubsetAttention(nn.Module):
         self.to_qkv = nn.Linear(d, 3 * d, bias=attn_qkv_bias)
         self.fc = nn.Linear(d, d, bias=attn_fc_bias)
         self.attn_fc_dropout = nn.Dropout(attn_fc_dropout)
-
-        self.use_flashatt_v2 = use_flashatt_v2
 
         self.use_qk_norm = use_qk_norm
         if self.use_qk_norm:
@@ -882,66 +731,34 @@ class SubsetAttention(nn.Module):
             'Only one of subset_kv_size or subset_q_size can be provided'
         )
 
-        if self.use_flashatt_v2:
-            q, k, v = map(
-                lambda t: rearrange(t, 'b l (nh dh) -> b l nh dh', dh=self.d_head),
-                (q, k, v),
+        q, k, v = (
+            rearrange(q, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
+            rearrange(k, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
+            rearrange(v, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
+        )
+
+        if self.use_qk_norm:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
+
+        dropout_p = self.attn_dropout if self.training else 0.0
+        if subset_kv_size is not None and subset_kv_size < q.shape[2]:
+            x = F.scaled_dot_product_attention(
+                q,
+                k[:, :, subset_kv_size:, :].contiguous(),
+                v[:, :, subset_kv_size:, :].contiguous(),
+                dropout_p=dropout_p,
             )
-
-            if self.use_qk_norm:
-                q = self.q_norm(q)
-                k = self.k_norm(k)
-
-            if subset_kv_size is not None and subset_kv_size < k.shape[1]:
-                x = xops.memory_efficient_attention(
-                    q,
-                    k[:, subset_kv_size:, :, :].contiguous(),
-                    v[:, subset_kv_size:, :, :].contiguous(),
-                    attn_bias=None,
-                    p=self.attn_dropout if self.training else 0.0,
-                    op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-                )
-            elif subset_q_size is not None and subset_q_size < q.shape[1]:
-                x = xops.memory_efficient_attention(
-                    q[:, :subset_q_size, :, :].contiguous(),
-                    k,
-                    v,
-                    attn_bias=None,
-                    p=self.attn_dropout if self.training else 0.0,
-                    op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-                )
-            else:
-                x = xops.memory_efficient_attention(
-                    q,
-                    k,
-                    v,
-                    attn_bias=None,
-                    p=self.attn_dropout if self.training else 0.0,
-                    op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-                )
-            x = rearrange(x, 'b l nh dh -> b l (nh dh)')
+        elif subset_q_size is not None and subset_q_size < q.shape[2]:
+            x = F.scaled_dot_product_attention(
+                q[:, :, :subset_q_size, :].contiguous(),
+                k,
+                v,
+                dropout_p=dropout_p,
+            )
         else:
-            q, k, v = (
-                rearrange(q, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
-                rearrange(k, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
-                rearrange(v, 'b l (nh dh) -> b nh l dh', dh=self.d_head),
-            )
-
-            if self.use_qk_norm:
-                q = self.q_norm(q)
-                k = self.k_norm(k)
-
-            dropout_p = self.attn_dropout if self.training else 0.0
-            if subset_kv_size is not None and subset_kv_size < q.shape[2]:
-                x = F.scaled_dot_product_attention(
-                    q,
-                    k[:, :, subset_kv_size:, :].contiguous(),
-                    v[:, :, subset_kv_size:, :].contiguous(),
-                    dropout_p=dropout_p,
-                )
-            else:
-                x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
-                x = rearrange(x, 'b nh l dh -> b l (nh dh)')
+            x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
+            x = rearrange(x, 'b nh l dh -> b l (nh dh)')
 
         x = self.attn_fc_dropout(self.fc(x))
         return x
@@ -1247,7 +1064,7 @@ class FaskMaskedTransformerBlock(nn.Module):
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
         self.attn = FastMaskAttention(
             d, d_head, attn_qkv_bias, attn_dropout, attn_fc_bias, attn_fc_dropout,
-            use_flashatt_v2=True, use_qk_norm=use_qk_norm,
+            use_qk_norm=use_qk_norm,
         )
         self.norm2 = nn.LayerNorm(d, bias=ln_bias)
         self.mlp = MLP(d, mlp_ratio, mlp_bias, mlp_dropout)
@@ -1297,7 +1114,7 @@ class QSubsetTransformerBlock(nn.Module):
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
         self.attn = SubsetAttention(
             d, d_head, attn_qkv_bias, attn_dropout, attn_fc_bias, attn_fc_dropout,
-            use_flashatt_v2=True, use_qk_norm=use_qk_norm,
+            use_qk_norm=use_qk_norm,
         )
         self.norm2 = nn.LayerNorm(d, bias=ln_bias)
         self.mlp = MLP(d, mlp_ratio, mlp_bias, mlp_dropout)
@@ -1349,7 +1166,7 @@ class KVSubsetTransformerBlock(nn.Module):
         self.norm1 = nn.LayerNorm(d, bias=ln_bias)
         self.attn = SubsetAttention(
             d, d_head, attn_qkv_bias, attn_dropout, attn_fc_bias, attn_fc_dropout,
-            use_flashatt_v2=True, use_qk_norm=use_qk_norm,
+            use_qk_norm=use_qk_norm,
         )
         self.norm2 = nn.LayerNorm(d, bias=ln_bias)
         self.mlp = MLP(d, mlp_ratio, mlp_bias, mlp_dropout)
@@ -1362,7 +1179,7 @@ class KVSubsetTransformerBlock(nn.Module):
 
 
 class CrossAttention(nn.Module):
-    """Cross-attention with optional xformers flash-attention and causal masking."""
+    """Cross-attention with optional causal masking."""
 
     def __init__(
         self,
@@ -1372,7 +1189,6 @@ class CrossAttention(nn.Module):
         attn_dropout: float = 0.0,
         attn_fc_bias: bool = False,
         attn_fc_dropout: float = 0.0,
-        use_flashatt_v2: bool = True,
         num_heads: int | None = None,
         ctx_dim: int | None = None,
         causal: bool = False,
@@ -1387,7 +1203,6 @@ class CrossAttention(nn.Module):
         attn_dropout: dropout probability on attention weights (must be 0.0).
         attn_fc_bias: whether to include bias in the output projection.
         attn_fc_dropout: dropout probability after the output projection.
-        use_flashatt_v2: use xformers flash-attention v2 when available.
         num_heads: number of attention heads; defaults to input_dim // d_head.
         ctx_dim: key/value context dimension; defaults to input_dim.
         causal: whether to apply a causal (lower-triangular) mask.
@@ -1408,7 +1223,6 @@ class CrossAttention(nn.Module):
 
         self.attn_dropout = attn_dropout
         assert self.attn_dropout == 0.0
-        self.use_flashatt_v2 = use_flashatt_v2
         self.causal = causal
 
     def forward(self, x: torch.Tensor, y: torch.Tensor | None = None) -> torch.Tensor:
@@ -1427,44 +1241,20 @@ class CrossAttention(nn.Module):
         k = self.to_k(y)
         v = self.to_v(y)
 
-        if self.use_flashatt_v2:
-            q, k, v = map(
-                lambda t: rearrange(t, 'b n (h d) -> b n h d', h=self.num_heads),
-                (q, k, v),
-            )
+        q, k, v = map(
+            lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.num_heads),
+            (q, k, v),
+        )
 
-            if self.causal:
-                attention_bias = xops.LowerTriangularMask()
-            else:
-                attention_bias = None
-
-            x = xops.memory_efficient_attention(
-                q,
-                k,
-                v,
-                attn_bias=attention_bias,
-                op=(xops.fmha.flash.FwOp, xops.fmha.flash.BwOp),
-            )
-
-            x = rearrange(x, 'b n h d -> b n (h d)')
-        else:
-            q, k, v = map(
-                lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.num_heads),
-                (q, k, v),
-            )
-
-            dropout_p = self.attn_dropout if self.training else 0.0
-            x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
-
-            x = rearrange(x, 'b nh l dh -> b l (nh dh)')
-
+        dropout_p = self.attn_dropout if self.training else 0.0
+        x = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p, is_causal=self.causal)
+        x = rearrange(x, 'b nh l dh -> b l (nh dh)')
         x = self.attn_fc_dropout(self.fc(x))
         return x
 
     def extra_repr(self) -> str:
         """Return extra representation string."""
         return (
-            f'use_flashatt_v2={self.use_flashatt_v2}, '
             f'num_heads={self.num_heads}, '
             f'input_dim={self.input_dim}, '
             f'ctx_dim={self.ctx_dim}, '

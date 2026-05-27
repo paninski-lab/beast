@@ -17,7 +17,6 @@ from beast.rendering.dino import DinoV3
 from beast.rendering.gaussians_renderer import (
     GaussianModel,
     deferred_gaussian_render,
-    render_opencv_cam,
     render_opencv_cam_gsplat,
 )
 from beast.rendering.losses import PerceptualLoss, masked_mse_loss
@@ -249,27 +248,16 @@ class Renderer(nn.Module):
                 pc = self.gaussians_model.set_data(
                     xyz[i], features[i], scaling[i], rotation[i], opacity[i],
                 )
-                if self.config['model'].get('use_gsplat', True):
-                    near_plane = self.config['model'].get('near_plane', 0.2)
-                    buffers = render_opencv_cam_gsplat(
-                        pc, height, width, C2W[i], fxfycxcy[i], self.sh_degree,
-                        near_plane=near_plane,
-                    )
-                    renderings[i] = buffers['render']
-                    if 'depth' in buffers and buffers['depth'] is not None:
-                        depth[i] = buffers['depth']
-                    if 'alpha' in buffers and buffers['alpha'] is not None:
-                        alpha[i] = buffers['alpha']
-                else:
-                    for j in range(v):
-                        buffers = render_opencv_cam(
-                            pc, height, width, C2W[i, j], fxfycxcy[i, j],
-                        )
-                        renderings[i, j] = buffers['render']
-                        if 'depth' in buffers and buffers['depth'] is not None:
-                            depth[i, j] = buffers['depth']
-                        if 'alpha' in buffers and buffers['alpha'] is not None:
-                            alpha[i, j] = buffers['alpha']
+                near_plane = self.config['model'].get('near_plane', 0.2)
+                buffers = render_opencv_cam_gsplat(
+                    pc, height, width, C2W[i], fxfycxcy[i], self.sh_degree,
+                    near_plane=near_plane,
+                )
+                renderings[i] = buffers['render']
+                if 'depth' in buffers and buffers['depth'] is not None:
+                    depth[i] = buffers['depth']
+                if 'alpha' in buffers and buffers['alpha'] is not None:
+                    alpha[i] = buffers['alpha']
 
         return SimpleNamespace(render=renderings, depth=depth, alpha=alpha)
 
