@@ -3,11 +3,13 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class VideoConfig(BaseModel):
     """Video file naming and discovery settings."""
+
+    model_config = ConfigDict(extra='forbid')
 
     filename_pattern: str = r'^(?P<session>.+)_(?P<cam>[^_]+)\.mp4$'
     extensions: list[str] = ['mp4', 'avi']
@@ -15,6 +17,8 @@ class VideoConfig(BaseModel):
 
 class FrameConfig(BaseModel):
     """Frame extraction settings."""
+
+    model_config = ConfigDict(extra='forbid')
 
     frames_per_video: int = 1000
     n_digits: int = 8
@@ -24,6 +28,8 @@ class FrameConfig(BaseModel):
 
 class SegmentationConfig(BaseModel):
     """SAM3 segmentation settings."""
+
+    model_config = ConfigDict(extra='forbid')
 
     enabled: bool = True
     text_prompt: str = 'animal'
@@ -43,6 +49,8 @@ class CutConfig(BaseModel):
     and re-indexed so row indices start at 0.
     """
 
+    model_config = ConfigDict(extra='forbid')
+
     enabled: bool = False
     start_frame: int | None = None
     end_frame: int | None = None
@@ -55,6 +63,8 @@ class CutConfig(BaseModel):
 class DownsampleConfig(BaseModel):
     """Video downsampling settings."""
 
+    model_config = ConfigDict(extra='forbid')
+
     enabled: bool = False
     target_fps: int | None = None
     max_frames: int | None = None
@@ -66,6 +76,8 @@ class DownsampleConfig(BaseModel):
 class AssembleConfig(BaseModel):
     """Dataset assembly settings."""
 
+    model_config = ConfigDict(extra='forbid')
+
     downsample_selected_frames: bool = False
     downsample_factor: int = 1
     max_workers: int = 4
@@ -73,6 +85,8 @@ class AssembleConfig(BaseModel):
 
 class ResizeConfig(BaseModel):
     """Post-assembly image resize settings."""
+
+    model_config = ConfigDict(extra='forbid')
 
     enabled: bool = False
     size: int = 256
@@ -90,6 +104,8 @@ class CalibrationConfig(BaseModel):
       - any string containing '{cam_id}': used as a format string
     """
 
+    model_config = ConfigDict(extra='forbid')
+
     format: str = 'anipose_toml'
     cam_name_mapping: str = 'identity'
     file_pattern: str = '{session_id}.toml'
@@ -97,6 +113,8 @@ class CalibrationConfig(BaseModel):
 
 class Beast3DConfig(BaseModel):
     """Top-level config for BEAST3D dataset creation."""
+
+    model_config = ConfigDict(extra='forbid')
 
     name: str = ''
     input_dir: str = ''
@@ -123,18 +141,15 @@ def load_config_3d(path: str | Path) -> Beast3DConfig:
 
     Parameters
     ----------
-    path
-        Path to the YAML config file.
+    path: path to the YAML config file
 
     Returns
     -------
-    Beast3DConfig
-        Validated config object.
+    validated Beast3DConfig object
 
     Raises
     ------
-    FileNotFoundError
-        If the config file does not exist.
+    FileNotFoundError: if the config file does not exist
     """
     path = Path(path)
     if not path.exists():
@@ -152,13 +167,11 @@ def validate_config(cfg: Beast3DConfig) -> None:
 
     Parameters
     ----------
-    cfg
-        Config to validate.
+    cfg: config to validate
 
     Raises
     ------
-    ValueError
-        If required fields are empty or required paths do not exist.
+    ValueError: if required fields are empty or required paths do not exist
     """
     for field in ('name', 'input_dir', 'output_dir', 'anchor_view'):
         if not getattr(cfg, field):

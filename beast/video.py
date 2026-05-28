@@ -1,6 +1,7 @@
-"""Video I/O utilities: codec checking, re-encoding, frame extraction, and motion energy."""
+"""Video utilities: codec checking, re-encoding, frame extraction, motion energy, and ffmpeg."""
 
 import logging
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -235,8 +236,8 @@ def read_nth_frames(
     ----------
     video_file: absolute path to mp4
     n: number of frames to advance after successfully loading a frame
-    resize_dims: number of pixels (in both dimensions) to downsample video before computing motion
-        energy
+    resize_dims: number of pixels (in both dimensions) to downsample video before computing
+        motion energy
 
     Returns
     -------
@@ -273,3 +274,197 @@ def read_nth_frames(
     cap.release()
 
     return np.array(frames)
+
+
+def get_video_stats(video_path: str | Path) -> dict:
+    """Return basic statistics for a single video file.
+
+    Parameters
+    ----------
+    video_path: path to the video file
+
+    Returns
+    -------
+    dict with keys: fps, width, height, total_frames, duration_sec, codec
+
+    Raises
+    ------
+    OSError: if the video file cannot be opened
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise OSError(f'Could not open video: {video_path}')
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration_sec = total_frames / fps if fps > 0 else 0.0
+    fourcc_int = int(cap.get(cv2.CAP_PROP_FOURCC))
+    codec = ''.join([chr((fourcc_int >> 8 * i) & 0xFF) for i in range(4)])
+    cap.release()
+    return {
+        'fps': round(fps, 2),
+        'width': width,
+        'height': height,
+        'total_frames': total_frames,
+        'duration_sec': round(duration_sec, 2),
+        'codec': codec.strip(),
+    }
+
+
+def _get_video_files(videos_dir: Path, extensions: list[str]) -> list[Path]:
+    """Return a sorted list of video files in a directory.
+
+    Parameters
+    ----------
+    videos_dir: directory to search (non-recursive)
+    extensions: file extensions to include, without leading dot (e.g. ['mp4', 'avi'])
+
+    Returns
+    -------
+    sorted list of matching paths
+    """
+    files: list[Path] = []
+    for ext in extensions:
+        files.extend(videos_dir.glob(f'*.{ext}'))
+    return sorted(files)
+
+
+def discover_videos(
+    videos_dir: Path,
+    pattern: str,
+    extensions: list[str],
+) -> dict[str, dict[str, Path]]:
+    """Discover video files and group them by session_id and cam_id.
+
+    The regex pattern must contain two named capture groups:
+    ``(?P<session>...)`` and ``(?P<cam>...)``.
+
+    Parameters
+    ----------
+    videos_dir: directory containing video files
+    pattern: regex pattern to parse filenames into session and cam components
+    extensions: file extensions to include (e.g. ['mp4', 'avi'])
+
+    Returns
+    -------
+    mapping of session_id -> cam_id -> resolved Path
+    """
+    compiled = re.compile(pattern)
+    video_dict: dict[str, dict[str, Path]] = {}
+    for video_file in _get_video_files(videos_dir, extensions):
+        match = compiled.match(video_file.name)
+        if not match:
+            _logger.warning(f'skipping unmatched file: {video_file.name}')
+            continue
+        session_id = match.group('session')
+        cam_id = match.group('cam')
+        video_dict.setdefault(session_id, {})[cam_id] = video_file.resolve()
+    return video_dict
+
+
+def cut_video(
+    input_path: Path,
+    output_path: Path,
+    start_frame: int,
+    end_frame: int,
+    threads: int | None = None,
+) -> None:
+    """Trim a video to an inclusive frame range using ffmpeg.
+
+    Uses the decoder frame counter rather than timestamp seeking, so the
+    output is frame-index-accurate even for VFR sources.
+
+    Parameters
+    ----------
+    input_path: source video file
+    output_path: destination file; parent directory is created if needed
+    start_frame: first frame to keep (inclusive, zero-indexed)
+    end_frame: last frame to keep (inclusive)
+    threads: number of ffmpeg threads; None lets ffmpeg decide
+
+    Raises
+    ------
+    RuntimeError: if ffmpeg returns a non-zero exit code
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    vf = f'trim=start_frame={start_frame}:end_frame={end_frame + 1},setpts=PTS-STARTPTS'
+    cmd = ['ffmpeg', '-y']
+    if threads is not None:
+        cmd += ['-threads', str(threads)]
+    cmd += [
+        '-i', str(input_path),
+        '-vf', vf,
+        '-c:v', 'libx264',
+        '-crf', '18',
+        '-preset', 'fast',
+        '-an',
+        str(output_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f'ffmpeg cut failed for {input_path}:\n{result.stderr}')
+
+
+def downsample_video(
+    input_path: Path,
+    output_path: Path,
+    target_fps: float | None,
+    max_frames: int | None = None,
+    threads: int | None = None,
+    phase_offset_frames: int = 0,
+) -> None:
+    """Downsample a video to a target FPS using ffmpeg.
+
+    If target_fps is None, fps resampling is skipped and only max_frames
+    is applied. If max_frames is set, only the first N output frames are kept.
+
+    When phase_offset_frames > 0, frames are selected starting at source-frame
+    index K with stride S = round(source_fps / target_fps): {K, K+S, K+2S, ...}.
+    K must satisfy 1 <= K < S to stay disjoint from the K=0 training set.
+
+    Parameters
+    ----------
+    input_path: source video file
+    output_path: destination file; parent directory is created if needed
+    target_fps: output frame rate; None skips fps filtering
+    max_frames: cap on output frame count; None keeps all frames
+    threads: number of ffmpeg threads; None lets ffmpeg decide
+    phase_offset_frames: source-frame offset K for phase-shifted eval set construction
+
+    Raises
+    ------
+    RuntimeError: if ffmpeg fails or if phase_offset_frames is invalid
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = ['ffmpeg', '-y']
+    if threads is not None:
+        cmd += ['-threads', str(threads)]
+    cmd += ['-i', str(input_path)]
+    if target_fps is not None:
+        if phase_offset_frames > 0:
+            src_fps = get_video_stats(input_path)['fps']
+            stride = int(round(src_fps / target_fps))
+            if stride < 2:
+                raise RuntimeError(
+                    f'{input_path.name}: source_fps={src_fps:.3f} too close to '
+                    f'target_fps={target_fps} (stride={stride}); '
+                    f'phase-shift requires stride >= 2'
+                )
+            if phase_offset_frames >= stride:
+                raise RuntimeError(
+                    f'{input_path.name}: phase_offset_frames={phase_offset_frames} '
+                    f'must be < stride={stride}; '
+                    f'otherwise frames overlap the K=0 training set'
+                )
+            k = phase_offset_frames
+            cmd += ['-vf', f'trim=start_frame={k},setpts=PTS-STARTPTS,fps={target_fps}']
+        else:
+            cmd += ['-vf', f'fps={target_fps}']
+    cmd += ['-c:v', 'libx264', '-crf', '18', '-preset', 'fast', '-an']
+    if max_frames is not None:
+        cmd += ['-frames:v', str(max_frames)]
+    cmd.append(str(output_path))
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f'ffmpeg downsample failed for {input_path}:\n{result.stderr}')
