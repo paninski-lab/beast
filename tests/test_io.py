@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from beast.data.config_3d import Beast3DConfig, CalibrationConfig
 from beast.io import (
     apply_config_overrides,
     get_calibration_path,
@@ -18,6 +17,7 @@ from beast.io import (
     load_config,
     map_cam_name,
 )
+from beast.preprocess.config_3d import Beast3DConfig, CalibrationConfig
 
 
 class TestLoadConfig:

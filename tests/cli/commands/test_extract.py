@@ -77,7 +77,7 @@ class TestHandle:
             workers=4,
         )
         # Act
-        with patch('beast.extraction.extract_frames') as mock_extract:
+        with patch('beast.preprocess.extraction.extract_frames') as mock_extract:
             mock_extract.return_value = {'total_frames': 100, 'total_videos': 2}
             handle(args)
         # Assert
@@ -99,7 +99,7 @@ class TestHandle:
             workers=2,
         )
         # Act
-        with patch('beast.extraction.extract_frames') as mock_extract:
+        with patch('beast.preprocess.extraction.extract_frames') as mock_extract:
             mock_extract.return_value = {'total_frames': 50, 'total_videos': 1}
             handle(args)
         # Assert

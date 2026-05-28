@@ -14,9 +14,9 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-from beast.data.config_3d import Beast3DConfig
-from beast.extraction import export_frames, select_frame_idxs_kmeans
 from beast.io import get_camera_params_for_view, load_bbox_csv, load_calibration
+from beast.preprocess.config_3d import Beast3DConfig
+from beast.preprocess.extraction import export_frames, select_frame_idxs_kmeans
 from beast.video import (
     _get_video_files,
     discover_videos,

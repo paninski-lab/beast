@@ -1,9 +1,14 @@
-"""Tests for frame extraction utilities."""
+"""Tests for beast/preprocess/extraction.py."""
 
 import numpy as np
 import pytest
 
-from beast.extraction import _run_kmeans, export_frames, extract_frames, select_frame_idxs_kmeans
+from beast.preprocess.extraction import (
+    _run_kmeans,
+    export_frames,
+    extract_frames,
+    select_frame_idxs_kmeans,
+)
 
 
 class TestExtractFrames:

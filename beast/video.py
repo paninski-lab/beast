@@ -312,6 +312,42 @@ def get_video_stats(video_path: str | Path) -> dict:
     }
 
 
+def merge_videos(video_paths: list[str], output_path: str, fps: int) -> None:
+    """Concatenate multiple video files into one using ffmpeg.
+
+    Parameters
+    ----------
+    video_paths: ordered list of video file paths
+    output_path: destination file path
+    fps: output frame rate
+
+    Raises
+    ------
+    subprocess.CalledProcessError: if ffmpeg exits with a non-zero code
+    """
+    if not video_paths:
+        return
+    if len(video_paths) == 1:
+        shutil.copyfile(video_paths[0], output_path)
+        return
+    file_list_path = Path(output_path).parent / 'video_list.txt'
+    with open(file_list_path, 'w') as f:
+        for vp in video_paths:
+            f.write(f"file '{Path(vp).absolute()}'\n")
+    cmd = [
+        'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
+        '-i', str(file_list_path), '-c', 'copy', str(output_path),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f'ffmpeg merge failed:\n{result.stderr}')
+        _logger.info(f'merged {len(video_paths)} clips into {output_path}')
+    finally:
+        if file_list_path.exists():
+            file_list_path.unlink()
+
+
 def _get_video_files(videos_dir: Path, extensions: list[str]) -> list[Path]:
     """Return a sorted list of video files in a directory.
 

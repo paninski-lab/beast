@@ -8,7 +8,7 @@ import yaml
 from aniposelib.cameras import CameraGroup as CameraGroupAnipose
 
 from beast.config import BeastConfig
-from beast.data.config_3d import Beast3DConfig
+from beast.preprocess.config_3d import Beast3DConfig
 
 _logger = logging.getLogger(__name__)
 

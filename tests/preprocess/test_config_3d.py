@@ -1,4 +1,4 @@
-"""Tests for beast/data/config_3d.py."""
+"""Tests for beast/preprocess/config_3d.py."""
 
 import textwrap
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from beast.data.config_3d import (
+from beast.preprocess.config_3d import (
     AssembleConfig,
     Beast3DConfig,
     CalibrationConfig,

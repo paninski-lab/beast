@@ -1,8 +1,8 @@
-"""Shared fixtures for beast/data tests."""
+"""Shared fixtures for beast/preprocess tests."""
 
 import pytest
 
-from beast.data.config_3d import Beast3DConfig
+from beast.preprocess.config_3d import Beast3DConfig
 
 
 @pytest.fixture

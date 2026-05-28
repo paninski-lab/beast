@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, get_args
 
 from beast.cli.types import output_dir
-from beast.extraction import ExtractionMethod
+from beast.preprocess.extraction import ExtractionMethod
 
 _logger = logging.getLogger('BEAST.CLI.EXTRACT')
 
@@ -68,7 +68,7 @@ def handle(args: argparse.Namespace) -> None:
     args.output.mkdir(parents=True, exist_ok=True)
 
     # Import the actual implementation
-    from beast.extraction import extract_frames
+    from beast.preprocess.extraction import extract_frames
 
     # Call the implementation
     result = extract_frames(
