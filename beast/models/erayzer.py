@@ -146,28 +146,6 @@ class GaussiansUpsampler(nn.Module):
         opacity = (opacity + self.opacity_bias).clamp(min=-10.0)
         return xyz, features, scaling, rotation, opacity
 
-    def forward(self, gaussians: torch.Tensor, images: torch.Tensor) -> torch.Tensor:
-        """Apply upsampling projection (currently upsample_factor=1 only).
-
-        Parameters
-        ----------
-        gaussians: token features of shape [B, N, d].
-        images: unused image features (reserved for future upsampler variants).
-
-        Returns
-        -------
-        projected feature tensor.
-
-        Raises
-        ------
-        NotImplementedError
-            if upsample_factor > 1.
-
-        """
-        u = self.config['model']['gaussians']['upsampler']['upsample_factor']
-        if u > 1:
-            raise NotImplementedError('GaussiansUpsampler only supports upsample_factor=1')
-        return self.linear(self.layernorm(gaussians))
 
 
 class Renderer(nn.Module):
@@ -198,7 +176,6 @@ class Renderer(nn.Module):
         width,
         C2W,
         fxfycxcy,
-        deferred=True,
     ):
         """Render Gaussians for all batch items and views.
 
@@ -213,7 +190,6 @@ class Renderer(nn.Module):
         width: render width in pixels.
         C2W: camera-to-world matrices of shape [b, v, 4, 4].
         fxfycxcy: intrinsics of shape [b, v, 4].
-        deferred: use deferred rendering (default True).
 
         Returns
         -------
@@ -1142,33 +1118,6 @@ class ERayZer(BaseLightningModel):
         spatial_pe = spatial_pe.reshape(1, 1, n, d).repeat(b, v, 1, 1)
         spatial_pe = spatial_pe.reshape(bv, n, d)
         return tokens + embedder(spatial_pe)
-
-    @staticmethod
-    def slice_expand_and_flatten(
-        token_tensor: torch.Tensor,
-        B: int,
-        S: int,
-    ) -> torch.Tensor:
-        """Process special tokens of shape (1, 2, X, C) for multi-frame batches.
-
-        Uses position 0 for the first frame and position 1 for all remaining
-        frames, then expands to batch size B and flattens to (B*S, X, C).
-
-        Parameters
-        ----------
-        token_tensor: special token tensor of shape (1, 2, X, C).
-        B: batch size.
-        S: number of frames / views.
-
-        Returns
-        -------
-        processed token tensor of shape (B*S, X, C).
-
-        """
-        query = token_tensor[:, 0:1, ...].expand(B, 1, *token_tensor.shape[2:])
-        others = token_tensor[:, 1:, ...].expand(B, S - 1, *token_tensor.shape[2:])
-        combined = torch.cat([query, others], dim=1)
-        return combined.view(B * S, *combined.shape[2:])
 
     def run_vggt_encoder_geom(
         self,
