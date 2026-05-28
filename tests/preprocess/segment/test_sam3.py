@@ -1,7 +1,4 @@
-"""Tests for beast/preprocess/segment/sam3.py.
-
-conftest.py in this directory mocks `accelerate` before this module is imported.
-"""
+"""Tests for beast/preprocess/segment/sam3.py."""
 
 import os
 from pathlib import Path
@@ -27,14 +24,6 @@ _SAM3 = 'beast.preprocess.segment.sam3'
 
 class TestPrecacheSam3Models:
     """Test the _precache_sam3_models function."""
-
-    def _make_model_mocks(self):
-        return {
-            f'{_SAM3}.Sam3TrackerVideoModel': MagicMock(),
-            f'{_SAM3}.Sam3TrackerVideoProcessor': MagicMock(),
-            f'{_SAM3}.Sam3Model': MagicMock(),
-            f'{_SAM3}.Sam3Processor': MagicMock(),
-        }
 
     def test_downloads_all_four_models_on_success(self) -> None:
         env = {k: v for k, v in os.environ.items() if k != 'HF_HUB_DOWNLOAD_TIMEOUT'}

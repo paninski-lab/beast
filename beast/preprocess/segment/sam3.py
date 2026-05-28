@@ -14,7 +14,6 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
-from accelerate import Accelerator
 from matplotlib.colors import hsv_to_rgb
 from PIL import Image
 from transformers import (
@@ -545,7 +544,7 @@ def process_video(
         f'clip size: {clip_size} — clips {first_clip_idx}–{last_clip_idx} '
         f'({last_clip_idx - first_clip_idx + 1} total)'
     )
-    device = Accelerator().device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     _logger.info(f'using device: {device}')
     _logger.info('loading SAM3 tracker model and processor')
     model = Sam3TrackerVideoModel.from_pretrained('facebook/sam3').to(device, dtype=torch.bfloat16)
