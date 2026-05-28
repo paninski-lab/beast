@@ -14,13 +14,13 @@ from beast.video import (
     compute_video_motion_energy,
     copy_and_reformat_video_directory,
     copy_and_reformat_video_file,
-    cut_video,
     discover_videos,
     downsample_video,
     get_frames_from_idxs,
     get_video_stats,
     read_nth_frames,
     reencode_video,
+    trim_video,
 )
 
 _ROOT = Path(__file__).parent
@@ -288,13 +288,13 @@ class TestDiscoverVideos:
         assert result == {}
 
 
-class TestCutVideo:
-    """Test the cut_video function."""
+class TestTrimVideo:
+    """Test the trim_video function."""
 
     def test_calls_ffmpeg_with_trim_filter(self, tmp_path) -> None:
         mock_result = Mock(returncode=0)
         with patch('beast.video.subprocess.run', return_value=mock_result) as mock_run:
-            cut_video(Path('input.mp4'), tmp_path / 'output.mp4', start_frame=10, end_frame=50)
+            trim_video(Path('input.mp4'), tmp_path / 'output.mp4', start_frame=10, end_frame=50)
         cmd = mock_run.call_args[0][0]
         vf_arg = next((a for a in cmd if 'trim=start_frame' in a), None)
         assert vf_arg is not None
@@ -304,7 +304,7 @@ class TestCutVideo:
     def test_threads_arg_included_when_set(self, tmp_path) -> None:
         mock_result = Mock(returncode=0)
         with patch('beast.video.subprocess.run', return_value=mock_result) as mock_run:
-            cut_video(Path('in.mp4'), tmp_path / 'out.mp4', 0, 10, threads=4)
+            trim_video(Path('in.mp4'), tmp_path / 'out.mp4', 0, 10, threads=4)
         cmd = mock_run.call_args[0][0]
         assert '-threads' in cmd
         assert '4' in cmd
@@ -313,14 +313,14 @@ class TestCutVideo:
         mock_result = Mock(returncode=0)
         subdir = tmp_path / 'new_subdir'
         with patch('beast.video.subprocess.run', return_value=mock_result):
-            cut_video(Path('in.mp4'), subdir / 'out.mp4', 0, 10)
+            trim_video(Path('in.mp4'), subdir / 'out.mp4', 0, 10)
         assert subdir.exists()
 
     def test_ffmpeg_failure_raises(self, tmp_path) -> None:
         mock_result = Mock(returncode=1, stderr='some error')
         with patch('beast.video.subprocess.run', return_value=mock_result):
             with pytest.raises(RuntimeError, match='ffmpeg cut failed'):
-                cut_video(Path('in.mp4'), tmp_path / 'out.mp4', 0, 10)
+                trim_video(Path('in.mp4'), tmp_path / 'out.mp4', 0, 10)
 
 
 class TestDownsampleVideo:

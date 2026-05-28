@@ -363,7 +363,7 @@ def discover_videos(
     return video_dict
 
 
-def cut_video(
+def trim_video(
     input_path: Path,
     output_path: Path,
     start_frame: int,
