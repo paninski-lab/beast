@@ -179,9 +179,8 @@ def run_segmentation(
     _logger.info(f'  num objects: {cfg.segmentation.num_objects}')
     _logger.info(f'  available GPUs: {num_gpus} (physical IDs: {physical_gpus})')
 
-    if num_gpus > 1:
-        from beast.preprocess.segment.sam3 import _precache_sam3_models
-        _precache_sam3_models()
+    from beast.preprocess.segment.sam3 import _precache_sam3_models
+    _precache_sam3_models()
 
     worker_kwargs = dict(
         text_prompt=cfg.segmentation.text_prompt,
@@ -210,7 +209,8 @@ def run_segmentation(
         for i, phys_id in enumerate(physical_gpus):
             _logger.info(f'  GPU {phys_id}: assigned {len(per_gpu_videos[i])} videos')
 
-        mp.set_start_method('spawn', force=True)
+        if mp.get_start_method(allow_none=True) != 'spawn':
+            mp.set_start_method('spawn', force=True)
         manager = mp.Manager()
         shared_failures = manager.list()
 

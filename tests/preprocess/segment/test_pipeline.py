@@ -214,18 +214,20 @@ class TestRunSegmentation:
     def test_single_gpu_calls_worker_directly(self, tmp_path) -> None:
         cfg = self._make_cfg_with_videos(tmp_path)
         videos_dir = tmp_path / 'videos'
-        with patch(f'{_PIPELINE}._get_physical_gpu_ids', return_value=['0']):
-            with patch(f'{_PIPELINE}._segment_worker', return_value=[]) as mock_worker:
-                run_segmentation(videos_dir, cfg)
+        with patch(f'{_SAM3_MODULE}._precache_sam3_models'):
+            with patch(f'{_PIPELINE}._get_physical_gpu_ids', return_value=['0']):
+                with patch(f'{_PIPELINE}._segment_worker', return_value=[]) as mock_worker:
+                    run_segmentation(videos_dir, cfg)
         mock_worker.assert_called_once()
         assert mock_worker.call_args.kwargs['physical_gpu_id'] == '0'
 
     def test_no_gpu_falls_back_to_id_zero(self, tmp_path) -> None:
         cfg = self._make_cfg_with_videos(tmp_path, n_videos=1)
         videos_dir = tmp_path / 'videos'
-        with patch(f'{_PIPELINE}._get_physical_gpu_ids', return_value=[]):
-            with patch(f'{_PIPELINE}._segment_worker', return_value=[]) as mock_worker:
-                run_segmentation(videos_dir, cfg)
+        with patch(f'{_SAM3_MODULE}._precache_sam3_models'):
+            with patch(f'{_PIPELINE}._get_physical_gpu_ids', return_value=[]):
+                with patch(f'{_PIPELINE}._segment_worker', return_value=[]) as mock_worker:
+                    run_segmentation(videos_dir, cfg)
         assert mock_worker.call_args.kwargs['physical_gpu_id'] == '0'
 
     def test_failures_written_to_json(self, tmp_path) -> None:
@@ -239,9 +241,10 @@ class TestRunSegmentation:
             'error_type': 'RuntimeError',
             'traceback': '...',
         }
-        with patch(f'{_PIPELINE}._get_physical_gpu_ids', return_value=['0']):
-            with patch(f'{_PIPELINE}._segment_worker', return_value=[failure]):
-                run_segmentation(videos_dir, cfg)
+        with patch(f'{_SAM3_MODULE}._precache_sam3_models'):
+            with patch(f'{_PIPELINE}._get_physical_gpu_ids', return_value=['0']):
+                with patch(f'{_PIPELINE}._segment_worker', return_value=[failure]):
+                    run_segmentation(videos_dir, cfg)
         failures_file = tmp_path / 'out' / 'segmentation_masks' / 'failed_videos.json'
         assert failures_file.exists()
         data = json.loads(failures_file.read_text())
@@ -256,9 +259,10 @@ class TestRunSegmentation:
         seg_dir.mkdir(parents=True)
         stale = seg_dir / 'failed_videos.json'
         stale.write_text('[]')
-        with patch(f'{_PIPELINE}._get_physical_gpu_ids', return_value=['0']):
-            with patch(f'{_PIPELINE}._segment_worker', return_value=[]):
-                run_segmentation(videos_dir, cfg)
+        with patch(f'{_SAM3_MODULE}._precache_sam3_models'):
+            with patch(f'{_PIPELINE}._get_physical_gpu_ids', return_value=['0']):
+                with patch(f'{_PIPELINE}._segment_worker', return_value=[]):
+                    run_segmentation(videos_dir, cfg)
         assert not stale.exists()
 
     def test_pending_videos_passed_to_worker(self, tmp_path) -> None:
@@ -268,9 +272,10 @@ class TestRunSegmentation:
         done_dir = seg_dir / 'sess_0_cam0'
         done_dir.mkdir(parents=True)
         (done_dir / '_COMPLETE').touch()
-        with patch(f'{_PIPELINE}._get_physical_gpu_ids', return_value=['0']):
-            with patch(f'{_PIPELINE}._segment_worker', return_value=[]) as mock_worker:
-                run_segmentation(videos_dir, cfg)
+        with patch(f'{_SAM3_MODULE}._precache_sam3_models'):
+            with patch(f'{_PIPELINE}._get_physical_gpu_ids', return_value=['0']):
+                with patch(f'{_PIPELINE}._segment_worker', return_value=[]) as mock_worker:
+                    run_segmentation(videos_dir, cfg)
         video_list = mock_worker.call_args.kwargs['video_list']
         assert len(video_list) == 2
         assert all('sess_0_cam0' not in v for v in video_list)
