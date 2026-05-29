@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 import pytest
 
-from beast.preprocess.config_3d import Beast3DConfig, CutConfig, DownsampleConfig
+from beast.preprocess.config_3d import Beast3DConfig, DownsampleConfig, TrimConfig
 from beast.preprocess.extraction_3d import (
     _compute_new_size,
     _copy_masks_for_frames,
@@ -103,7 +103,7 @@ class TestResolveVideosDir:
 
     def test_returns_trim_dir_when_cut_enabled_and_exists(self, tmp_path: Path) -> None:
         cfg = _minimal_cfg(tmp_path)
-        cfg.cut.enabled = True
+        cfg.trim.enabled = True
         trim_dir = tmp_path / 'out' / 'videos_trim'
         trim_dir.mkdir(parents=True)
         result = resolve_videos_dir(cfg)
@@ -120,7 +120,7 @@ class TestResolveVideosDir:
     def test_downsample_dir_missing_falls_through_to_trim(self, tmp_path: Path) -> None:
         cfg = _minimal_cfg(tmp_path)
         cfg.downsample.enabled = True
-        cfg.cut.enabled = True
+        cfg.trim.enabled = True
         # ds dir absent; trim dir present
         trim_dir = tmp_path / 'out' / 'videos_trim'
         trim_dir.mkdir(parents=True)
@@ -171,7 +171,7 @@ class TestResolveFrameRange:
     """Test the _resolve_frame_range function."""
 
     def test_uses_start_frame_and_end_frame_when_set(self, tmp_path: Path) -> None:
-        cfg = _minimal_cfg(tmp_path, cut=CutConfig(start_frame=10, end_frame=50))
+        cfg = _minimal_cfg(tmp_path, trim=TrimConfig(start_frame=10, end_frame=50))
         start, end = _resolve_frame_range(cfg, tmp_path / 'v.mp4')
         assert start == 10
         assert end == 50
@@ -184,14 +184,14 @@ class TestResolveFrameRange:
         assert end == 99
 
     def test_converts_seconds_to_frames(self, tmp_path: Path) -> None:
-        cfg = _minimal_cfg(tmp_path, cut=CutConfig(start_sec=1.0, end_sec=3.0))
+        cfg = _minimal_cfg(tmp_path, trim=TrimConfig(start_sec=1.0, end_sec=3.0))
         with patch(f'{_EXT3D}.get_video_stats', return_value=_fake_video_stats(fps=10.0)):
             start, end = _resolve_frame_range(cfg, tmp_path / 'v.mp4')
         assert start == 10   # 1.0 * 10
         assert end == 29     # int(round(3.0 * 10)) - 1 = 29
 
     def test_raises_when_start_greater_than_end(self, tmp_path: Path) -> None:
-        cfg = _minimal_cfg(tmp_path, cut=CutConfig(start_frame=100, end_frame=50))
+        cfg = _minimal_cfg(tmp_path, trim=TrimConfig(start_frame=100, end_frame=50))
         with pytest.raises(ValueError, match='invalid trim range'):
             _resolve_frame_range(cfg, tmp_path / 'v.mp4')
 

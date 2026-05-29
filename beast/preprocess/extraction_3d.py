@@ -54,7 +54,7 @@ def resolve_videos_dir(cfg: Beast3DConfig) -> Path:
         ds_dir = Path(cfg.output_dir) / cfg.video_subdir
         if ds_dir.is_dir():
             return ds_dir
-    if cfg.cut.enabled:
+    if cfg.trim.enabled:
         trim_dir = _get_trim_videos_dir(cfg)
         if trim_dir.is_dir():
             return trim_dir
@@ -163,7 +163,7 @@ def _resolve_frame_range(cfg: Beast3DConfig, video_path: Path) -> tuple[int, int
     ValueError: if the resolved range is invalid (start > end)
 
     """
-    cut = cfg.cut
+    trim = cfg.trim
     _stats: dict | None = None
 
     def _probe() -> dict:
@@ -172,17 +172,17 @@ def _resolve_frame_range(cfg: Beast3DConfig, video_path: Path) -> tuple[int, int
             _stats = get_video_stats(video_path)
         return _stats
 
-    if cut.start_frame is not None:
-        start_frame = int(cut.start_frame)
-    elif cut.start_sec is not None:
-        start_frame = int(round(cut.start_sec * _probe()['fps']))
+    if trim.start_frame is not None:
+        start_frame = int(trim.start_frame)
+    elif trim.start_sec is not None:
+        start_frame = int(round(trim.start_sec * _probe()['fps']))
     else:
         start_frame = 0
 
-    if cut.end_frame is not None:
-        end_frame = int(cut.end_frame)
-    elif cut.end_sec is not None:
-        end_frame = int(round(cut.end_sec * _probe()['fps'])) - 1
+    if trim.end_frame is not None:
+        end_frame = int(trim.end_frame)
+    elif trim.end_sec is not None:
+        end_frame = int(round(trim.end_sec * _probe()['fps'])) - 1
     else:
         end_frame = _probe()['total_frames'] - 1
 
@@ -263,7 +263,7 @@ def run_trim(cfg: Beast3DConfig) -> Path:
 
     Parameters
     ----------
-    cfg: beast3d config with cut.enabled=True
+    cfg: beast3d config with trim.enabled=True
 
     Returns
     -------
@@ -285,9 +285,9 @@ def run_trim(cfg: Beast3DConfig) -> Path:
             f'with extensions {cfg.video.extensions}'
         )
 
-    max_workers = max(1, int(cfg.cut.max_workers))
-    if cfg.cut.ffmpeg_threads is not None:
-        ffmpeg_threads = int(cfg.cut.ffmpeg_threads)
+    max_workers = max(1, int(cfg.trim.max_workers))
+    if cfg.trim.ffmpeg_threads is not None:
+        ffmpeg_threads = int(cfg.trim.ffmpeg_threads)
     else:
         cpu_count = os.cpu_count() or max_workers
         ffmpeg_threads = max(1, math.ceil(cpu_count / max_workers))
@@ -388,7 +388,7 @@ def run_downsample(cfg: Beast3DConfig) -> Path:
     ValueError: if phase_offset_frames is negative
 
     """
-    input_videos_dir = _get_trim_videos_dir(cfg) if cfg.cut.enabled else (
+    input_videos_dir = _get_trim_videos_dir(cfg) if cfg.trim.enabled else (
         Path(cfg.input_dir) / cfg.video_subdir
     )
     output_videos_dir = Path(cfg.output_dir) / cfg.video_subdir

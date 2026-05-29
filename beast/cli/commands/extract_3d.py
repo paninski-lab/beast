@@ -59,7 +59,7 @@ def handle(args: argparse.Namespace) -> None:
         _logger.info('step: video stats')
         run_video_stats(cfg)
 
-    if cfg.cut.enabled:
+    if cfg.trim.enabled:
         _logger.info('step: trim')
         run_trim(cfg)
 

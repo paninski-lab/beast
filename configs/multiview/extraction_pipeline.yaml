@@ -57,7 +57,7 @@ segmentation:
 # Trim (optional)
 # Clips every input video to a fixed frame range before any other steps.
 # ---------------------------------------------------------------------------
-cut:
+trim:
   enabled: false
   start_frame: null   # frame-based bounds take priority over second-based bounds
   end_frame: null

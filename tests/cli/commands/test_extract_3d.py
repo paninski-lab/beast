@@ -55,7 +55,7 @@ class TestHandle:
 
     def _make_cfg(self) -> MagicMock:
         cfg = MagicMock()
-        cfg.cut.enabled = False
+        cfg.trim.enabled = False
         cfg.downsample.enabled = False
         cfg.segmentation.enabled = False
         cfg.resize.enabled = False
@@ -102,7 +102,7 @@ class TestHandle:
 
     def test_runs_trim_when_enabled(self) -> None:
         cfg = self._make_cfg()
-        cfg.cut.enabled = True
+        cfg.trim.enabled = True
         mocks = self._run(cfg)
         mocks['trim'].assert_called_once_with(cfg)
 

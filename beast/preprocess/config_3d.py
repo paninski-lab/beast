@@ -38,7 +38,7 @@ class SegmentationConfig(BaseModel):
     clip_size: int = 512
 
 
-class CutConfig(BaseModel):
+class TrimConfig(BaseModel):
     """Video trim settings.
 
     Trims every input video to a frame range. Either frame-based
@@ -129,7 +129,7 @@ class Beast3DConfig(BaseModel):
     video: VideoConfig = VideoConfig()
     frame: FrameConfig = FrameConfig()
     segmentation: SegmentationConfig = SegmentationConfig()
-    cut: CutConfig = CutConfig()
+    trim: TrimConfig = TrimConfig()
     downsample: DownsampleConfig = DownsampleConfig()
     calibration: CalibrationConfig = CalibrationConfig()
     assemble: AssembleConfig = AssembleConfig()

@@ -14,7 +14,7 @@ The pipeline runs up to six steps in sequence, each gated by a flag in the confi
 | Step | Config flag | What it does |
 |------|-------------|--------------|
 | Stats | always runs | Scans input videos; writes `video_stats.csv` and `video_stats.json` |
-| Trim | `cut.enabled` | Clips every video to a fixed frame/time range |
+| Trim | `trim.enabled` | Clips every video to a fixed frame/time range |
 | Downsample | `downsample.enabled` | Re-encodes videos at a lower frame rate or frame count |
 | Segment | `segmentation.enabled` | Runs SAM3 video tracking to produce per-frame binary masks |
 | Assemble | always runs | Selects frames via k-means, exports images and camera params |
@@ -201,7 +201,7 @@ Segmentation outputs are written to `output_dir/segmentation_masks/{video_stem}/
 A `_COMPLETE` sentinel file is written on success. If a run is interrupted, the
 incomplete output directory is cleaned automatically on the next run.
 
-### `cut`
+### `trim`
 
 Optional trim step. Disabled by default.
 

@@ -10,11 +10,11 @@ from beast.preprocess.config_3d import (
     AssembleConfig,
     Beast3DConfig,
     CalibrationConfig,
-    CutConfig,
     DownsampleConfig,
     FrameConfig,
     ResizeConfig,
     SegmentationConfig,
+    TrimConfig,
     VideoConfig,
     load_config_3d,
     validate_config,
@@ -72,11 +72,11 @@ class TestSegmentationConfig:
         assert cfg.num_objects == 3
 
 
-class TestCutConfig:
-    """Test the CutConfig model."""
+class TestTrimConfig:
+    """Test the TrimConfig model."""
 
     def test_defaults(self) -> None:
-        cfg = CutConfig()
+        cfg = TrimConfig()
         assert cfg.enabled is False
         assert cfg.start_frame is None
         assert cfg.end_frame is None
@@ -86,12 +86,12 @@ class TestCutConfig:
         assert cfg.ffmpeg_threads is None
 
     def test_frame_bounds(self) -> None:
-        cfg = CutConfig(enabled=True, start_frame=100, end_frame=500)
+        cfg = TrimConfig(enabled=True, start_frame=100, end_frame=500)
         assert cfg.start_frame == 100
         assert cfg.end_frame == 500
 
     def test_second_bounds(self) -> None:
-        cfg = CutConfig(enabled=True, start_sec=1.5, end_sec=10.0)
+        cfg = TrimConfig(enabled=True, start_sec=1.5, end_sec=10.0)
         assert cfg.start_sec == 1.5
         assert cfg.end_sec == 10.0
 
@@ -169,7 +169,7 @@ class TestBeast3DConfig:
         assert isinstance(cfg.video, VideoConfig)
         assert isinstance(cfg.frame, FrameConfig)
         assert isinstance(cfg.segmentation, SegmentationConfig)
-        assert isinstance(cfg.cut, CutConfig)
+        assert isinstance(cfg.trim, TrimConfig)
         assert isinstance(cfg.downsample, DownsampleConfig)
         assert isinstance(cfg.calibration, CalibrationConfig)
         assert isinstance(cfg.assemble, AssembleConfig)
