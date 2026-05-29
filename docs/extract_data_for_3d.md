@@ -155,6 +155,7 @@ and `anchor_view` are required to be non-empty; everything else has a sensible d
 | `output_dir` | `''` | All pipeline outputs are written here |
 | `anchor_view` | `''` | Camera whose frames drive k-means selection; must match a `cam` group in the filenames |
 | `video_subdir` | `videos` | Subdirectory under `input_dir` that holds video files |
+| `max_workers` | `4` | Parallel workers used by the trim, downsample, and assemble steps |
 | `has_bboxes` | `false` | Set to `true` if bounding box CSVs are available alongside videos |
 | `bbox_csv_pattern` | `''` | Filename template for bbox CSVs, e.g. `{session_id}_{cam_id}_bbox.csv` |
 | `author` | `anonymous` | Written into `info.json` |
@@ -212,7 +213,6 @@ Optional trim step. Disabled by default.
 | `end_frame` | `null` | Last frame to keep (inclusive); takes priority over `end_sec` |
 | `start_sec` | `null` | Start time in seconds (converted to frames using source FPS) |
 | `end_sec` | `null` | End time in seconds |
-| `max_workers` | `4` | Parallel ffmpeg processes |
 | `ffmpeg_threads` | `null` | Threads per ffmpeg process; `null` = `cpu_count / max_workers` |
 
 Frame-based bounds take priority over second-based bounds. If neither is set for
@@ -227,13 +227,18 @@ Optional frame-rate reduction step. Disabled by default.
 | Field | Default | Description |
 |-------|---------|-------------|
 | `enabled` | `false` | Set to `true` to downsample all videos |
-| `target_fps` | `null` | Target frame rate; `null` = keep original FPS (use `max_frames` instead) |
-| `max_frames` | `null` | Hard cap on frame count; applied after FPS downsampling |
-| `max_workers` | `4` | Parallel ffmpeg processes |
-| `ffmpeg_threads` | `null` | Threads per ffmpeg process; `null` = auto |
+| `target_fps` | `null` | Target frame rate in fps |
+| `ffmpeg_threads` | `null` | Threads per ffmpeg process; `null` = `cpu_count / max_workers` |
 | `phase_offset_frames` | `0` | Skip this many frames at the start before downsampling begins |
 
-When both `cut` and `downsample` are enabled, downsample reads from the trim output.
+For example, setting `target_fps: 1` on a 25 fps video selects every 25th frame,
+reducing a 10-minute video from ~15,000 frames to ~600. This is useful when working
+with long videos where the full frame pool would be redundant for k-means selection.
+The assemble step then runs k-means on the downsampled frames to pick `frames_per_video`
+of them, so the two steps compose: downsample narrows the candidate pool, k-means
+picks the most visually diverse subset.
+
+When both `trim` and `downsample` are enabled, downsample reads from the trim output.
 Downsampled videos are written to `output_dir/{video_subdir}/` (e.g., `output_dir/videos/`).
 
 ### `calibration`
@@ -252,9 +257,6 @@ Controls the final frame export step.
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `downsample_selected_frames` | `false` | After k-means selection, thin out frames by `downsample_factor` |
-| `downsample_factor` | `1` | Keep every Nth selected frame (e.g., `2` keeps half) |
-| `max_workers` | `4` | Parallel workers for frame export |
 
 ### `resize`
 

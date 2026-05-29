@@ -285,7 +285,7 @@ def run_trim(cfg: Beast3DConfig) -> Path:
             f'with extensions {cfg.video.extensions}'
         )
 
-    max_workers = max(1, int(cfg.trim.max_workers))
+    max_workers = max(1, int(cfg.max_workers))
     if cfg.trim.ffmpeg_threads is not None:
         ffmpeg_threads = int(cfg.trim.ffmpeg_threads)
     else:
@@ -350,7 +350,6 @@ def _downsample_one(
     input_path: Path,
     output_path: Path,
     target_fps: float | None,
-    max_frames: int | None,
     threads: int | None,
     phase_offset_frames: int,
 ) -> tuple[Path, bool]:
@@ -361,7 +360,6 @@ def _downsample_one(
         input_path,
         output_path,
         target_fps,
-        max_frames=max_frames,
         threads=threads,
         phase_offset_frames=phase_offset_frames,
     )
@@ -407,7 +405,7 @@ def run_downsample(cfg: Beast3DConfig) -> Path:
             f'downsample.phase_offset_frames must be >= 0, got {phase_offset}'
         )
 
-    max_workers = max(1, int(cfg.downsample.max_workers))
+    max_workers = max(1, int(cfg.max_workers))
     if cfg.downsample.ffmpeg_threads is not None:
         ffmpeg_threads = int(cfg.downsample.ffmpeg_threads)
     else:
@@ -415,16 +413,10 @@ def run_downsample(cfg: Beast3DConfig) -> Path:
         ffmpeg_threads = max(1, math.ceil(cpu_count / max_workers))
 
     phase_tag = f', phase_offset_frames={phase_offset}' if phase_offset > 0 else ''
-    if cfg.downsample.target_fps is None:
-        _logger.info(
-            f'trimming {len(video_files)} videos to max_frames={cfg.downsample.max_frames} '
-            f'(workers={max_workers}, ffmpeg_threads={ffmpeg_threads})'
-        )
-    else:
-        _logger.info(
-            f'downsampling {len(video_files)} videos to {cfg.downsample.target_fps} fps '
-            f'(workers={max_workers}, ffmpeg_threads={ffmpeg_threads}{phase_tag})'
-        )
+    _logger.info(
+        f'downsampling {len(video_files)} videos to {cfg.downsample.target_fps} fps '
+        f'(workers={max_workers}, ffmpeg_threads={ffmpeg_threads}{phase_tag})'
+    )
 
     jobs = [(vf, output_videos_dir / vf.name) for vf in video_files]
     with ProcessPoolExecutor(max_workers=max_workers) as pool:
@@ -433,7 +425,6 @@ def run_downsample(cfg: Beast3DConfig) -> Path:
                 _downsample_one,
                 inp, out,
                 cfg.downsample.target_fps,
-                cfg.downsample.max_frames,
                 ffmpeg_threads,
                 phase_offset,
             ): inp
@@ -668,13 +659,6 @@ def assemble_dataset(cfg: Beast3DConfig) -> Path:
             else:
                 raise
 
-        if cfg.assemble.downsample_selected_frames and cfg.assemble.downsample_factor > 1:
-            factor = cfg.assemble.downsample_factor
-            frame_idxs = frame_idxs[::factor]
-            _logger.info(
-                f'  downsampled selected frames by factor {factor} → {len(frame_idxs)} frames'
-            )
-
         _logger.info(f'  selected {len(frame_idxs)} frames')
 
         # map downsampled frame indices back to original video frame space for bbox lookup
@@ -725,7 +709,7 @@ def assemble_dataset(cfg: Beast3DConfig) -> Path:
         processed_sessions.append(session_id)
 
     # phase 2 (parallel): fan out per-view export / cam-param / mask-copy work
-    max_workers = max(1, int(cfg.assemble.max_workers))
+    max_workers = max(1, int(cfg.max_workers))
     _logger.info(f'exporting {len(tasks)} views (workers={max_workers})')
 
     with ProcessPoolExecutor(max_workers=max_workers) as pool:

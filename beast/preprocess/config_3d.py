@@ -56,7 +56,6 @@ class TrimConfig(BaseModel):
     end_frame: int | None = None
     start_sec: float | None = None
     end_sec: float | None = None
-    max_workers: int = 4
     ffmpeg_threads: int | None = None
 
 
@@ -67,8 +66,6 @@ class DownsampleConfig(BaseModel):
 
     enabled: bool = False
     target_fps: int | None = None
-    max_frames: int | None = None
-    max_workers: int = 4
     ffmpeg_threads: int | None = None
     phase_offset_frames: int = 0
 
@@ -77,10 +74,6 @@ class AssembleConfig(BaseModel):
     """Dataset assembly settings."""
 
     model_config = ConfigDict(extra='forbid')
-
-    downsample_selected_frames: bool = False
-    downsample_factor: int = 1
-    max_workers: int = 4
 
 
 class ResizeConfig(BaseModel):
@@ -123,6 +116,7 @@ class Beast3DConfig(BaseModel):
     has_bboxes: bool = False
     bbox_csv_pattern: str = ''
     video_subdir: str = 'videos'
+    max_workers: int = 4
     author: str = 'anonymous'
     seed: int = 42
 

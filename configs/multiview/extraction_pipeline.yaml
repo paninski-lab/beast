@@ -11,6 +11,7 @@ input_dir: /data/raw        # must contain videos/ and calibrations/ subdirector
 output_dir: /data/beast3d   # all pipeline outputs are written here
 anchor_view: cam0           # camera whose frames drive k-means selection
 
+max_workers: 4              # parallel workers used by trim, downsample, and assemble steps
 author: anonymous
 seed: 42
 
@@ -63,19 +64,16 @@ trim:
   end_frame: null
   start_sec: null     # alternative: specify trim bounds in seconds
   end_sec: null
-  max_workers: 4
   ffmpeg_threads: null  # null = auto (cpu_count / max_workers)
 
 # ---------------------------------------------------------------------------
 # Downsample (optional)
-# Re-encodes videos at a lower frame rate. Reads from trim output if cut is enabled.
+# Re-encodes videos at a lower frame rate. Reads from trim output if trim is enabled.
 # ---------------------------------------------------------------------------
 downsample:
   enabled: false
   target_fps: null        # null = keep original FPS; set e.g. 25 to downsample to 25 fps
-  max_frames: null        # hard frame cap; applied after fps downsampling
-  max_workers: 4
-  ffmpeg_threads: null
+  ffmpeg_threads: null    # null = auto (cpu_count / max_workers)
   phase_offset_frames: 0  # skip N frames at start before downsampling begins
 
 # ---------------------------------------------------------------------------
@@ -92,15 +90,6 @@ calibration:
   cam_name_mapping: identity
   # {session_id} is substituted with the 'session' group from the video filename.
   file_pattern: '{session_id}.toml'
-
-# ---------------------------------------------------------------------------
-# Assembly
-# Selects frames, exports images, writes camera param .npy files, copies masks.
-# ---------------------------------------------------------------------------
-assemble:
-  downsample_selected_frames: false  # thin out k-means selected frames post-selection
-  downsample_factor: 1               # keep every Nth selected frame (1 = keep all)
-  max_workers: 4
 
 # ---------------------------------------------------------------------------
 # Resize (optional)

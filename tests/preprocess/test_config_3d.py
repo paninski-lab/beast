@@ -82,7 +82,6 @@ class TestTrimConfig:
         assert cfg.end_frame is None
         assert cfg.start_sec is None
         assert cfg.end_sec is None
-        assert cfg.max_workers == 4
         assert cfg.ffmpeg_threads is None
 
     def test_frame_bounds(self) -> None:
@@ -103,7 +102,6 @@ class TestDownsampleConfig:
         cfg = DownsampleConfig()
         assert cfg.enabled is False
         assert cfg.target_fps is None
-        assert cfg.max_frames is None
         assert cfg.phase_offset_frames == 0
 
     def test_target_fps_set(self) -> None:
@@ -114,11 +112,8 @@ class TestDownsampleConfig:
 class TestAssembleConfig:
     """Test the AssembleConfig model."""
 
-    def test_defaults(self) -> None:
-        cfg = AssembleConfig()
-        assert cfg.downsample_selected_frames is False
-        assert cfg.downsample_factor == 1
-        assert cfg.max_workers == 4
+    def test_instantiates(self) -> None:
+        assert AssembleConfig() is not None
 
 
 class TestResizeConfig:
@@ -161,6 +156,7 @@ class TestBeast3DConfig:
         assert cfg.has_bboxes is False
         assert cfg.bbox_csv_pattern == ''
         assert cfg.video_subdir == 'videos'
+        assert cfg.max_workers == 4
         assert cfg.author == 'anonymous'
         assert cfg.seed == 42
 
