@@ -74,6 +74,8 @@ def _segment_worker(
     os.environ['CUDA_VISIBLE_DEVICES'] = physical_gpu_id
     # force offline mode so workers use the pre-cached models
     os.environ['HF_HUB_OFFLINE'] = '1'
+    # suppress noisy httpx probe requests for optional HF files that don't exist for SAM3
+    logging.getLogger('httpx').setLevel(logging.WARNING)
 
     try:
         from beast.preprocess.segment.sam3 import process_video
@@ -179,6 +181,7 @@ def run_segmentation(
     _logger.info(f'  num objects: {cfg.segmentation.num_objects}')
     _logger.info(f'  available GPUs: {num_gpus} (physical IDs: {physical_gpus})')
 
+    logging.getLogger('httpx').setLevel(logging.WARNING)
     from beast.preprocess.segment.sam3 import _precache_sam3_models
     _precache_sam3_models()
 
