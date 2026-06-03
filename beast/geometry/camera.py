@@ -294,6 +294,102 @@ def get_interpolated_poses_many(
     return torch.tensor(traj, dtype=torch.float32), torch.tensor(k_interp, dtype=torch.float32)
 
 
+def w2c_to_c2w(w2c: torch.Tensor) -> torch.Tensor:
+    """Convert world-to-camera matrices to camera-to-world using the analytical SE3 inverse.
+
+    For a rigid body transform [R | t; 0 | 1], the inverse is [R^T | -R^T t; 0 | 1].
+    Handles any leading batch dimensions.
+
+    Parameters
+    ----------
+    w2c: world-to-camera matrices of shape (..., 4, 4).
+
+    Returns
+    -------
+    camera-to-world matrices of shape (..., 4, 4).
+
+    """
+    R = w2c[..., :3, :3]
+    t = w2c[..., :3, 3:]
+    R_T = R.transpose(-2, -1)
+    t_new = -torch.matmul(R_T, t)
+    c2w = torch.zeros_like(w2c)
+    c2w[..., :3, :3] = R_T
+    c2w[..., :3, 3:] = t_new
+    c2w[..., 3, 3] = 1.0
+    return c2w
+
+
+def intrinsics_to_fxfycxcy(K: torch.Tensor) -> torch.Tensor:
+    """Extract [fx, fy, cx, cy] from a 3x3 camera intrinsics matrix.
+
+    Parameters
+    ----------
+    K: intrinsics matrix of shape (..., 3, 3).
+
+    Returns
+    -------
+    tensor of shape (..., 4) containing [fx, fy, cx, cy].
+
+    """
+    return torch.stack(
+        [K[..., 0, 0], K[..., 1, 1], K[..., 0, 2], K[..., 1, 2]],
+        dim=-1,
+    )
+
+
+def scale_intrinsics(K: torch.Tensor, scale_w: float, scale_h: float) -> torch.Tensor:
+    """Scale camera intrinsics to account for an image resize.
+
+    Parameters
+    ----------
+    K: intrinsics matrix of shape (..., 3, 3).
+    scale_w: horizontal scale factor (new_width / orig_width).
+    scale_h: vertical scale factor (new_height / orig_height).
+
+    Returns
+    -------
+    scaled intrinsics matrix of shape (..., 3, 3).
+
+    """
+    K_scaled = K.clone()
+    K_scaled[..., 0, 0] = K_scaled[..., 0, 0] * scale_w  # fx
+    K_scaled[..., 0, 2] = K_scaled[..., 0, 2] * scale_w  # cx
+    K_scaled[..., 1, 1] = K_scaled[..., 1, 1] * scale_h  # fy
+    K_scaled[..., 1, 2] = K_scaled[..., 1, 2] * scale_h  # cy
+    return K_scaled
+
+
+def normalize_camera_sequence(extrinsics: torch.Tensor) -> torch.Tensor:
+    """Normalize a sequence of w2c camera matrices and return c2w.
+
+    Applies two normalizations in sequence:
+    1. Re-center: transforms coordinates so camera 0 is at the world origin.
+    2. Scale: divides all translations so the mean camera distance from origin is 1.
+
+    Parameters
+    ----------
+    extrinsics: world-to-camera matrices of shape (V, 4, 4).
+
+    Returns
+    -------
+    camera-to-world matrices of shape (V, 4, 4) in the normalized coordinate frame.
+
+    """
+    first_c2w = w2c_to_c2w(extrinsics[0:1]).squeeze(0)  # (4, 4)
+    ex_norm = torch.matmul(extrinsics, first_c2w)  # (V, 4, 4)
+
+    c2w = w2c_to_c2w(ex_norm)  # (V, 4, 4)
+    scale = c2w[:, :3, 3].norm(dim=-1).mean()
+
+    if scale > 1e-8:
+        ex_norm = ex_norm.clone()
+        ex_norm[:, :3, 3] = ex_norm[:, :3, 3] / scale
+        c2w = w2c_to_c2w(ex_norm)
+
+    return c2w
+
+
 def cam_info_to_plucker(
     c2w: torch.Tensor,
     fxfycxcy: torch.Tensor,
