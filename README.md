@@ -56,6 +56,9 @@ pip install beast-backbones
 
 ## Usage
 
+> The commands below are for the **single-view BEAST model**.
+> For multi-view 3D data, see the [BEAST3D documentation](docs/beast3d.md).
+
 `beast` comes with a simple command line interface. To get more information, run
 ```commandline
 beast -h

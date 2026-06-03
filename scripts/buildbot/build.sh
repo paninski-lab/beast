@@ -62,5 +62,7 @@ echo "Pip install exit code: $?"
 pip show beast
 python -c "import beast; print('Beast location:', beast.__file__); print('Beast import successful')"
 
-# Run with html reporting.
-pytest --html=report.html --self-contained-html --cov=. --cov-report=xml:$HOME/buildbot/coverage.xml --basetemp=/local/$(whoami)/pytest-tmp tests/
+# Run with html reporting (for github actions) and codecov reporting
+# Note the --basetemp, this puts the temporary pytest files/directories in an Axon path that is cleared daily
+mkdir -p -m 777 /local/$(whoami)/pytest-tmp
+pytest --html=report.html --self-contained-html --cov=. --cov-report=xml:$HOME/buildbot_lp/coverage.xml --basetemp="/local/$(whoami)/pytest-tmp/$(date '+%Y_%m_%d-%H_%M_%S')" tests/

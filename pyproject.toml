@@ -28,6 +28,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "aniposelib (>=0.8.0)",
     "imaug",
     "jaxtyping",
     "lightning (~=2.5)",

@@ -1,0 +1,101 @@
+# BEAST3D Extraction Pipeline Configuration
+# Run with: beast extract_3d --config configs/multiview/extraction_pipeline.yaml
+# Full documentation: docs/extract_data_for_3d.md
+
+# ---------------------------------------------------------------------------
+# Dataset identity
+# ---------------------------------------------------------------------------
+
+name: my_dataset            # short name written into dataset/info.json
+input_dir: /data/raw        # must contain videos/ and calibrations/ subdirectories
+output_dir: /data/beast3d   # all pipeline outputs are written here
+anchor_view: cam0           # camera whose frames drive k-means selection
+
+max_workers: 4              # parallel workers used by trim, downsample, and assemble steps
+author: anonymous
+seed: 42
+
+# Set has_bboxes: true if bounding box CSV files live alongside the videos.
+# bbox_csv_pattern is then required, e.g. '{session_id}_{cam_id}_bbox.csv'
+has_bboxes: false
+bbox_csv_pattern: ''
+
+# Subdirectory under input_dir that holds the raw video files
+video_subdir: videos
+
+# ---------------------------------------------------------------------------
+# Video discovery
+# ---------------------------------------------------------------------------
+video:
+  # Regex with named groups 'session' and 'cam'.
+  # Default matches filenames like: session01_cam0.mp4
+  # All videos sharing the same session name are treated as synchronized.
+  filename_pattern: '^(?P<session>.+)_(?P<cam>[^_]+)\.mp4$'
+  extensions:
+    - mp4
+    - avi
+
+# ---------------------------------------------------------------------------
+# Frame extraction (assemble step)
+# ---------------------------------------------------------------------------
+frame:
+  frames_per_video: 1000  # frames to select per session via k-means
+  n_digits: 8             # zero-padding: img00000000.png
+  extension: png
+  kmeans_resize: 32       # frame is resized to 32x32 for k-means pixel features
+
+# ---------------------------------------------------------------------------
+# Segmentation (SAM3) — requires GPU
+# ---------------------------------------------------------------------------
+segmentation:
+  enabled: true
+  text_prompt: animal   # SAM3 grounding prompt for object detection on the first clip
+  num_objects: null     # null = let SAM3 decide; set an integer to fix the count
+  threshold: 0.5        # SAM3 confidence threshold for mask acceptance
+  clip_size: 512        # frames per SAM3 inference clip; reduce if you run out of VRAM
+
+# ---------------------------------------------------------------------------
+# Trim (optional)
+# Clips every input video to a fixed frame range before any other steps.
+# ---------------------------------------------------------------------------
+trim:
+  enabled: false
+  start_frame: null   # frame-based bounds take priority over second-based bounds
+  end_frame: null
+  start_sec: null     # alternative: specify trim bounds in seconds
+  end_sec: null
+  ffmpeg_threads: null  # null = auto (cpu_count / max_workers)
+
+# ---------------------------------------------------------------------------
+# Downsample (optional)
+# Re-encodes videos at a lower frame rate. Reads from trim output if trim is enabled.
+# ---------------------------------------------------------------------------
+downsample:
+  enabled: false
+  target_fps: null        # null = keep original FPS; set e.g. 25 to downsample to 25 fps
+  ffmpeg_threads: null    # null = auto (cpu_count / max_workers)
+  phase_offset_frames: 0  # skip N frames at start before downsampling begins
+
+# ---------------------------------------------------------------------------
+# Calibration
+# Expected format: anipose TOML (one file per session under input_dir/calibrations/).
+# ---------------------------------------------------------------------------
+calibration:
+  format: anipose_toml
+  # How the cam_id parsed from the video filename maps to camera names in the
+  # calibration file:
+  #   identity         -> cam_name == cam_id  (e.g. cam0 -> cam0)
+  #   prefix_<str>     -> cam_name = <str> + cam_id  (e.g. prefix_Cam- -> Cam-0)
+  #   any '{cam_id}'   -> format string  (e.g. camera_{cam_id} -> camera_0)
+  cam_name_mapping: identity
+  # {session_id} is substituted with the 'session' group from the video filename.
+  file_pattern: '{session_id}.toml'
+
+# ---------------------------------------------------------------------------
+# Resize (optional)
+# Rescales all assembled images and masks in-place after the assemble step.
+# Camera intrinsics in .npy files are updated to match the new dimensions.
+# ---------------------------------------------------------------------------
+resize:
+  enabled: false
+  size: 256  # target size in pixels for the shorter side; aspect ratio is preserved
