@@ -185,13 +185,6 @@ def run_segmentation(
     from beast.preprocess.segment.sam3 import _precache_sam3_models
     _precache_sam3_models()
 
-    worker_kwargs = dict(
-        text_prompt=cfg.segmentation.text_prompt,
-        num_objects=cfg.segmentation.num_objects,
-        threshold=cfg.segmentation.threshold,
-        clip_size=cfg.segmentation.clip_size,
-    )
-
     all_failures: list[dict] = []
 
     if num_gpus <= 1:
@@ -200,7 +193,10 @@ def run_segmentation(
             physical_gpu_id=phys_id,
             video_list=pending_videos,
             output_dirs=pending_outputs,
-            **worker_kwargs,
+            text_prompt=cfg.segmentation.text_prompt,
+            num_objects=cfg.segmentation.num_objects,
+            threshold=cfg.segmentation.threshold,
+            clip_size=cfg.segmentation.clip_size,
         )
     else:
         per_gpu_videos: list[list[str]] = [[] for _ in range(num_gpus)]

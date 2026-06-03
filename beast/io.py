@@ -132,7 +132,7 @@ def load_anipose_calibration(calibration_file: str | Path) -> dict[str, dict]:
     extrinsics (4x4 array), distortions array, width, height
 
     """
-    camera_group = CameraGroupAnipose.load(str(calibration_file))
+    camera_group = CameraGroupAnipose.load(str(calibration_file))  # type: ignore[arg-type]
     cam_params = {}
     for cam in camera_group.cameras:
         cam_params[cam.name] = {

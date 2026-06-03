@@ -604,7 +604,7 @@ class TestResizeDataset:
             'intrinsics': np.array([[500., 0., 200.], [0., 500., 100.], [0., 0., 1.]]),
             'width': 400, 'height': 200,
         }
-        np.save(str(npy_path), data)
+        np.save(str(npy_path), data)  # type: ignore[arg-type]
         resize_dataset(cfg)
         updated = np.load(str(npy_path), allow_pickle=True).item()
         # shorter side is h=200, target=50 → scale 0.25; new size (50, 100)

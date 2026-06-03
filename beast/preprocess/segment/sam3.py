@@ -93,7 +93,7 @@ def detect_objects_with_text_prompt(
     """
     frame_pil = Image.fromarray(frame) if isinstance(frame, np.ndarray) else frame
     _logger.info('loading SAM3 model for text-based detection')
-    sam3_model = Sam3Model.from_pretrained('facebook/sam3').to(device, dtype=torch.bfloat16)
+    sam3_model = Sam3Model.from_pretrained('facebook/sam3').to(device, dtype=torch.bfloat16)  # type: ignore[arg-type]
     sam3_processor = Sam3Processor.from_pretrained('facebook/sam3')
     _logger.info(f'detecting objects with text prompt: "{text_prompt}"')
     inputs = sam3_processor(images=frame_pil, text=text_prompt, return_tensors='pt')
@@ -206,6 +206,7 @@ def process_sam3_video_outputs(
             )
 
         object_ids = _to_numpy(object_ids)
+        assert object_ids is not None
         scores = _to_numpy(outputs.get('scores'))
         boxes = _to_numpy(outputs.get('boxes'))
         masks = _to_numpy(outputs.get('masks'))
@@ -248,7 +249,7 @@ def process_video_clip(
     track_colors: dict[int, np.ndarray] | None = None,
     downsample_ratio: int = 1,
     initial_boxes: list[list[float]] | None = None,
-) -> tuple[dict[int, np.ndarray], dict, int]:
+) -> tuple[dict[int, np.ndarray], dict | None, int]:
     """Run SAM3 tracking on a single clip and save masks and visualization.
 
     Parameters
@@ -298,6 +299,7 @@ def process_video_clip(
             ]
             input_labels = [[[1]]] * len(initial_boxes)
         else:
+            assert text_prompt is not None
             input_points, input_labels, obj_ids, input_boxes = detect_objects_with_text_prompt(
                 frame=first_frame,
                 text_prompt=text_prompt,
@@ -348,7 +350,7 @@ def process_video_clip(
     height = int(cap_info.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap_info.release()
     clip_video_path = clips_dir / f'clip_{clip_idx:04d}.mp4'
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # type: ignore[attr-defined]
     out = cv2.VideoWriter(
         str(clip_video_path), fourcc, fps_orig // downsample_ratio, (width, height),
     )
@@ -396,6 +398,7 @@ def process_video_clip(
                 torch.cuda.empty_cache()
         for sam3_out in model.propagate_in_video_iterator(inference_session):
             frame_idx = sam3_out.frame_idx
+            assert frame_idx is not None
             if skip_first_frame and frame_idx == 0:
                 continue
             video_res_masks = processor.post_process_masks(
@@ -547,7 +550,7 @@ def process_video(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     _logger.info(f'using device: {device}')
     _logger.info('loading SAM3 tracker model and processor')
-    model = Sam3TrackerVideoModel.from_pretrained('facebook/sam3').to(device, dtype=torch.bfloat16)
+    model = Sam3TrackerVideoModel.from_pretrained('facebook/sam3').to(device, dtype=torch.bfloat16)  # type: ignore[arg-type]
     processor = Sam3TrackerVideoProcessor.from_pretrained('facebook/sam3')
     track_colors: dict[int, np.ndarray] | None = None
     prev_clip_last_frame_tracking: dict | None = None

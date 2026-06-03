@@ -19,7 +19,7 @@ def _make_frame(h: int = 20, w: int = 20) -> np.ndarray:
 def _rect_mask(
     h: int = 20, w: int = 20,
     r1: int = 4, c1: int = 6, r2: int = 14, c2: int = 16,
-    dtype=np.float32,
+    dtype: type = np.float32,
 ) -> np.ndarray:
     mask = np.zeros((h, w), dtype=dtype)
     mask[r1:r2, c1:c2] = 255 if dtype == np.uint8 else 1.0
