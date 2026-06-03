@@ -12,9 +12,11 @@ import torch
 
 from beast.api.model import Model
 from beast.data.augmentations import expand_imgaug_str_to_dict, imgaug_pipeline
-from beast.data.datamodules import BaseDataModule
-from beast.data.datasets import BaseDataset
+from beast.data.datamodules import BaseDataModule, MultiViewDataModule
+from beast.data.datasets import BaseDataset, MultiViewDataset
 from beast.io import load_config
+
+_MULTIVIEW_IMAGE_SIZE = 64
 
 ROOT = Path(__file__).parent.parent
 
@@ -58,6 +60,7 @@ def fetch_test_data_if_needed(save_dir: str | Path, dataset_name: str = 'testing
     datasets_url_dict = {
         # 'testing_data': 'https://figshare.com/ndownloader/articles/29207330/versions/1',
         'testing_data': 'https://github.com/paninski-lab/beast-test-fixtures/releases/download/v1/test_models.zip',  # noqa
+        'multiview_testing_data': 'https://github.com/paninski-lab/beast-test-fixtures/releases/download/v2/multiview_testing_data.zip',  # noqa
     }
 
     dst_dir = Path(save_dir) / dataset_name
@@ -90,6 +93,7 @@ def fetch_test_data_if_needed(save_dir: str | Path, dataset_name: str = 'testing
 
 
 fetch_test_data_if_needed(save_dir=Path(__file__).parent)
+fetch_test_data_if_needed(save_dir=Path(__file__).parent, dataset_name='multiview_testing_data')
 
 # ---------------------------------------------
 # pytest fixtures
@@ -99,6 +103,11 @@ fetch_test_data_if_needed(save_dir=Path(__file__).parent)
 @pytest.fixture
 def data_dir() -> Path:
     return ROOT.joinpath('tests/testing_data/data_dir')
+
+
+@pytest.fixture
+def multiview_data_dir() -> Path:
+    return ROOT.joinpath('tests/multiview_testing_data/multiview_testing_data')
 
 
 @pytest.fixture
@@ -180,6 +189,31 @@ def base_datamodule_contrastive(base_dataset) -> BaseDataModule:
     )
     datamodule.setup()
     return datamodule
+
+
+@pytest.fixture
+def multiview_dataset(multiview_data_dir) -> MultiViewDataset:
+    """MultiViewDataset in test mode (stable view order, no mask)."""
+    return MultiViewDataset(
+        data_dir=multiview_data_dir,
+        image_size=_MULTIVIEW_IMAGE_SIZE,
+        mode='test',
+    )
+
+
+@pytest.fixture
+def multiview_datamodule(multiview_data_dir) -> MultiViewDataModule:
+    """MultiViewDataModule with 80/20 split, batch size 2, already set up."""
+    dm = MultiViewDataModule(
+        data_dir=multiview_data_dir,
+        image_size=_MULTIVIEW_IMAGE_SIZE,
+        train_batch_size=2,
+        val_batch_size=2,
+        train_fraction=0.8,
+        num_workers=0,
+    )
+    dm.setup()
+    return dm
 
 
 @pytest.fixture

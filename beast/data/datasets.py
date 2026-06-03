@@ -1,5 +1,7 @@
 """Dataset objects store images and augmentation pipeline."""
 
+import json
+import logging
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -11,8 +13,16 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
-from beast.data.types import ExampleDict
+from beast.data.types import ExampleDict, MultiViewExampleDict
+from beast.geometry.camera import (
+    intrinsics_to_fxfycxcy,
+    normalize_camera_sequence,
+    scale_intrinsics,
+    w2c_to_c2w,
+)
 from beast.logging import log_step
+
+_logger = logging.getLogger(__name__)
 
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
@@ -144,3 +154,195 @@ class BaseDataset(torch.utils.data.Dataset):
             idx=idx,
             image_path=str(img_path),
         )
+
+
+class MultiViewDataset(torch.utils.data.Dataset):
+    """Multi-view dataset for BEAST3D training.
+
+    Each item is a single time point from one session, containing synchronized
+    images from all available cameras along with their camera parameters.
+
+    The dataset reads from the output directory produced by ``beast extract_3d``.
+    Each item returns:
+
+    - ``image``: float32 tensor of shape ``(V, 3, H, W)`` in ``[0, 1]``.
+    - ``c2w``: float32 tensor of shape ``(V, 4, 4)`` camera-to-world matrices.
+    - ``fxfycxcy``: float32 tensor of shape ``(V, 4)`` intrinsics at ``image_size``
+      resolution in absolute pixel units.
+    - ``view_names``: list of V camera name strings.
+    - ``video_id``, ``frame_id``: metadata strings.
+    - ``input_mask`` (optional): float32 tensor of shape ``(V, 1, H, W)`` binary
+      foreground masks, only present when ``use_mask=True``.
+    """
+
+    def __init__(
+        self,
+        data_dir: str | Path,
+        image_size: int,
+        mode: str = 'train',
+        use_mask: bool = False,
+        normalize_cameras: bool = True,
+        frame_ids: list[str] | None = None,
+    ) -> None:
+        """Initialize the multi-view dataset.
+
+        Parameters
+        ----------
+        data_dir: path to the ``dataset/`` directory produced by ``beast extract_3d``.
+        image_size: square size to resize images to (both height and width).
+        mode: ``'train'`` shuffles view order randomly; ``'test'`` uses sorted order.
+        use_mask: if True, load binary segmentation masks alongside images.
+        normalize_cameras: if True, re-center cameras so camera 0 is at the origin
+            and scale translations so the mean camera distance is 1.
+        frame_ids: optional pre-selected list of ``'{video_id}/{frame_filename}'``
+            strings; if None, all frames from all sessions are used.
+
+        Raises
+        ------
+        ValueError
+            if data_dir does not exist, contains no sessions, or use_mask is True
+            but a mask file is missing for any frame.
+
+        """
+        self.data_dir = Path(data_dir)
+        if not self.data_dir.is_dir():
+            raise ValueError(f'{self.data_dir} is not a directory')
+
+        self.image_size = image_size
+        self.mode = mode
+        self.use_mask = use_mask
+        self.normalize_cameras = normalize_cameras
+
+        info_path = self.data_dir / 'info.json'
+        if not info_path.exists():
+            raise ValueError(f'info.json not found in {self.data_dir}')
+        with open(info_path) as f:
+            info = json.load(f)
+        self.available_views: list[str] = sorted(info['available_views'])
+
+        if frame_ids is not None:
+            self.unique_frame_ids = frame_ids
+        else:
+            csv_files = sorted(self.data_dir.rglob('selected_frames.csv'))
+            if not csv_files:
+                raise ValueError(f'No selected_frames.csv files found under {self.data_dir}')
+            ids: list[str] = []
+            for csv_path in csv_files:
+                video_id = csv_path.parent.name
+                frames = csv_path.read_text().splitlines()
+                ids.extend(f'{video_id}/{f}' for f in frames if f)
+            self.unique_frame_ids = sorted(set(ids))
+
+        if not self.unique_frame_ids:
+            raise ValueError(f'{self.data_dir} contains no multi-view frame data')
+
+        self.img_transform = transforms.Compose([
+            transforms.Resize(
+                (image_size, image_size),
+                interpolation=transforms.InterpolationMode.BICUBIC,
+                antialias=True,
+            ),
+            transforms.ToTensor(),
+        ])
+        self.mask_transform = transforms.Compose([
+            transforms.Resize(
+                (image_size, image_size),
+                interpolation=transforms.InterpolationMode.NEAREST,
+            ),
+            transforms.ToTensor(),
+        ])
+
+        _logger.info(
+            f'MultiViewDataset: {len(self.unique_frame_ids)} frames × '
+            f'{len(self.available_views)} views  (mode={mode}, use_mask={use_mask})'
+        )
+
+    def __len__(self) -> int:
+        """Return number of frames in the dataset."""
+        return len(self.unique_frame_ids)
+
+    def __getitem__(self, idx: int) -> MultiViewExampleDict:
+        """Return all camera views for a single time point.
+
+        Parameters
+        ----------
+        idx: index into unique_frame_ids.
+
+        Returns
+        -------
+        MultiViewExampleDict with stacked tensors for all V cameras.
+
+        """
+        return self._get_single_item(idx)
+
+    def _get_single_item(self, idx: int) -> MultiViewExampleDict:
+        """Load images and camera params for one (session, frame) pair."""
+        unique_frame_id = self.unique_frame_ids[idx]
+        video_id, frame_id = unique_frame_id.split('/', 1)
+
+        images: list[torch.Tensor] = []
+        extrinsics: list[torch.Tensor] = []
+        fxfycxcy_list: list[torch.Tensor] = []
+        masks: list[torch.Tensor] = []
+
+        for view in self.available_views:
+            img_path = self.data_dir / video_id / view / frame_id
+            cam_path = img_path.with_suffix('.npy')
+
+            image = Image.open(img_path).convert('RGB')
+            images.append(self.img_transform(image))
+
+            if not cam_path.exists():
+                raise FileNotFoundError(
+                    f'camera file missing for {img_path.name} '
+                    f'(expected {cam_path})'
+                )
+            cam_info = np.load(cam_path, allow_pickle=True).item()
+            K = torch.from_numpy(cam_info['intrinsics']).float()
+            scale_w = self.image_size / cam_info['width']
+            scale_h = self.image_size / cam_info['height']
+            K = scale_intrinsics(K, scale_w, scale_h)
+            fxfycxcy_list.append(intrinsics_to_fxfycxcy(K))
+            extrinsics.append(torch.from_numpy(cam_info['extrinsics']).float())
+
+            if self.use_mask:
+                mask_filename = frame_id.replace('img', 'mask', 1)
+                mask_path = self.data_dir / video_id / view / mask_filename
+                mask = Image.open(mask_path).convert('L')
+                mask_tensor = self.mask_transform(mask)
+                masks.append((mask_tensor > 0.5).float())
+
+        images_t = torch.stack(images)           # (V, 3, H, W)
+        w2c_t = torch.stack(extrinsics)          # (V, 4, 4)
+        fxfycxcy_t = torch.stack(fxfycxcy_list)  # (V, 4)
+
+        if self.normalize_cameras:
+            c2w_t = normalize_camera_sequence(w2c_t)
+        else:
+            c2w_t = w2c_to_c2w(w2c_t)
+
+        view_names = list(self.available_views)
+
+        if self.mode == 'train':
+            perm = torch.randperm(len(self.available_views))
+            images_t = images_t[perm]
+            c2w_t = c2w_t[perm]
+            fxfycxcy_t = fxfycxcy_t[perm]
+            view_names = [view_names[i] for i in perm.tolist()]
+            if self.use_mask:
+                masks_t = torch.stack(masks)[perm]
+        else:
+            if self.use_mask:
+                masks_t = torch.stack(masks)
+
+        result: MultiViewExampleDict = {
+            'image': images_t,
+            'c2w': c2w_t,
+            'fxfycxcy': fxfycxcy_t,
+            'view_names': view_names,
+            'video_id': video_id,
+            'frame_id': frame_id,
+        }
+        if self.use_mask:
+            result['input_mask'] = masks_t
+        return result

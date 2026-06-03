@@ -178,6 +178,7 @@ cython_debug/
 
 # cached test data
 tests/testing_data/
+tests/multiview_testing_data/
 runs/
 app.log
 
