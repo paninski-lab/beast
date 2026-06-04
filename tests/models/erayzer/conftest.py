@@ -11,6 +11,23 @@ from beast.api.model import Model
 from beast.data.datamodules import MultiViewDataModule
 
 
+def _gsplat_cuda_available() -> bool:
+    """Return True if gsplat's CUDA extension compiled and loaded successfully."""
+    try:
+        from gsplat.cuda._backend import _C  # noqa: F401
+        return _C is not None
+    except Exception:
+        return False
+
+
+# Applied to every integration test; skips gracefully when gsplat CUDA is absent
+# (e.g. missing CUDA toolkit, architecture not yet supported by available wheels).
+requires_gsplat_cuda = pytest.mark.skipif(
+    not _gsplat_cuda_available(),
+    reason='gsplat CUDA extension not available (no nvcc / unsupported GPU arch)',
+)
+
+
 @pytest.fixture
 def run_erayzer_model_test(tmp_path, multiview_data_dir):
     """Build, train, and run inference on an ERayZer model.

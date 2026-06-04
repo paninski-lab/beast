@@ -19,6 +19,7 @@ from beast.models.erayzer.erayzer_model import (
     sanitize,
 )
 from beast.nn.transformer import QK_Norm_TransformerBlock
+from tests.models.erayzer.conftest import requires_gsplat_cuda
 
 # ---------------------------------------------------------------------------
 # TestSanitize
@@ -614,8 +615,14 @@ class TestERayZer:
 # ---------------------------------------------------------------------------
 
 
+@requires_gsplat_cuda
 class TestERayZerIntegration:
-    """Integration tests that train and run inference on ERayZer."""
+    """Integration tests that train and run inference on ERayZer.
+
+    Skipped automatically when the gsplat CUDA extension is unavailable
+    (e.g. CUDA toolkit not installed, GPU architecture not yet supported by
+    available pre-compiled wheels).
+    """
 
     def test_integration_basic(self, config_erayzer, run_erayzer_model_test) -> None:
         """Test ERayZer trains to completion and runs inference with L2 loss only."""
