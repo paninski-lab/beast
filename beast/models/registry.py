@@ -19,8 +19,10 @@ def _register_all() -> None:
     from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
     from beast.models.beast_resnet.beast_resnet_model import ResnetAutoencoder
     from beast.models.beast_resnet.beast_resnet_train import train as resnet_train
+    from beast.models.beast_vit.beast_vit_config import VitModelConfig
+    from beast.models.beast_vit.beast_vit_model import VisionTransformer
+    from beast.models.beast_vit.beast_vit_train import train as vit_train
     from beast.models.erayzer import ERayZer
-    from beast.models.vits import VisionTransformer
     from beast.train import train
 
     MODEL_REGISTRY['resnet'] = ResnetAutoencoder
@@ -28,7 +30,8 @@ def _register_all() -> None:
     CONFIG_REGISTRY['resnet'] = ResnetModelConfig
 
     MODEL_REGISTRY['vit'] = VisionTransformer
-    TRAIN_REGISTRY['vit'] = train
+    TRAIN_REGISTRY['vit'] = vit_train
+    CONFIG_REGISTRY['vit'] = VitModelConfig
 
     MODEL_REGISTRY['erayzer'] = ERayZer
     TRAIN_REGISTRY['erayzer'] = train

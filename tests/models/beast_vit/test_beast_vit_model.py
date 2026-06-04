@@ -1,11 +1,14 @@
+"""Tests for the Vision Transformer autoencoder model."""
+
 import copy
 
 import torch
 
-from beast.models.vits import VisionTransformer
+from beast.models.beast_vit.beast_vit_model import VisionTransformer
 
 
 class TestVisionTransformer:
+    """Test VisionTransformer forward pass and output shapes."""
 
     def test_forward(self, config_vit):
         config = copy.deepcopy(config_vit)

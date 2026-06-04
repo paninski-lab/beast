@@ -9,10 +9,10 @@ from beast.config import (
     BeastConfig,
     OptimizerConfig,
     TrainingConfig,
-    VitModelParams,
 )
 from beast.io import load_config
 from beast.models.beast_resnet.beast_resnet_config import ResnetModelParams
+from beast.models.beast_vit.beast_vit_config import VitModelParams
 
 _CONFIGS_DIR = Path(__file__).parent.parent / 'configs'
 _CONFIG_FILES = list(_CONFIGS_DIR.glob('*.yaml'))
