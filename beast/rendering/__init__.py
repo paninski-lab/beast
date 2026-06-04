@@ -1,1 +1,1 @@
-"""Rendering utilities: Gaussian splatting, transformer blocks, losses, and vision backbones."""
+"""Rendering utilities: Gaussian splatting and novel-view synthesis losses."""

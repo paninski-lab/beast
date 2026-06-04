@@ -2,7 +2,7 @@
 
 import torch
 
-from beast.models.perceptual import AlexPerceptual, Perceptual
+from beast.nn.perceptual import AlexPerceptual, Perceptual
 
 
 class TestPerceptual:

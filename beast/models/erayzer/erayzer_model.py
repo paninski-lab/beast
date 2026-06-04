@@ -23,17 +23,17 @@ from beast.geometry.camera import cam_info_to_plucker, get_interpolated_poses_ma
 from beast.geometry.positional_encoding import get_2d_sincos_pos_embed
 from beast.geometry.rotations import quat2mat, rot6d2mat
 from beast.models.base import BaseLightningModel
+from beast.nn.transformer import (
+    QK_Norm_TransformerBlock,
+    _init_weights,
+    _init_weights_layerwise,
+)
 from beast.rendering.gaussians_renderer import (
     GaussianModel,
     deferred_gaussian_render,
     render_opencv_cam_gsplat,
 )
 from beast.rendering.losses import PerceptualLoss, masked_mse_loss
-from beast.rendering.transformer import (
-    QK_Norm_TransformerBlock,
-    _init_weights,
-    _init_weights_layerwise,
-)
 
 
 def sanitize(t: torch.Tensor) -> torch.Tensor:

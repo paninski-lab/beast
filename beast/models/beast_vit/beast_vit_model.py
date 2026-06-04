@@ -13,7 +13,7 @@ from transformers import (
 
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
-from beast.models.perceptual import AlexPerceptual
+from beast.nn.perceptual import AlexPerceptual
 
 
 class BatchNormProjector(nn.Module):

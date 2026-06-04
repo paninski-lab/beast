@@ -18,7 +18,7 @@ from beast.models.erayzer.erayzer_model import (
     get_point_range_func,
     sanitize,
 )
-from beast.rendering.transformer import QK_Norm_TransformerBlock
+from beast.nn.transformer import QK_Norm_TransformerBlock
 
 # ---------------------------------------------------------------------------
 # TestSanitize
