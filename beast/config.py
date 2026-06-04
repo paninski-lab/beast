@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
 from beast.models.beast_vit.beast_vit_config import VitModelConfig
+from beast.models.erayzer.erayzer_config import ERayZerModelConfig
 
 
 class BeastConfig(BaseModel):
@@ -17,17 +18,6 @@ class BeastConfig(BaseModel):
     optimizer: OptimizerConfig
     data: DataConfig
     inference: bool = False
-
-
-class ERayZerModelConfig(BaseModel):
-    """ERayZer multi-view 3DGS model config.
-
-    Uses extra='allow' so the many nested sub-dicts (transformer, gaussians,
-    pose_latent, etc.) pass through without being enumerated here.
-    """
-
-    model_config = ConfigDict(extra='allow')
-    model_class: Literal['erayzer']
 
 
 ModelConfig = Annotated[

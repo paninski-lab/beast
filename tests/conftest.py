@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 import requests
 import torch
-import yaml
 
 from beast.api.model import Model
 from beast.data.augmentations import expand_imgaug_str_to_dict, imgaug_pipeline
@@ -155,10 +154,7 @@ def config_erayzer_path() -> Path:
 
 @pytest.fixture
 def config_erayzer(config_erayzer_path) -> dict:
-    # load_config runs Pydantic validation against BeastConfig which does not yet
-    # include an ERayZer schema, so load the yaml directly instead
-    with open(config_erayzer_path) as f:
-        config = yaml.safe_load(f)
+    config = load_config(config_erayzer_path)
     config['model']['image_tokenizer']['image_size'] = 32
     config['model']['image_tokenizer']['patch_size'] = 8   # 4×4 = 16 tokens per view
     config['model']['target_image']['height'] = 32

@@ -1,4 +1,4 @@
-"""Tests for beast.models.erayzer components."""
+"""Tests for beast.models.erayzer.erayzer_model components."""
 
 import copy
 from types import SimpleNamespace
@@ -8,7 +8,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from beast.models.erayzer import (
+from beast.models.erayzer.erayzer_model import (
     ERayZer,
     GaussiansUpsampler,
     LossComputer,
