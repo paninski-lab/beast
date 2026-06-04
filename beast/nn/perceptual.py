@@ -1,9 +1,5 @@
 """Perceptual loss modules using pretrained feature extractors."""
 
-import urllib.request
-from pathlib import Path
-
-import scipy.io
 import torch
 import torch.nn as nn
 import torchvision
@@ -84,67 +80,15 @@ class VGGPerceptual(Perceptual):
         self._setup_feature_blocks()
 
     def _build_vgg(self) -> nn.Module:
-        """Build VGG19, replacing MaxPool with AvgPool, loading matconvnet weights if available."""
-        model = vgg19(weights=None)
+        """Build VGG19 with ImageNet weights, replacing MaxPool layers with AvgPool."""
+        model = vgg19(weights=VGG19_Weights.IMAGENET1K_V1)
         for idx, layer in enumerate(model.features):
             if isinstance(layer, nn.MaxPool2d):
                 model.features[idx] = nn.AvgPool2d(kernel_size=2, stride=2)
-
-        if not self._load_matconvnet_weights(model):
-            model = vgg19(weights=VGG19_Weights.IMAGENET1K_V1)
-            for idx, layer in enumerate(model.features):
-                if isinstance(layer, nn.MaxPool2d):
-                    model.features[idx] = nn.AvgPool2d(kernel_size=2, stride=2)
-
         model = model.to(self.device).eval()
         for param in model.parameters():
             param.requires_grad = False
         return model
-
-    def _load_matconvnet_weights(self, model: nn.Module) -> bool:
-        """Attempt to load matconvnet VGG19 weights, downloading if needed.
-
-        Parameters
-        ----------
-        model: VGG19 model to load weights into
-
-        Returns
-        -------
-        True if weights were loaded successfully, False otherwise
-
-        """
-        weight_file = Path('metric_checkpoint/imagenet-vgg-verydeep-19.mat')
-        weight_file.parent.mkdir(parents=True, exist_ok=True)
-        if not weight_file.exists():
-            try:
-                urllib.request.urlretrieve(
-                    'https://www.vlfeat.org/matconvnet/models/imagenet-vgg-verydeep-19.mat',
-                    weight_file,
-                )
-            except Exception:
-                return False
-
-        try:
-            vgg_data = scipy.io.loadmat(weight_file)
-        except Exception:
-            return False
-
-        vgg_layers = vgg_data['layers'][0]
-        layer_indices = [0, 2, 5, 7, 10, 12, 14, 16, 19, 21, 23, 25, 28, 30, 32, 34]
-        filter_sizes = [
-            64, 64, 128, 128, 256, 256, 256, 256, 512, 512, 512, 512, 512, 512, 512, 512,
-        ]
-        with torch.no_grad():
-            for i, layer_idx in enumerate(layer_indices):
-                weights = torch.from_numpy(
-                    vgg_layers[layer_idx][0][0][2][0][0]
-                ).permute(3, 2, 0, 1)
-                biases = torch.from_numpy(
-                    vgg_layers[layer_idx][0][0][2][0][1]
-                ).view(filter_sizes[i])
-                model.features[layer_idx].weight.copy_(weights)
-                model.features[layer_idx].bias.copy_(biases)
-        return True
 
     def _setup_feature_blocks(self) -> None:
         """Build sequential feature extraction blocks from VGG19 layers."""

@@ -41,7 +41,6 @@ dependencies = [
     "plyfile",
     "pydantic",
     "scikit-learn",
-    "scipy",
     "tensorboard",
     "toml",
     "torchvision",
