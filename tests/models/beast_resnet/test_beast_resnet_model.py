@@ -1,9 +1,15 @@
+"""Tests for the ResNet autoencoder model."""
+
 import copy
 
 import pytest
 import torch
 
-from beast.models.resnets import _RESNET_CONFIGS, ResnetAutoencoder, get_configs
+from beast.models.beast_resnet.beast_resnet_model import (
+    _RESNET_CONFIGS,
+    ResnetAutoencoder,
+    get_configs,
+)
 
 
 class TestGetConfigs:
@@ -36,11 +42,11 @@ class TestGetConfigs:
 
 
 class TestResnetAutoencoder:
+    """Test ResnetAutoencoder forward pass shapes."""
 
     def test_forward_features(self, config_ae):
-
         config = copy.deepcopy(config_ae)
-        config['model']['model_params']['num_latents'] = None  # no latents, just 2D features
+        config['model']['model_params']['num_latents'] = None
 
         input = torch.randn((5, 3, 224, 224))
 
@@ -75,7 +81,6 @@ class TestResnetAutoencoder:
         assert latents.shape == (input.shape[0], 2048, 7, 7)
 
     def test_forward_latents(self, config_ae):
-
         config = copy.deepcopy(config_ae)
         num_latents = 16
         config['model']['model_params']['num_latents'] = num_latents
@@ -113,7 +118,6 @@ class TestResnetAutoencoder:
         assert latents.shape == (input.shape[0], num_latents)
 
     def test_predict_step_return_reconstructions(self, config_ae):
-
         config = copy.deepcopy(config_ae)
         config['model']['model_params']['backbone'] = 'resnet18'
         config['model']['model_params']['num_latents'] = 16

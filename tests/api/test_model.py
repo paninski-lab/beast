@@ -80,14 +80,14 @@ class TestModelFromConfig:
     def test_dict_config_vit(self) -> None:
         config = _make_valid_config('vit')
         mock_class = self._mock_class()
-        with patch.dict(Model.MODEL_REGISTRY, {'vit': mock_class}):
+        with patch.dict('beast.models.registry.MODEL_REGISTRY', {'vit': mock_class}):
             m = Model.from_config(config)
         assert isinstance(m, Model)
 
     def test_dict_config_resnet(self) -> None:
         config = _make_valid_config('resnet')
         mock_class = self._mock_class()
-        with patch.dict(Model.MODEL_REGISTRY, {'resnet': mock_class}):
+        with patch.dict('beast.models.registry.MODEL_REGISTRY', {'resnet': mock_class}):
             m = Model.from_config(config)
         assert isinstance(m, Model)
 
@@ -95,7 +95,7 @@ class TestModelFromConfig:
         config_path = tmp_path / 'config.yaml'
         config_path.write_text(yaml.dump(_make_valid_config('vit')))
         mock_class = self._mock_class()
-        with patch.dict(Model.MODEL_REGISTRY, {'vit': mock_class}):
+        with patch.dict('beast.models.registry.MODEL_REGISTRY', {'vit': mock_class}):
             m = Model.from_config(config_path)
         assert isinstance(m, Model)
 
@@ -107,7 +107,7 @@ class TestModelFromConfig:
     def test_dict_config_erayzer(self) -> None:
         config = _make_valid_erayzer_config()
         mock_class = self._mock_class()
-        with patch.dict(Model.MODEL_REGISTRY, {'erayzer': mock_class}):
+        with patch.dict('beast.models.registry.MODEL_REGISTRY', {'erayzer': mock_class}):
             m = Model.from_config(config)
         assert isinstance(m, Model)
         mock_class.assert_called_once()
@@ -120,7 +120,7 @@ class TestModelFromConfig:
         config['training']['max_fwdbwd_passes'] = 100000
         config['optimizer']['beta1'] = 0.9
         mock_class = self._mock_class()
-        with patch.dict(Model.MODEL_REGISTRY, {'erayzer': mock_class}):
+        with patch.dict('beast.models.registry.MODEL_REGISTRY', {'erayzer': mock_class}):
             Model.from_config(config)
         passed_config = mock_class.call_args[0][0]
         assert passed_config['model']['transformer']['d'] == 768
@@ -130,7 +130,7 @@ class TestModelFromConfig:
     def test_model_dir_is_none_after_from_config(self) -> None:
         config = _make_valid_config('vit')
         mock_class = self._mock_class()
-        with patch.dict(Model.MODEL_REGISTRY, {'vit': mock_class}):
+        with patch.dict('beast.models.registry.MODEL_REGISTRY', {'vit': mock_class}):
             m = Model.from_config(config)
         assert m.model_dir is None
 
@@ -158,7 +158,7 @@ class TestModelFromDir:
         mock_instance = mock_class.return_value
         mock_state = {'state_dict': {'layer': 'weights'}}
         with (
-            patch.dict(Model.MODEL_REGISTRY, {'vit': mock_class}),
+            patch.dict('beast.models.registry.MODEL_REGISTRY', {'vit': mock_class}),
             patch('beast.api.model.torch.load', return_value=mock_state),
         ):
             m = Model.from_dir(tmp_path)
@@ -179,7 +179,7 @@ class TestModelFromDir:
         mock_class = self._mock_class()
         mock_state = {'state_dict': {}}
         with (
-            patch.dict(Model.MODEL_REGISTRY, {'resnet': mock_class}),
+            patch.dict('beast.models.registry.MODEL_REGISTRY', {'resnet': mock_class}),
             patch('beast.api.model.torch.load', return_value=mock_state),
         ):
             m = Model.from_dir(str(tmp_path))

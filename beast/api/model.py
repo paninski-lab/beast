@@ -15,9 +15,7 @@ from beast.inference import predict_images, predict_video
 from beast.io import load_config
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
-from beast.models.erayzer import ERayZer
-from beast.models.resnets import ResnetAutoencoder
-from beast.models.vits import VisionTransformer
+from beast.models.registry import MODEL_REGISTRY
 from beast.train import train
 
 _logger = logging.getLogger(__name__)
@@ -46,12 +44,6 @@ class Model:
 
     This class manages both the model and the training/inference processes.
     """
-
-    MODEL_REGISTRY = {
-        'erayzer': ERayZer,
-        'resnet': ResnetAutoencoder,
-        'vit': VisionTransformer,
-    }
 
     def __init__(
         self,
@@ -84,11 +76,11 @@ class Model:
         config = load_config(config_path)
 
         model_type = config['model'].get('model_class', '').lower()
-        if model_type not in cls.MODEL_REGISTRY:
+        if model_type not in MODEL_REGISTRY:
             raise ValueError(f'Unknown model type: {model_type}')
 
         # Initialize the LightningModule
-        model_class = cls.MODEL_REGISTRY[model_type]
+        model_class = MODEL_REGISTRY[model_type]
         model = model_class(config)
 
         _logger.info(f'Loaded a {model_class} model')
@@ -120,11 +112,11 @@ class Model:
             config = BeastConfig.model_validate(config_path).model_dump()
 
         model_type = config['model'].get('model_class', '').lower()
-        if model_type not in cls.MODEL_REGISTRY:
+        if model_type not in MODEL_REGISTRY:
             raise ValueError(f'Unknown model type: {model_type}')
 
         # Initialize the LightningModule
-        model_class = cls.MODEL_REGISTRY[model_type]
+        model_class = MODEL_REGISTRY[model_type]
         log_step(f"Creating {model_type} model instance", level='debug')
         log_step(
             f"About to call {model_class.__name__}.__init__() - this may take several"

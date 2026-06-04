@@ -7,6 +7,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
+
 
 class BeastConfig(BaseModel):
     model: ModelConfig
@@ -14,26 +16,6 @@ class BeastConfig(BaseModel):
     optimizer: OptimizerConfig
     data: DataConfig
     inference: bool = False
-
-
-class ResnetModelConfig(BaseModel):
-    model_class: Literal['resnet']
-    model_params: ResnetModelParams
-    seed: int = 0
-    checkpoint: str | None = None
-
-
-class ResnetModelParams(BaseModel):
-    backbone: Literal[
-        'resnet18',
-        'resnet34',
-        'resnet50',
-        'resnet101',
-        'resnet152',
-    ] = 'resnet18'
-    num_latents: int | None = None
-    image_size: int = 224
-    num_channels: int = 3
 
 
 class VitModelConfig(BaseModel):
