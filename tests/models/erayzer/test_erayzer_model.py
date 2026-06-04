@@ -607,3 +607,28 @@ class TestERayZer:
         opt_cfg = model.configure_optimizers()
         assert 'optimizer' in opt_cfg
         assert 'lr_scheduler' in opt_cfg
+
+
+# ---------------------------------------------------------------------------
+# TestERayZerIntegration
+# ---------------------------------------------------------------------------
+
+
+class TestERayZerIntegration:
+    """Integration tests that train and run inference on ERayZer."""
+
+    def test_integration_basic(self, config_erayzer, run_erayzer_model_test) -> None:
+        """Test ERayZer trains to completion and runs inference with L2 loss only."""
+        run_erayzer_model_test(config=config_erayzer)
+
+    def test_integration_gs_reg(self, config_erayzer, run_erayzer_model_test) -> None:
+        """Test ERayZer trains with Gaussian splatting regularization loss enabled."""
+        config = copy.deepcopy(config_erayzer)
+        config['training']['gs_reg_loss_weight'] = 0.1
+        run_erayzer_model_test(config=config)
+
+    def test_integration_perceptual_loss(self, config_erayzer, run_erayzer_model_test) -> None:
+        """Test ERayZer trains with VGG perceptual loss enabled."""
+        config = copy.deepcopy(config_erayzer)
+        config['training']['perceptual_loss_weight'] = 0.1
+        run_erayzer_model_test(config=config)
