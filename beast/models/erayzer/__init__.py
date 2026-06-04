@@ -4,9 +4,11 @@ from beast.models.erayzer.erayzer_config import (
     ERayZerGaussiansConfig,
     ERayZerImageTokenizerConfig,
     ERayZerModelConfig,
+    ERayZerOptimizerConfig,
     ERayZerPoseLatentConfig,
     ERayZerRangeSettingConfig,
     ERayZerTargetImageConfig,
+    ERayZerTrainingConfig,
     ERayZerTransformerConfig,
 )
 from beast.models.erayzer.erayzer_model import (
@@ -26,9 +28,11 @@ __all__ = [
     'ERayZerGaussiansConfig',
     'ERayZerImageTokenizerConfig',
     'ERayZerModelConfig',
+    'ERayZerOptimizerConfig',
     'ERayZerPoseLatentConfig',
     'ERayZerRangeSettingConfig',
     'ERayZerTargetImageConfig',
+    'ERayZerTrainingConfig',
     'ERayZerTransformerConfig',
     'GaussiansUpsampler',
     'LossComputer',

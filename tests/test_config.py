@@ -7,12 +7,14 @@ from pydantic import ValidationError
 
 from beast.config import (
     BeastConfig,
+    ERayZerBeastConfig,
     OptimizerConfig,
     TrainingConfig,
 )
 from beast.io import load_config
 from beast.models.beast_resnet.beast_resnet_config import ResnetModelParams
 from beast.models.beast_vit.beast_vit_config import VitModelParams
+from beast.models.erayzer.erayzer_config import ERayZerOptimizerConfig, ERayZerTrainingConfig
 
 _CONFIGS_DIR = Path(__file__).parent.parent / 'configs'
 _NON_BEAST_CONFIG_NAMES = {'extraction_pipeline.yaml'}
@@ -31,6 +33,23 @@ _MINIMAL_VIT = {
     'model': {'model_class': 'vit', 'model_params': {}},
     'training': {'train_batch_size': 32, 'val_batch_size': 64},
     'optimizer': {'lr': 1e-4},
+    'data': {'data_dir': '/path/to/data'},
+}
+
+_MINIMAL_ERAYZER = {
+    'model': {
+        'model_class': 'erayzer',
+        'transformer': {'d': 256, 'd_head': 64, 'encoder_geom_n_layer': 4},
+    },
+    'training': {
+        'train_batch_size': 4,
+        'val_batch_size': 2,
+        'num_views': 3,
+        'num_input_views': 2,
+        'num_target_views': 1,
+        'max_fwdbwd_passes': 50000,
+    },
+    'optimizer': {'lr': 4e-4},
     'data': {'data_dir': '/path/to/data'},
 }
 
@@ -136,6 +155,66 @@ class TestVitModelParams:
         assert cfg.mask_ratio == 0.75
         assert cfg.use_infoNCE is False
         assert cfg.use_perceptual_loss is False
+
+
+class TestERayZerTrainingConfig:
+    """Test the ERayZerTrainingConfig model."""
+
+    def test_defaults_applied(self) -> None:
+        cfg = ERayZerTrainingConfig(
+            train_batch_size=4,
+            val_batch_size=2,
+            num_views=3,
+            num_input_views=2,
+            num_target_views=1,
+            max_fwdbwd_passes=50000,
+        )
+        assert cfg.num_epochs == 200
+        assert cfg.seed == 0
+        assert cfg.train_fraction == 0.9
+        assert cfg.l2_loss_weight == 1.0
+        assert cfg.random_split is False
+        assert cfg.ckpt_every_n_epochs is None
+
+    def test_missing_required_fields_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            ERayZerTrainingConfig(train_batch_size=4, val_batch_size=2)  # type: ignore[call-arg]
+
+
+class TestERayZerOptimizerConfig:
+    """Test the ERayZerOptimizerConfig model."""
+
+    def test_defaults_applied(self) -> None:
+        cfg = ERayZerOptimizerConfig(lr=4e-4)
+        assert cfg.beta1 == 0.9
+        assert cfg.beta2 == 0.95
+        assert cfg.wd == 0.05
+        assert cfg.warmup == 3000
+        assert cfg.div_factor == 1.0
+        assert cfg.accumulate_grad_batches == 1
+
+    def test_missing_lr_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            ERayZerOptimizerConfig()  # type: ignore[call-arg]
+
+
+class TestERayZerBeastConfig:
+    """Test the ERayZerBeastConfig model."""
+
+    def test_valid_config(self) -> None:
+        ERayZerBeastConfig.model_validate(_MINIMAL_ERAYZER)
+
+    def test_missing_required_training_field_raises(self) -> None:
+        raw = {**_MINIMAL_ERAYZER, 'training': {'train_batch_size': 4, 'val_batch_size': 2}}
+        with pytest.raises(ValidationError):
+            ERayZerBeastConfig.model_validate(raw)
+
+    def test_model_dump_contains_erayzer_fields(self) -> None:
+        config = ERayZerBeastConfig.model_validate(_MINIMAL_ERAYZER)
+        dumped = config.model_dump()
+        assert dumped['training']['num_views'] == 3
+        assert dumped['training']['max_fwdbwd_passes'] == 50000
+        assert 'beta1' in dumped['optimizer']
 
 
 class TestConfigFiles:

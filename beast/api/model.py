@@ -10,13 +10,12 @@ from typing import Any
 
 import torch
 
-from beast.config import BeastConfig
+from beast.config import get_beast_config_class
 from beast.inference import predict_images, predict_video
 from beast.io import load_config
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
-from beast.models.registry import MODEL_REGISTRY
-from beast.train import train
+from beast.models.registry import MODEL_REGISTRY, TRAIN_REGISTRY
 
 _logger = logging.getLogger(__name__)
 
@@ -109,7 +108,8 @@ class Model:
         if not isinstance(config_path, dict):
             config = load_config(config_path)
         else:
-            config = BeastConfig.model_validate(config_path).model_dump()
+            model_class = (config_path.get('model') or {}).get('model_class', '')
+            config = get_beast_config_class(model_class).model_validate(config_path).model_dump()
 
         model_type = config['model'].get('model_class', '').lower()
         if model_type not in MODEL_REGISTRY:
@@ -141,8 +141,10 @@ class Model:
 
         """
         self.model_dir = Path(output_dir)
+        model_type = self.config['model'].get('model_class', '').lower()
+        train_fn = TRAIN_REGISTRY[model_type]
         with chdir(self.model_dir):
-            self.model = train(self.config, self.model, output_dir=self.model_dir)
+            self.model = train_fn(self.config, self.model, output_dir=self.model_dir)
 
     def predict_images(
         self,

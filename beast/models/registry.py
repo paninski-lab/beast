@@ -1,7 +1,17 @@
 """Central registries for BEAST model classes, training functions, and config schemas.
 
-Each model package populates these dicts when its package is imported.
-To add a new model: create a beast/models/<name>/ directory and add entries here.
+Three dicts are populated by _register_all() at import time:
+
+  MODEL_REGISTRY   model_class str → LightningModule subclass
+  TRAIN_REGISTRY   model_class str → train(config, model, output_dir) callable
+  CONFIG_REGISTRY  model_class str → model-section Pydantic config class
+
+To register a new model, add three lines inside _register_all():
+  MODEL_REGISTRY['<name>']  = <ModelClass>
+  TRAIN_REGISTRY['<name>']  = <train_fn>
+  CONFIG_REGISTRY['<name>'] = <ModelConfigClass>
+
+See docs/developer_guide.md for the full step-by-step checklist.
 """
 
 from collections.abc import Callable

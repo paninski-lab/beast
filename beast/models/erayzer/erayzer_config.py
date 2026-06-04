@@ -86,3 +86,45 @@ class ERayZerModelConfig(BaseModel):
     opacity_bias: float = -2.0
     near_plane: float = 0.2
     use_deferred_rendering: bool = False
+
+
+class ERayZerTrainingConfig(BaseModel):
+    """Training configuration for ERayZer."""
+
+    train_batch_size: int
+    val_batch_size: int
+    test_batch_size: int = 128
+    num_epochs: int = 200
+    seed: int = 0
+    num_workers: int = 8
+    num_gpus: int = 1
+    num_nodes: int = 1
+    log_every_n_steps: int = 10
+    check_val_every_n_epoch: int = 1
+    ckpt_every_n_epochs: int | None = None
+    num_views: int
+    num_input_views: int
+    num_target_views: int
+    max_fwdbwd_passes: int
+    grad_checkpoint_every: int = 1
+    train_fraction: float = 0.9
+    random_split: bool = False
+    random_inputs: bool = False
+    render_interpolate: bool = False
+    l2_loss_weight: float = 1.0
+    gs_reg_loss_weight: float = 0.0
+    perceptual_loss_weight: float = 0.0
+    pose_consistency_reg_weight: float = 0.0
+
+
+class ERayZerOptimizerConfig(BaseModel):
+    """Optimizer configuration for ERayZer (AdamW + OneCycleLR)."""
+
+    lr: float
+    beta1: float = 0.9
+    beta2: float = 0.95
+    wd: float = 0.05
+    warmup: int = 3000
+    div_factor: float = 1.0
+    final_div_factor: float = 1.0
+    accumulate_grad_batches: int = 1

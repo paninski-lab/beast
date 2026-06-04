@@ -22,13 +22,20 @@ def _make_valid_config(model_class: str) -> dict:
 
 
 def _make_valid_erayzer_config() -> dict:
-    """Minimal dict config accepted by BeastConfig for the erayzer model class."""
+    """Minimal dict config accepted by ERayZerBeastConfig."""
     return {
         'model': {
             'model_class': 'erayzer',
             'transformer': {'d': 768, 'd_head': 64, 'encoder_geom_n_layer': 12},
         },
-        'training': {'train_batch_size': 4, 'val_batch_size': 2},
+        'training': {
+            'train_batch_size': 4,
+            'val_batch_size': 2,
+            'num_views': 3,
+            'num_input_views': 2,
+            'num_target_views': 1,
+            'max_fwdbwd_passes': 100000,
+        },
         'optimizer': {'lr': 1e-4},
         'data': {'data_dir': '/path/to/data'},
     }
@@ -115,22 +122,20 @@ class TestModelFromConfig:
         assert isinstance(m, Model)
         mock_class.assert_called_once()
 
-    def test_erayzer_extra_fields_pass_through(self) -> None:
-        # ERayZer config carries many extra nested keys; they must survive validation
+    def test_erayzer_typed_fields_pass_through(self) -> None:
+        # ERayZer-specific fields are fully typed in the schema and must survive model_dump()
         config = _make_valid_erayzer_config()
         config['model']['transformer'] = {
             'd': 768, 'd_head': 64, 'encoder_n_layer': 12, 'encoder_geom_n_layer': 12,
         }
-        config['training']['num_views'] = 3
-        config['training']['max_fwdbwd_passes'] = 100000
-        config['optimizer']['beta1'] = 0.9
+        config['optimizer']['beta1'] = 0.95
         mock_class = self._mock_class()
         with patch.dict('beast.models.registry.MODEL_REGISTRY', {'erayzer': mock_class}):
             Model.from_config(config)
         passed_config = mock_class.call_args[0][0]
         assert passed_config['model']['transformer']['d'] == 768
         assert passed_config['training']['num_views'] == 3
-        assert passed_config['optimizer']['beta1'] == 0.9
+        assert passed_config['optimizer']['beta1'] == 0.95
 
     def test_model_dir_is_none_after_from_config(self) -> None:
         config = _make_valid_config('vit')
@@ -195,13 +200,18 @@ class TestModelTrain:
     """Test the Model.train method."""
 
     def _make_model(self, model_dir: Path | None = None) -> Model:
-        return Model(MagicMock(), {'model': {}, 'training': {}}, model_dir=model_dir)
+        return Model(
+            MagicMock(),
+            {'model': {'model_class': 'vit'}, 'training': {}},
+            model_dir=model_dir,
+        )
 
     def test_sets_model_dir(self, tmp_path: Path) -> None:
         m = self._make_model()
         output = tmp_path / 'run1'
         output.mkdir()
-        with patch('beast.api.model.train', return_value=MagicMock()):
+        mock_train = MagicMock(return_value=MagicMock())
+        with patch.dict('beast.models.registry.TRAIN_REGISTRY', {'vit': mock_train}):
             m.train(output_dir=output)
         assert m.model_dir == output
 
@@ -210,7 +220,8 @@ class TestModelTrain:
         original_model = m.model  # train() reassigns m.model to its return value
         output = tmp_path / 'run1'
         output.mkdir()
-        with patch('beast.api.model.train', return_value=MagicMock()) as mock_train:
+        mock_train = MagicMock(return_value=MagicMock())
+        with patch.dict('beast.models.registry.TRAIN_REGISTRY', {'vit': mock_train}):
             m.train(output_dir=output)
         mock_train.assert_called_once_with(m.config, original_model, output_dir=output)
 
@@ -219,7 +230,8 @@ class TestModelTrain:
         output = tmp_path / 'run1'
         output.mkdir()
         trained_model = MagicMock()
-        with patch('beast.api.model.train', return_value=trained_model):
+        mock_train = MagicMock(return_value=trained_model)
+        with patch.dict('beast.models.registry.TRAIN_REGISTRY', {'vit': mock_train}):
             m.train(output_dir=output)
         assert m.model is trained_model
 
