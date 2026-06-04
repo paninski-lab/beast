@@ -15,7 +15,10 @@ from beast.models.beast_resnet.beast_resnet_config import ResnetModelParams
 from beast.models.beast_vit.beast_vit_config import VitModelParams
 
 _CONFIGS_DIR = Path(__file__).parent.parent / 'configs'
-_CONFIG_FILES = list(_CONFIGS_DIR.glob('*.yaml'))
+_NON_BEAST_CONFIG_NAMES = {'extraction_pipeline.yaml'}
+_CONFIG_FILES = sorted(
+    p for p in _CONFIGS_DIR.rglob('*.yaml') if p.name not in _NON_BEAST_CONFIG_NAMES
+)
 
 _MINIMAL_RESNET = {
     'model': {'model_class': 'resnet', 'model_params': {}},
@@ -138,7 +141,11 @@ class TestVitModelParams:
 class TestConfigFiles:
     """Validate all config files in the configs/ directory."""
 
-    @pytest.mark.parametrize('config_path', _CONFIG_FILES, ids=[p.name for p in _CONFIG_FILES])
+    @pytest.mark.parametrize(
+        'config_path',
+        _CONFIG_FILES,
+        ids=[str(p.relative_to(_CONFIGS_DIR)) for p in _CONFIG_FILES],
+    )
     def test_config_is_valid(self, config_path: Path) -> None:
         config = load_config(config_path)
         assert isinstance(config, dict)
