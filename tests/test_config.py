@@ -10,6 +10,7 @@ from beast.config import (
     ERayZerBeastConfig,
     OptimizerConfig,
     TrainingConfig,
+    get_beast_config_class,
 )
 from beast.io import load_config
 from beast.models.beast_resnet.beast_resnet_config import ResnetModelParams
@@ -215,6 +216,25 @@ class TestERayZerBeastConfig:
         assert dumped['training']['num_views'] == 3
         assert dumped['training']['max_fwdbwd_passes'] == 50000
         assert 'beta1' in dumped['optimizer']
+
+
+class TestGetBeastConfigClass:
+    """Test the get_beast_config_class dispatcher."""
+
+    def test_erayzer_returns_erayzer_beast_config(self) -> None:
+        assert get_beast_config_class('erayzer') is ERayZerBeastConfig
+
+    def test_resnet_falls_back_to_beast_config(self) -> None:
+        assert get_beast_config_class('resnet') is BeastConfig
+
+    def test_vit_falls_back_to_beast_config(self) -> None:
+        assert get_beast_config_class('vit') is BeastConfig
+
+    def test_unknown_falls_back_to_beast_config(self) -> None:
+        assert get_beast_config_class('totally_unknown_model') is BeastConfig
+
+    def test_empty_string_falls_back_to_beast_config(self) -> None:
+        assert get_beast_config_class('') is BeastConfig
 
 
 class TestConfigFiles:
