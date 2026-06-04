@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BeastConfig(BaseModel):
@@ -13,6 +13,7 @@ class BeastConfig(BaseModel):
     training: TrainingConfig
     optimizer: OptimizerConfig
     data: DataConfig
+    inference: bool = False
 
 
 class ResnetModelConfig(BaseModel):
@@ -71,13 +72,25 @@ class VitModelParams(BaseModel):
     lambda_perceptual: float = 10.0
 
 
+class ERayZerModelConfig(BaseModel):
+    """ERayZer multi-view 3DGS model config.
+
+    Uses extra='allow' so the many nested sub-dicts (transformer, gaussians,
+    pose_latent, etc.) pass through without being enumerated here.
+    """
+
+    model_config = ConfigDict(extra='allow')
+    model_class: Literal['erayzer']
+
+
 ModelConfig = Annotated[
-    ResnetModelConfig | VitModelConfig,
+    ResnetModelConfig | VitModelConfig | ERayZerModelConfig,
     Field(discriminator='model_class'),
 ]
 
 
 class TrainingConfig(BaseModel):
+    model_config = ConfigDict(extra='allow')
     train_batch_size: int
     val_batch_size: int
     test_batch_size: int = 128
@@ -95,6 +108,7 @@ class TrainingConfig(BaseModel):
 
 
 class OptimizerConfig(BaseModel):
+    model_config = ConfigDict(extra='allow')
     lr: float
     type: Literal['Adam', 'AdamW'] = 'AdamW'
     wd: float = 0.05

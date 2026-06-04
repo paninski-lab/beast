@@ -21,6 +21,16 @@ def _make_valid_config(model_class: str) -> dict:
     }
 
 
+def _make_valid_erayzer_config() -> dict:
+    """Minimal dict config accepted by BeastConfig for the erayzer model class."""
+    return {
+        'model': {'model_class': 'erayzer'},
+        'training': {'train_batch_size': 4, 'val_batch_size': 2},
+        'optimizer': {'lr': 1e-4},
+        'data': {'data_dir': '/path/to/data'},
+    }
+
+
 class TestChdir:
     """Test the chdir context manager."""
 
@@ -93,6 +103,29 @@ class TestModelFromConfig:
         config = _make_valid_config('unknown_arch')
         with pytest.raises(ValidationError):
             Model.from_config(config)
+
+    def test_dict_config_erayzer(self) -> None:
+        config = _make_valid_erayzer_config()
+        mock_class = self._mock_class()
+        with patch.dict(Model.MODEL_REGISTRY, {'erayzer': mock_class}):
+            m = Model.from_config(config)
+        assert isinstance(m, Model)
+        mock_class.assert_called_once()
+
+    def test_erayzer_extra_fields_pass_through(self) -> None:
+        # ERayZer config carries many extra nested keys; they must survive validation
+        config = _make_valid_erayzer_config()
+        config['model']['transformer'] = {'d': 768, 'encoder_n_layer': 12}
+        config['training']['num_views'] = 3
+        config['training']['max_fwdbwd_passes'] = 100000
+        config['optimizer']['beta1'] = 0.9
+        mock_class = self._mock_class()
+        with patch.dict(Model.MODEL_REGISTRY, {'erayzer': mock_class}):
+            Model.from_config(config)
+        passed_config = mock_class.call_args[0][0]
+        assert passed_config['model']['transformer']['d'] == 768
+        assert passed_config['training']['num_views'] == 3
+        assert passed_config['optimizer']['beta1'] == 0.9
 
     def test_model_dir_is_none_after_from_config(self) -> None:
         config = _make_valid_config('vit')

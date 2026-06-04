@@ -755,7 +755,7 @@ class ERayZer(BaseLightningModel):
         if config['model']['transformer'].get('fix_decoder', False):
             self.freeze_weights()
 
-        if config['inference'] or config.get('evaluation', False):
+        if config.get('inference', False):
             self.random_index = config['training'].get('random_inputs', False)
         else:
             self.random_index = config['training'].get('random_split', False)
@@ -1104,7 +1104,6 @@ class ERayZer(BaseLightningModel):
             render_video
             or not self.training
             or self.config.get('inference', False)
-            or self.config.get('evaluation', False)
             or data.get('return_render_video', False)
         )
         if should_render_video:
@@ -1350,7 +1349,6 @@ class ERayZer(BaseLightningModel):
 
         can_split = (
             not self.config.get('inference', False)
-            and not self.config.get('evaluation', False)
             and num_real_views == self.config['training']['num_views']
             and num_input + num_target <= num_real_views
         )

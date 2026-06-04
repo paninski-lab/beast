@@ -15,6 +15,7 @@ from beast.inference import predict_images, predict_video
 from beast.io import load_config
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
+from beast.models.erayzer import ERayZer
 from beast.models.resnets import ResnetAutoencoder
 from beast.models.vits import VisionTransformer
 from beast.train import train
@@ -47,9 +48,9 @@ class Model:
     """
 
     MODEL_REGISTRY = {
-        'vit': VisionTransformer,
+        'erayzer': ERayZer,
         'resnet': ResnetAutoencoder,
-        # Add more models as needed
+        'vit': VisionTransformer,
     }
 
     def __init__(

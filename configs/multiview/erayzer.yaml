@@ -12,6 +12,7 @@
 # Model architecture
 # ---------------------------------------------------------------------------
 model:
+  model_class: erayzer
   seed: 0
   checkpoint: null            # path to .ckpt for fine-tuning or inference
 
@@ -78,6 +79,7 @@ training:
   log_every_n_steps: 10
   check_val_every_n_epoch: 1
 
+  train_fraction: 0.9         # fraction of samples used for training (rest = validation)
   random_split: false         # randomize input/target partition order per batch
   random_inputs: false        # randomize which views are used as input
   render_interpolate: false   # render an interpolated video trajectory at eval time
@@ -109,5 +111,4 @@ data:
 # ---------------------------------------------------------------------------
 # Runtime flags
 # ---------------------------------------------------------------------------
-inference: false
-evaluation: false
+inference: false    # set to true at inference time; disables view split and enables video render
