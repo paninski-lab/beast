@@ -1,3 +1,4 @@
+import copy
 import gc
 import io
 import json
@@ -9,6 +10,7 @@ from pathlib import Path
 import pytest
 import requests
 import torch
+import yaml
 
 from beast.api.model import Model
 from beast.data.augmentations import expand_imgaug_str_to_dict, imgaug_pipeline
@@ -144,6 +146,38 @@ def config_vit(config_vit_path, data_dir) -> dict:
     config['training']['test_batch_size'] = 4
     config['model']['model_params']['use_infoNCE'] = False
     return config
+
+
+@pytest.fixture
+def config_erayzer_path() -> Path:
+    return ROOT.joinpath('configs/multiview/erayzer.yaml')
+
+
+@pytest.fixture
+def config_erayzer(config_erayzer_path) -> dict:
+    # load_config runs Pydantic validation against BeastConfig which does not yet
+    # include an ERayZer schema, so load the yaml directly instead
+    with open(config_erayzer_path) as f:
+        config = yaml.safe_load(f)
+    config['model']['image_tokenizer']['image_size'] = 32
+    config['model']['image_tokenizer']['patch_size'] = 8   # 4×4 = 16 tokens per view
+    config['model']['target_image']['height'] = 32
+    config['model']['target_image']['width'] = 32
+    config['model']['transformer']['d'] = 32
+    config['model']['transformer']['d_head'] = 8
+    config['model']['transformer']['encoder_n_layer'] = 2
+    config['model']['transformer']['encoder_geom_n_layer'] = 2
+    config['model']['transformer']['use_qk_norm'] = False
+    config['model']['transformer']['special_init'] = False
+    config['model']['transformer']['depth_init'] = False
+    config['model']['gaussians']['sh_degree'] = 0
+    config['training']['num_views'] = 3
+    config['training']['num_input_views'] = 2
+    config['training']['num_target_views'] = 1
+    config['training']['grad_checkpoint_every'] = 1
+    config['training']['max_fwdbwd_passes'] = 100
+    config['optimizer']['warmup'] = 10   # must be < max_fwdbwd_passes
+    return copy.deepcopy(config)
 
 
 @pytest.fixture

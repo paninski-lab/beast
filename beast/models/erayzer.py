@@ -1,4 +1,14 @@
-"""ERayZer model: 3DGS renderer, loss computer, and Lightning model."""
+"""ERayZer model: 3DGS renderer, loss computer, and Lightning model.
+
+ERayZer is the base class that includes a camera-prediction branch
+(transformer_encoder + PoseEstimator).  Subclasses can override
+``_resolve_cameras`` to substitute a different camera source:
+
+- ``BEAST3D``: drops the prediction modules and reads GT cameras from the
+  batch dict.
+- ``SABLE`` (future): inherits prediction and adds depth/pointcloud
+  initialization.
+"""
 
 import copy
 from types import SimpleNamespace
@@ -6,14 +16,13 @@ from types import SimpleNamespace
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
+from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 
-from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD
 from beast.geometry.camera import cam_info_to_plucker, get_interpolated_poses_many
 from beast.geometry.positional_encoding import get_2d_sincos_pos_embed
+from beast.geometry.rotations import quat2mat, rot6d2mat
 from beast.models.base import BaseLightningModel
-from beast.rendering.dino import DinoV3
 from beast.rendering.gaussians_renderer import (
     GaussianModel,
     deferred_gaussian_render,
@@ -25,23 +34,6 @@ from beast.rendering.transformer import (
     _init_weights,
     _init_weights_layerwise,
 )
-
-
-def imagenet_normalize(x: torch.Tensor) -> torch.Tensor:
-    """Normalize a tensor using ImageNet channel mean and std.
-
-    Parameters
-    ----------
-    x: image tensor of shape (..., 3, H, W) in [0, 1].
-
-    Returns
-    -------
-    normalized tensor.
-
-    """
-    mean = x.new_tensor(_IMAGENET_MEAN).view(1, 3, 1, 1)
-    std = x.new_tensor(_IMAGENET_STD).view(1, 3, 1, 1)
-    return (x - mean) / std
 
 
 def sanitize(t: torch.Tensor) -> torch.Tensor:
@@ -95,6 +87,261 @@ def build_transformer_blocks(
     return nn.ModuleList(layers)
 
 
+# ---------------------------------------------------------------------------
+# Camera-prediction helpers
+# ---------------------------------------------------------------------------
+
+def get_cam_se3(
+    cam_info: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Decode camera tokens into c2w matrices and fxfycxcy intrinsics.
+
+    Parameters
+    ----------
+    cam_info: predicted camera parameters of shape [B, D] where D is either
+        13 (6D rotation + 3D translation + 4 intrinsics) or
+        11 (quaternion rotation + 3D translation + 4 intrinsics).
+
+    Returns
+    -------
+    tuple of (c2w [B, 4, 4], fxfycxcy [B, 4]).
+
+    Raises
+    ------
+    NotImplementedError
+        if D is neither 11 nor 13.
+
+    """
+    b, n = cam_info.shape
+    if n == 13:
+        R = rot6d2mat(cam_info[:, :6])
+        t = cam_info[:, 6:9].unsqueeze(-1)
+        fxfycxcy = cam_info[:, 9:]
+    elif n == 11:
+        R = quat2mat(cam_info[:, :4])
+        t = cam_info[:, 4:7].unsqueeze(-1)
+        fxfycxcy = cam_info[:, 7:]
+    else:
+        raise NotImplementedError(f'cam_info width {n} is neither 11 nor 13')
+
+    bottom = torch.tensor([0, 0, 0, 1], dtype=R.dtype, device=R.device)
+    bottom = bottom.view(1, 1, 4).expand(b, -1, -1)
+    c2w = torch.cat([torch.cat([R, t], dim=2), bottom], dim=1)
+    return c2w, fxfycxcy
+
+
+class PoseEstimator(nn.Module):
+    """Predict per-view SE3 poses and focal lengths from camera tokens.
+
+    Supports three canonical modes (``first``, ``middle``, ``unordered``) and
+    two pose parameterizations (``6d`` continuous rotation, ``quat``ernion).
+    """
+
+    _FOCAL_BIAS = 1.25  # default predicted focal length offset (normalized)
+
+    def __init__(self, config: dict) -> None:
+        """Initialize PoseEstimator.
+
+        Parameters
+        ----------
+        config: full model config dict; reads config['model']['pose_latent']
+            for canonical, mode, and representation settings.
+
+        """
+        super().__init__()
+        self.config = config
+        pose_cfg = config['model']['pose_latent']
+        self.canonical = pose_cfg.get('canonical', 'first')
+        if self.canonical not in ('first', 'middle', 'unordered'):
+            raise ValueError(f'Unknown canonical mode: {self.canonical!r}')
+        self.is_pairwise = pose_cfg.get('mode', 'pairwise') == 'pairwise'
+        self.pose_consistency_reg_weight = config['training'].get(
+            'pose_consistency_reg_weight', 0.0,
+        )
+        self.pose_rep = pose_cfg.get('representation', '6d')
+        if self.pose_rep == '6d':
+            self.num_pose_element = 6
+        elif self.pose_rep == 'quat':
+            self.num_pose_element = 4
+        else:
+            raise NotImplementedError(f'Unknown pose representation: {self.pose_rep!r}')
+
+        d = config['model']['transformer']['d']
+        rel_head_in = d * 2 if self.is_pairwise else d
+        self.rel_head = nn.Sequential(
+            nn.Linear(rel_head_in, d, bias=True),
+            nn.SiLU(),
+            nn.Linear(d, self.num_pose_element + 3, bias=True),
+        )
+        self.rel_head.apply(_init_weights)
+
+        self.canonical_k_head = nn.Sequential(
+            nn.Linear(d, d, bias=True),
+            nn.SiLU(),
+            nn.Linear(d, 1, bias=False),
+        )
+        self.canonical_k_head.apply(_init_weights)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        v: int,
+    ) -> torch.Tensor:
+        """Predict camera parameters for all views.
+
+        Parameters
+        ----------
+        x: per-view camera tokens of shape [B*V, D] or [B, V, D].
+        v: number of views V.
+
+        Returns
+        -------
+        camera parameter tensor of shape [B*V, pose_dim] where pose_dim is
+        either 13 (6d) or 11 (quat).
+
+        """
+        return_flat = x.ndim == 2
+        if return_flat:
+            x = rearrange(x, '(b v) d -> b v d', v=v)
+
+        if self.is_pairwise:
+            if v == 1:
+                out = self._forward_single_view(x, v)
+            else:
+                out = self._forward_canonical(x, v, self.canonical)
+        else:
+            out = self._forward_global(x, v, self.canonical)
+
+        return rearrange(out, 'b v d -> (b v) d') if return_flat else out
+
+    # ------------------------------------------------------------------
+    # Private forward variants
+    # ------------------------------------------------------------------
+
+    def _identity_rt(
+        self,
+        b: int,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> torch.Tensor:
+        """Return an identity rotation+translation canonical tensor [B, 1, num_pose_element+3]."""
+        if self.pose_rep == '6d':
+            # first two columns of I₃ then zero translation
+            vals = [1, 0, 0, 0, 1, 0, 0, 0, 0]
+        else:
+            # w=1, x=y=z=0 quaternion, then zero translation
+            vals = [1, 0, 0, 0, 0, 0, 0]
+        return torch.tensor(vals, device=device, dtype=dtype).reshape(1, 1, -1).expand(b, 1, -1)
+
+    def _predict_fxfy(
+        self,
+        x_canonical: torch.Tensor,
+        v: int,
+    ) -> torch.Tensor:
+        """Predict and broadcast focal lengths for all views.
+
+        Parameters
+        ----------
+        x_canonical: canonical view tokens [B, 1, D].
+        v: total number of views to broadcast to.
+
+        Returns
+        -------
+        fxfy tensor of shape [B, V, 2].
+
+        """
+        fxfy = self.canonical_k_head(x_canonical[:, 0]) + self._FOCAL_BIAS  # [B, 1]
+        fxfy = fxfy.unsqueeze(1).expand(-1, -1, 2)                          # [B, 1, 2]
+        return fxfy.expand(-1, v, -1)                                        # [B, V, 2]
+
+    def _append_cxcy(self, info: torch.Tensor) -> torch.Tensor:
+        """Append fixed cx=0.5, cy=0.5 principal point to all views."""
+        b, v = info.shape[:2]
+        cxcy = info.new_tensor([0.5, 0.5]).reshape(1, 1, 2).expand(b, v, -1)
+        return torch.cat([info, cxcy], dim=-1)
+
+    def _forward_canonical(
+        self,
+        x: torch.Tensor,
+        v: int,
+        canonical: str,
+    ) -> torch.Tensor:
+        """Canonical-based pairwise prediction (first or middle view as anchor)."""
+        b = x.shape[0]
+        device, dtype = x.device, x.dtype
+
+        if canonical == 'first':
+            cano_idx = 0
+            rel_indices = torch.arange(1, v, device=device)
+        elif canonical == 'middle':
+            cano_idx = v // 2
+            rel_indices = torch.cat([
+                torch.arange(cano_idx, device=device),
+                torch.arange(cano_idx + 1, v, device=device),
+            ])
+        else:
+            raise NotImplementedError
+
+        x_canonical = x[:, cano_idx:cano_idx + 1]  # [B, 1, D]
+        x_rel = x[:, rel_indices]                    # [B, V-1, D]
+
+        # identity canonical pose + broadcast fxfy
+        rt_cano = self._identity_rt(b, device, dtype)                    # [B, 1, num_pose+3]
+        fxfy = self._predict_fxfy(x_canonical, v)                        # [B, V, 2]
+        info = torch.cat([rt_cano.expand(b, v, -1), fxfy], dim=-1)       # [B, V, num_pose+3+2]
+
+        # relative pose residuals
+        feat_rel = torch.cat([x_canonical.expand(-1, v - 1, -1), x_rel], dim=-1)
+        residuals = self.rel_head(feat_rel)                               # [B, V-1, num_pose+3]
+        info[:, rel_indices, :self.num_pose_element + 3] = (
+            info[:, rel_indices, :self.num_pose_element + 3] + residuals
+        )
+
+        return self._append_cxcy(info)
+
+    def _forward_single_view(self, x: torch.Tensor, v: int) -> torch.Tensor:
+        """Degenerate single-view case: identity pose broadcast to all views."""
+        b = x.shape[0]
+        rt_cano = self._identity_rt(b, x.device, x.dtype)
+        fxfy = self._predict_fxfy(x[:, 0:1], v)
+        info = torch.cat([rt_cano.expand(b, v, -1), fxfy], dim=-1)
+        return self._append_cxcy(info)
+
+    def _forward_global(
+        self,
+        x: torch.Tensor,
+        v: int,
+        canonical: str,
+    ) -> torch.Tensor:
+        """Global (non-pairwise) prediction: each view gets its own pose offset from identity."""
+        b = x.shape[0]
+        device, dtype = x.device, x.dtype
+
+        rt_canonical = self._identity_rt(b, device, dtype).expand(b, v, -1)
+        residuals = self.rel_head(x)  # [B, V, num_pose+3]
+
+        if canonical == 'unordered':
+            rt_final = rt_canonical + residuals
+        else:
+            if canonical == 'first':
+                cano_idx = 0
+            elif canonical == 'middle':
+                cano_idx = v // 2
+            else:
+                raise ValueError(f'Unknown canonical mode: {canonical!r}')
+            mask = torch.ones(1, v, 1, device=device)
+            mask[:, cano_idx, :] = 0.0
+            rt_final = rt_canonical + residuals * mask
+
+        fxfy = self._predict_fxfy(x[:, 0:1], v)
+        info = torch.cat([rt_final, fxfy], dim=-1)
+        return self._append_cxcy(info)
+
+
+# ---------------------------------------------------------------------------
+# Gaussian splatting helpers
+# ---------------------------------------------------------------------------
+
 class GaussiansUpsampler(nn.Module):
     """Project token features to per-Gaussian attributes."""
 
@@ -113,7 +360,8 @@ class GaussiansUpsampler(nn.Module):
         self.opacity_bias = config['model'].get('opacity_bias', -2.0)
 
     def to_gs(
-        self, gaussians: torch.Tensor,
+        self,
+        gaussians: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Split and activate raw Gaussian attribute predictions.
 
@@ -145,7 +393,6 @@ class GaussiansUpsampler(nn.Module):
         scaling = (scaling + self.scaling_bias).clamp(max=self.scaling_max).clamp(min=-10.0)
         opacity = (opacity + self.opacity_bias).clamp(min=-10.0)
         return xyz, features, scaling, rotation, opacity
-
 
 
 class Renderer(nn.Module):
@@ -201,24 +448,14 @@ class Renderer(nn.Module):
                 xyz, features, scaling, rotation, opacity, height, width, C2W, fxfycxcy,
             )
             b, v = C2W.size(0), C2W.size(1)
-            depth = torch.zeros(
-                b, v, 1, height, width, dtype=torch.float32, device=xyz.device,
-            )
-            alpha = torch.zeros(
-                b, v, 1, height, width, dtype=torch.float32, device=xyz.device,
-            )
+            depth = torch.zeros(b, v, 1, height, width, dtype=torch.float32, device=xyz.device)
+            alpha = torch.zeros(b, v, 1, height, width, dtype=torch.float32, device=xyz.device)
         else:
             b, v = C2W.size(0), C2W.size(1)
-            renderings = torch.zeros(
-                b, v, 3, height, width, dtype=torch.float32, device=xyz.device,
-            )
-
-            depth = torch.zeros(
-                b, v, 1, height, width, dtype=torch.float32, device=xyz.device,
-            )
-            alpha = torch.zeros(
-                b, v, 1, height, width, dtype=torch.float32, device=xyz.device,
-            )
+            kw = {'dtype': torch.float32, 'device': xyz.device}
+            renderings = torch.zeros(b, v, 3, height, width, **kw)
+            depth = torch.zeros(b, v, 1, height, width, **kw)
+            alpha = torch.zeros(b, v, 1, height, width, **kw)
 
             for i in range(b):
                 pc = self.gaussians_model.set_data(
@@ -256,7 +493,6 @@ def get_point_range_func(gaussians_config: dict):
 
     """
     range_setting = gaussians_config.get('range_setting', {'type': 'object_centric_depth'})
-
     if range_setting['type'] == 'object_centric_depth':
         def rangefunc(t):
             return (2.0 * torch.sigmoid(t) - 1.0) * 1.5 + 2.7
@@ -338,6 +574,7 @@ class LossComputer(nn.Module):
             l2_loss = masked_mse_loss(rendering, target, pixel_mask)
         else:
             l2_loss = F.mse_loss(rendering, target)
+
         gs_reg_loss = (
             F.mse_loss(xyz_norm, xyz_init_norm)
             if xyz_norm is not None and xyz_init_norm is not None
@@ -365,8 +602,23 @@ class LossComputer(nn.Module):
         )
 
 
+# ---------------------------------------------------------------------------
+# ERayZer base model
+# ---------------------------------------------------------------------------
+
 class ERayZer(BaseLightningModel):
-    """ERayZer: encode multi-view images with GT poses into 3D Gaussians and render."""
+    """ERayZer: encode multi-view images into 3D Gaussians and render.
+
+    Camera parameters are obtained via ``_resolve_cameras``, which by default
+    runs a learned pose-prediction branch (transformer_encoder + PoseEstimator).
+    Subclasses override ``_resolve_cameras`` to use a different source (e.g.
+    ground-truth cameras in ``BEAST3D``).
+
+    The camera prediction branch is only constructed when
+    ``config['model']['transformer']['encoder_n_layer'] > 0``.
+    """
+
+    _NUM_REGISTER_TOKENS = 4
 
     def __init__(self, config: dict) -> None:
         """Initialize ERayZer model architecture.
@@ -417,18 +669,47 @@ class ERayZer(BaseLightningModel):
             )
             self.pe_embedder_plucker.apply(_init_weights)
 
-        # frozen DINO feature extractor
-        self.dino_featurizer = DinoV3()
+        use_qk_norm = config['model']['transformer'].get('use_qk_norm', False)
+        special_init = config['model']['transformer'].get('special_init', False)
+        depth_init = config['model']['transformer'].get('depth_init', False)
+
+        # camera prediction branch (only when encoder_n_layer is set)
+        encoder_n_layer = config['model']['transformer'].get('encoder_n_layer', 0)
+        if encoder_n_layer > 0:
+            if encoder_n_layer % 2 != 0:
+                raise ValueError(
+                    f'encoder_n_layer must be even (alternating frame/global attention), '
+                    f'got {encoder_n_layer}'
+                )
+            self.num_register_tokens = self._NUM_REGISTER_TOKENS
+            self.camera_token = nn.Parameter(torch.empty(1, 1, self.d))
+            self.register_token = nn.Parameter(torch.empty(1, self.num_register_tokens, self.d))
+            nn.init.normal_(self.camera_token, std=1e-6)
+            nn.init.normal_(self.register_token, std=1e-6)
+            self.transformer_encoder = build_transformer_blocks(
+                num_layers=encoder_n_layer,
+                d=self.d,
+                d_head=self.d_head,
+                use_qk_norm=use_qk_norm,
+                special_init=special_init,
+                depth_init=depth_init,
+            )
+            self.pose_predictor = PoseEstimator(config)
 
         # geometry encoder (alternating frame / global attention)
-        use_qk_norm = config['model']['transformer'].get('use_qk_norm', False)
+        encoder_geom_n_layer = config['model']['transformer']['encoder_geom_n_layer']
+        if encoder_geom_n_layer % 2 != 0:
+            raise ValueError(
+                f'encoder_geom_n_layer must be even (alternating frame/global attention), '
+                f'got {encoder_geom_n_layer}'
+            )
         self.transformer_encoder_geom = build_transformer_blocks(
-            num_layers=config['model']['transformer']['encoder_geom_n_layer'],
+            num_layers=encoder_geom_n_layer,
             d=self.d,
             d_head=self.d_head,
             use_qk_norm=use_qk_norm,
-            special_init=config['model']['transformer'].get('special_init', False),
-            depth_init=config['model']['transformer'].get('depth_init', False),
+            special_init=special_init,
+            depth_init=depth_init,
         )
 
         # Plucker ray tokenizer: 6-channel ray map → per-patch d-dim embedding
@@ -451,11 +732,10 @@ class ERayZer(BaseLightningModel):
         )
         self.mlp_fuse.apply(_init_weights)
 
-        # training settings
         self.num_views = config['training']['num_views']
         self.mask_ratio = float(config['model'].get('mask_ratio', 0.0))
 
-        # Gaussian attribute decoder: d-dim tokens → (ph*pw * gs_channels) attributes
+        # Gaussian attribute decoder
         sh_degree = config['model']['gaussians']['sh_degree']
         n_gs_channels = 3 + (sh_degree + 1) ** 2 * 3 + 3 + 4 + 1
         self.image_token_decoder = nn.Sequential(
@@ -479,6 +759,74 @@ class ERayZer(BaseLightningModel):
             self.random_index = config['training'].get('random_inputs', False)
         else:
             self.random_index = config['training'].get('random_split', False)
+
+    # ------------------------------------------------------------------
+    # Camera resolution hook
+    # ------------------------------------------------------------------
+
+    def _resolve_cameras(
+        self,
+        img_tokens: torch.Tensor,
+        b: int,
+        v_all: int,
+        n: int,
+        data: dict,
+        device: torch.device,
+    ) -> tuple[torch.Tensor, torch.Tensor, bool]:
+        """Predict camera parameters from image tokens.
+
+        Override this in subclasses to substitute a different camera source.
+        The base implementation runs the learned camera-prediction branch.
+
+        Parameters
+        ----------
+        img_tokens: spatial-PE-added image tokens of shape [B*V, n, d].
+        b: batch size.
+        v_all: total number of views (may include padding).
+        n: number of patch tokens per view.
+        data: batch dict (unused by the prediction branch but available to overrides).
+        device: compute device.
+
+        Returns
+        -------
+        tuple of:
+            c2w_all [B, V, 4, 4] camera-to-world matrices,
+            fxfycxcy_all [B, V, 4] intrinsics,
+            normalized (bool) — True means fxfycxcy values are divided by image dims.
+
+        Raises
+        ------
+        RuntimeError
+            if the camera prediction modules were not initialized (encoder_n_layer == 0).
+
+        """
+        if not hasattr(self, 'transformer_encoder'):
+            raise RuntimeError(
+                'ERayZer camera prediction modules are not initialized '
+                '(encoder_n_layer was 0 or not set). '
+                'Either set encoder_n_layer > 0 in config, or use BEAST3D for GT cameras.'
+            )
+
+        # build per-view token sequences: [cam_token, register_tokens, img_tokens]
+        cam_tokens = repeat(self.camera_token, '1 one d -> bv one d', bv=b * v_all)
+        reg_tokens = repeat(self.register_token, '1 r d -> bv r d', bv=b * v_all)
+        all_tokens = torch.cat([cam_tokens, reg_tokens, img_tokens], dim=1)
+        all_tokens = rearrange(all_tokens, '(b v) n d -> b (v n) d', b=b)
+
+        # camera encoder (alternating frame / global attention)
+        all_tokens = self.run_vggt_encoder(all_tokens, b, v_all)
+        all_tokens = rearrange(all_tokens, 'b (v n) d -> (b v) n d', v=v_all)
+
+        # extract camera token (first token of each view)
+        cam_out = all_tokens[:, 0]  # [B*V, d]
+
+        # predict poses
+        cam_info = self.pose_predictor(cam_out, v_all)  # [B*V, pose_dim]
+        pred_c2w, pred_fxfycxcy = get_cam_se3(cam_info)
+        pred_c2w = rearrange(pred_c2w, '(b v) h w -> b v h w', b=b)
+        pred_fxfycxcy = rearrange(pred_fxfycxcy, '(b v) d -> b v d', b=b).detach()
+
+        return pred_c2w, pred_fxfycxcy, True
 
     # ------------------------------------------------------------------
     # BaseLightningModel interface
@@ -592,8 +940,8 @@ class ERayZer(BaseLightningModel):
         ----------
         data: batch dict with keys:
             - image: [B, V, 3, H, W] in [0, 1]
-            - c2w: [B, V, 4, 4] camera-to-world matrices
-            - fxfycxcy: [B, V, 4] intrinsics (fx, fy, cx, cy)
+            - c2w / fxfycxcy: only required when using a subclass that reads
+              GT cameras (e.g. BEAST3D).
             - input_indices (optional): [B, n_in]
             - target_indices (optional): [B, n_tgt]
         render_video: whether to render an interpolated video trajectory.
@@ -618,41 +966,32 @@ class ERayZer(BaseLightningModel):
         v_input = input_idx.shape[1]
 
         # pad to 10 views (repeat last view) if fewer are available
-        if v_real < 10:
-            pad_views = 10 - v_real
-            last_view = image_all[:, -1:, ...].repeat(1, pad_views, 1, 1, 1)
+        pad_views = max(0, 10 - v_real)
+        if pad_views:
+            last_view = image_all[:, -1:, ...].expand(-1, pad_views, -1, -1, -1)
             image_all = torch.cat([image_all, last_view], dim=1)
             v_all = 10
         else:
             v_all = v_real
 
-        # tokenize all views: [B*V, n_patches, d]
-        img_tokens = self.image_tokenizer(image_all)
+        # tokenize all views and add spatial PE
+        img_tokens = self.image_tokenizer(image_all)  # [B*V, n, d]
         _, n, d = img_tokens.shape
-
         if self.use_pe_embedding_layer:
             img_tokens = self.add_spatial_pe(
                 img_tokens, b, v_all, self.hh, self.ww, embedder=self.pe_embedder,
             )
 
-        # DINO CLS tokens for input views
-        dino_image_all = data['image']
-        if v_real < 10:
-            last_view = dino_image_all[:, -1:, ...].repeat(1, pad_views, 1, 1, 1)
-            dino_image_all = torch.cat([dino_image_all, last_view], dim=1)
-        dino_image_all = imagenet_normalize(dino_image_all)
-        _, dino_cls_tokens = self.dino_featurizer(dino_image_all)  # [B, V, embed_dim]
-        dino_cls_tokens = dino_cls_tokens[batch_idx, input_idx, ...]  # [B, v_input, embed_dim]
+        # resolve cameras (predicted or GT, depending on subclass)
+        c2w_all, fxfycxcy_all, normalized = self._resolve_cameras(
+            img_tokens, b, v_all, n, data, device,
+        )
 
-        # select input and target poses from data
-        c2w_all = data['c2w']          # [B, V, 4, 4]
-        fxfycxcy_all = data['fxfycxcy']  # [B, V, 4]
-        c2w_input = c2w_all[batch_idx, input_idx, ...]      # [B, v_input, 4, 4]
+        # select input and target cameras
+        c2w_input = c2w_all[batch_idx, input_idx, ...]          # [B, v_input, 4, 4]
         fxfycxcy_input = fxfycxcy_all[batch_idx, input_idx, ...]  # [B, v_input, 4]
-        c2w_target = c2w_all[batch_idx, target_idx, ...]    # [B, v_target, 4, 4]
+        c2w_target = c2w_all[batch_idx, target_idx, ...]          # [B, v_target, 4, 4]
         fxfycxcy_target = fxfycxcy_all[batch_idx, target_idx, ...].clone()
-
-        normalized = self.config['model'].get('normalized_intrinsics', True)
 
         # Plucker ray encoding for input views
         plucker_rays_input = cam_info_to_plucker(
@@ -665,38 +1004,27 @@ class ERayZer(BaseLightningModel):
         plucker_rays_input = rearrange(
             plucker_rays_input, '(b v) c h w -> b v h w c', b=b, v=v_input,
         )
-        plucker_emb_input = self.input_pose_tokenizer(plucker_rays_input)  # [(B*v_input), n, d]
+        plucker_emb_input = self.input_pose_tokenizer(plucker_rays_input)
         if self.use_pe_embedding_layer:
             plucker_emb_input = self.add_spatial_pe(
                 plucker_emb_input, b, v_input, self.hh, self.ww,
                 embedder=self.pe_embedder_plucker,
             )
-        plucker_emb_input = rearrange(
-            plucker_emb_input, '(b v) n d -> b (v n) d', v=v_input,
-        )
+        plucker_emb_input = rearrange(plucker_emb_input, '(b v) n d -> b (v n) d', v=v_input)
 
         # select and optionally mask input image tokens
         img_tokens_all = rearrange(img_tokens, '(b v) n d -> b v n d', b=b, v=v_all)
-        img_tokens_input = img_tokens_all[batch_idx, input_idx, ...]  # [B, v_input, n, d]
+        img_tokens_input = img_tokens_all[batch_idx, input_idx, ...]
         if self.training and self.mask_ratio > 0:
-            keep = (
-                torch.rand(img_tokens_input.shape[:-1], device=device) >= self.mask_ratio
-            )
+            keep = torch.rand(img_tokens_input.shape[:-1], device=device) >= self.mask_ratio
             img_tokens_input = img_tokens_input * keep.unsqueeze(-1).to(img_tokens_input.dtype)
 
-        # fuse image tokens with Plucker pose embeddings
+        # fuse image tokens with Plucker embeddings
         img_tokens_input = rearrange(img_tokens_input, 'b v n d -> b (v n) d')
         img_tokens_input = torch.cat([img_tokens_input, plucker_emb_input], dim=-1)
-        all_tokens = self.mlp_fuse(img_tokens_input)  # [B, v_input*n, d]
+        all_tokens = self.mlp_fuse(img_tokens_input)
 
-        # prepend DINO CLS tokens (one per input view)
-        all_tokens = torch.cat([dino_cls_tokens, all_tokens], dim=1)  # [B, v_input+v_input*n, d]
-
-        # geometry encoder
         all_tokens = self.run_vggt_encoder_geom(all_tokens, b, v_input)
-
-        # split out CLS tokens; rest are per-patch tokens for Gaussian decoding
-        frame_cls_tokens, all_tokens = all_tokens.split([v_input, v_input * n], dim=1)
 
         # decode tokens to per-pixel Gaussian attributes
         img_aligned_gaussians = self.image_token_decoder(all_tokens)
@@ -763,8 +1091,8 @@ class ERayZer(BaseLightningModel):
                 'Check dataset preprocessing and target_image config.'
             )
         if normalized:
-            intrinsics_scale = fxfycxcy_target.new_tensor([width, height, width, height])
-            fxfycxcy_target = fxfycxcy_target * intrinsics_scale
+            scale = fxfycxcy_target.new_tensor([width, height, width, height])
+            fxfycxcy_target = fxfycxcy_target * scale
 
         render = self.renderer(
             xyz, features, scaling, rotation, opacity,
@@ -846,8 +1174,6 @@ class ERayZer(BaseLightningModel):
             target_indices=target_idx,
             xyz_norm=None,
             xyz_init_norm=None,
-            frame_cls_tokens=frame_cls_tokens,
-            dino_cls_tokens=dino_cls_tokens,
             render_video=(
                 vis_only_results.rendered_images_video.detach().clamp(0, 1)
                 if vis_only_results is not None
@@ -913,7 +1239,8 @@ class ERayZer(BaseLightningModel):
             pw=self.pw,
         )
 
-        normalized = self.config['model'].get('normalized_intrinsics', True)
+        # this method receives pre-computed cameras so normalized=False
+        normalized = False
         ray_o = None
         if self.config['model']['hard_pixelalign']:
             img_aligned_xyz = img_aligned_xyz.mean(dim=2, keepdim=True)
@@ -1031,9 +1358,7 @@ class ERayZer(BaseLightningModel):
         if can_split and self.random_index:
             perm = torch.randperm(num_real_views, device=device)
             input_idx = perm[:num_input].unsqueeze(0).repeat(batch_size, 1)
-            target_idx = perm[num_input: num_input + num_target].unsqueeze(0).repeat(
-                batch_size, 1,
-            )
+            target_idx = perm[num_input:num_input + num_target].unsqueeze(0).repeat(batch_size, 1)
             return input_idx, target_idx
 
         if can_split:
@@ -1115,9 +1440,61 @@ class ERayZer(BaseLightningModel):
             device=tokens.device,
         ).to(tokens.dtype)  # [n, d]
 
-        spatial_pe = spatial_pe.reshape(1, 1, n, d).repeat(b, v, 1, 1)
-        spatial_pe = spatial_pe.reshape(bv, n, d)
+        spatial_pe = spatial_pe.reshape(1, 1, n, d).expand(b, v, -1, -1).reshape(bv, n, d)
         return tokens + embedder(spatial_pe)
+
+    def run_vggt_encoder(
+        self,
+        all_tokens: torch.Tensor,
+        b: int,
+        v: int,
+    ) -> torch.Tensor:
+        """Run the camera-prediction encoder with alternating frame/global attention.
+
+        Parameters
+        ----------
+        all_tokens: token tensor of shape [B, V*n, d].
+        b: batch size.
+        v: number of views.
+
+        Returns
+        -------
+        updated token tensor of shape [B, V*n, d].
+
+        """
+        checkpoint_every = self.config['training']['grad_checkpoint_every']
+        for i in range(0, len(self.transformer_encoder), checkpoint_every):
+            if i % 2 == 0:
+                all_tokens = rearrange(all_tokens, 'b (v n) d -> (b v) n d', v=v)
+            else:
+                all_tokens = rearrange(all_tokens, '(b v) n d -> b (v n) d', b=b)
+            all_tokens = torch.utils.checkpoint.checkpoint(
+                self._run_layers_encoder(i, i + 1),
+                all_tokens,
+                use_reentrant=False,
+            )
+            if checkpoint_every > 1:
+                all_tokens = self._run_layers_encoder(i + 1, i + checkpoint_every)(all_tokens)
+        return all_tokens
+
+    def _run_layers_encoder(self, start: int, end: int):
+        """Return a closure applying camera-encoder layers [start, end).
+
+        Parameters
+        ----------
+        start: index of the first layer to apply.
+        end: one past the index of the last layer to apply.
+
+        Returns
+        -------
+        callable that applies the specified layer range.
+
+        """
+        def custom_forward(tokens):
+            for i in range(start, min(end, len(self.transformer_encoder))):
+                tokens = self.transformer_encoder[i](tokens)
+            return tokens
+        return custom_forward
 
     def run_vggt_encoder_geom(
         self,
@@ -1126,11 +1503,6 @@ class ERayZer(BaseLightningModel):
         v: int,
     ) -> torch.Tensor:
         """Run the geometry encoder with alternating frame/global attention.
-
-        Even-indexed layers process each view independently (frame attention);
-        odd-indexed layers process all views jointly (global attention).
-        Gradient checkpointing is applied according to
-        config['training']['grad_checkpoint_every'].
 
         Parameters
         ----------
@@ -1149,7 +1521,6 @@ class ERayZer(BaseLightningModel):
                 all_tokens = rearrange(all_tokens, 'b (v n) d -> (b v) n d', v=v)
             else:
                 all_tokens = rearrange(all_tokens, '(b v) n d -> b (v n) d', b=b)
-
             all_tokens = torch.utils.checkpoint.checkpoint(
                 self._run_layers_geom(i, i + 1),
                 all_tokens,
@@ -1160,7 +1531,7 @@ class ERayZer(BaseLightningModel):
         return all_tokens
 
     def _run_layers_geom(self, start: int, end: int):
-        """Return a closure that applies geometry encoder layers [start, end).
+        """Return a closure applying geometry-encoder layers [start, end).
 
         Parameters
         ----------
@@ -1169,7 +1540,7 @@ class ERayZer(BaseLightningModel):
 
         Returns
         -------
-        callable that applies the specified layer range to a token tensor.
+        callable that applies the specified layer range.
 
         """
         def custom_forward(tokens):
@@ -1214,8 +1585,8 @@ class ERayZer(BaseLightningModel):
 
             all_renderings = []
             for i in range(b):
-                c2ws = c2w_all[i]        # [V, 4, 4]
-                fxfycxcy = fxfycxcy_all[i]  # [V, 4]
+                c2ws = c2w_all[i]
+                fxfycxcy = fxfycxcy_all[i]
                 Ks = torch.zeros((c2ws.shape[0], 3, 3), device=device)
                 Ks[:, 0, 0] = fxfycxcy[:, 0]
                 Ks[:, 1, 1] = fxfycxcy[:, 1]
@@ -1227,9 +1598,9 @@ class ERayZer(BaseLightningModel):
                 frame_c2ws = torch.cat(
                     [
                         c2ws_interp.to(device),
-                        torch.tensor(
-                            [[[0, 0, 0, 1]]], device=device,
-                        ).repeat(c2ws_interp.shape[0], 1, 1),
+                        torch.tensor([[[0, 0, 0, 1]]], device=device).expand(
+                            c2ws_interp.shape[0], -1, -1,
+                        ),
                     ],
                     dim=1,
                 )
@@ -1240,18 +1611,15 @@ class ERayZer(BaseLightningModel):
                 frame_fxfycxcy[:, 3] = Ks_interp[:, 1, 2]
 
                 img_size = self.config['model']['image_tokenizer']['image_size']
-                batch_size_render = 5
                 num_views_traj = frame_c2ws.shape[0]
                 renderings = []
-                for start in range(0, num_views_traj, batch_size_render):
-                    end = min(start + batch_size_render, num_views_traj)
-                    batch_c2w = frame_c2ws[start:end].unsqueeze(0)
-                    batch_fx = frame_fxfycxcy[start:end].unsqueeze(0)
+                for start in range(0, num_views_traj, 5):
+                    end = min(start + 5, num_views_traj)
                     rendered_batch = self.renderer(
                         xyz, features, scaling, rotation, opacity,
                         img_size, img_size,
-                        C2W=batch_c2w,
-                        fxfycxcy=batch_fx,
+                        C2W=frame_c2ws[start:end].unsqueeze(0),
+                        fxfycxcy=frame_fxfycxcy[start:end].unsqueeze(0),
                     ).render.squeeze(0)
                     renderings.append(rendered_batch)
 
