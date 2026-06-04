@@ -22,7 +22,9 @@ from einops.layers.torch import Rearrange
 from beast.geometry.camera import cam_info_to_plucker, get_interpolated_poses_many
 from beast.geometry.positional_encoding import get_2d_sincos_pos_embed
 from beast.geometry.rotations import quat2mat, rot6d2mat
+from beast.losses import masked_mse_loss
 from beast.models.base import BaseLightningModel
+from beast.nn.perceptual import VGGPerceptual
 from beast.nn.transformer import (
     QK_Norm_TransformerBlock,
     _init_weights,
@@ -33,7 +35,6 @@ from beast.rendering.gaussians_renderer import (
     deferred_gaussian_render,
     render_opencv_cam_gsplat,
 )
-from beast.rendering.losses import PerceptualLoss, masked_mse_loss
 
 
 def sanitize(t: torch.Tensor) -> torch.Tensor:
@@ -537,7 +538,7 @@ class LossComputer(nn.Module):
 
         self.perceptual_loss_module = None
         if self.config['training'].get('perceptual_loss_weight', 0.0) > 0.0:
-            self.perceptual_loss_module = PerceptualLoss(device).eval()
+            self.perceptual_loss_module = VGGPerceptual(device).eval()
 
     def forward(
         self,
