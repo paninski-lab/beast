@@ -185,3 +185,13 @@ app.log
 # data
 /data/
 *.png
+
+# machine-specific run / inspection scripts (private paths, accounts, node names)
+scripts/*.sbatch
+scripts/export_pointcloud.py
+scripts/preview_pointcloud.py
+scripts/smoke_erayzer_load.py
+scripts/viz_erayzer.py
+
+# fine-tune config holds a machine-specific init_checkpoint path (kept local)
+configs/multiview/erayzer_cheese3d_ft.yaml

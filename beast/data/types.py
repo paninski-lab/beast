@@ -1,9 +1,10 @@
 """Typed dictionaries for dataset item structures."""
 
-from typing import NotRequired, TypedDict
+from typing import TypedDict
 
 from jaxtyping import Float
 from torch import Tensor
+from typing_extensions import NotRequired
 
 
 class ExampleDict(TypedDict):

@@ -13,6 +13,7 @@ from beast.models.erayzer.erayzer_model import (
     GaussiansUpsampler,
     LossComputer,
     PoseEstimator,
+    _filter_init_state_dict,
     build_transformer_blocks,
     get_cam_se3,
     get_point_range_func,
@@ -143,7 +144,7 @@ class TestPoseEstimator:
     """Test the PoseEstimator module."""
 
     def _make_config(self, canonical: str = 'first', mode: str = 'pairwise',
-                     rep: str = '6d') -> dict:
+                     rep: str = '6d', per_view_focal: bool = False) -> dict:
         return {
             'model': {
                 'transformer': {'d': 32},
@@ -151,6 +152,7 @@ class TestPoseEstimator:
                     'canonical': canonical,
                     'mode': mode,
                     'representation': rep,
+                    'per_view_focal': per_view_focal,
                 },
             },
             'training': {'pose_consistency_reg_weight': 0.0},
@@ -213,6 +215,28 @@ class TestPoseEstimator:
         # last two columns are cx, cy
         assert torch.allclose(out[:, 11], torch.full((6,), 0.5), atol=1e-5)
         assert torch.allclose(out[:, 12], torch.full((6,), 0.5), atol=1e-5)
+
+    def test_per_view_focal_false_broadcasts_canonical(self) -> None:
+        # default (checkpoint-matching): focal predicted from the canonical view
+        # and broadcast, so every view shares the same fx
+        config = self._make_config(per_view_focal=False)
+        estimator = PoseEstimator(config)
+        b, v = 2, 4
+        x = torch.randn(b, v, 32)
+        out = estimator(x, v)  # [b, v, 13]
+        fx = out[..., 9]  # focal x is column 9 (after 6 rot + 3 trans)
+        assert torch.allclose(fx, fx[:, :1].expand(-1, v), atol=1e-6)
+
+    def test_per_view_focal_true_varies_per_view(self) -> None:
+        # opt-in: focal head applied per view, so distinct view tokens give
+        # distinct per-view focals
+        config = self._make_config(per_view_focal=True)
+        estimator = PoseEstimator(config)
+        b, v = 2, 4
+        x = torch.randn(b, v, 32)
+        out = estimator(x, v)
+        fx = out[..., 9]
+        assert not torch.allclose(fx, fx[:, :1].expand(-1, v), atol=1e-4)
 
 
 # ---------------------------------------------------------------------------
@@ -639,3 +663,116 @@ class TestERayZerIntegration:
         config = copy.deepcopy(config_erayzer)
         config['training']['perceptual_loss_weight'] = 0.1
         run_erayzer_model_test(config=config)
+
+
+# ---------------------------------------------------------------------------
+# TestFilterInitStateDict
+# ---------------------------------------------------------------------------
+
+
+class TestFilterInitStateDict:
+    """Test the _filter_init_state_dict checkpoint-extraction helper."""
+
+    def test_extracts_from_state_dict_key(self) -> None:
+        raw = {'state_dict': {'a': torch.zeros(1), 'b': torch.zeros(2)}}
+        out = _filter_init_state_dict(raw)
+        assert set(out) == {'a', 'b'}
+
+    def test_extracts_from_model_key(self) -> None:
+        raw = {'model': {'a': torch.zeros(1)}}
+        out = _filter_init_state_dict(raw)
+        assert set(out) == {'a'}
+
+    def test_handles_bare_top_level_state_dict(self) -> None:
+        raw = {'camera_token': torch.zeros(1), 'register_token': torch.zeros(2)}
+        out = _filter_init_state_dict(raw)
+        assert set(out) == {'camera_token', 'register_token'}
+
+    def test_drops_loss_computer_keys(self) -> None:
+        raw = {
+            'camera_token': torch.zeros(1),
+            'loss_computer.perceptual_loss_module.vgg.features.0.weight': torch.zeros(3),
+            'loss_computer.anything': torch.zeros(1),
+        }
+        out = _filter_init_state_dict(raw)
+        assert set(out) == {'camera_token'}
+
+    def test_keeps_non_dropped_keys(self) -> None:
+        raw = {'state_dict': {
+            'transformer_encoder.0.norm1.weight': torch.zeros(4),
+            'loss_computer.x': torch.zeros(1),
+        }}
+        out = _filter_init_state_dict(raw)
+        assert set(out) == {'transformer_encoder.0.norm1.weight'}
+
+    def test_custom_drop_prefix(self) -> None:
+        raw = {'keep.a': torch.zeros(1), 'drop.b': torch.zeros(1)}
+        out = _filter_init_state_dict(raw, drop_prefixes=('drop.',))
+        assert set(out) == {'keep.a'}
+
+
+# ---------------------------------------------------------------------------
+# TestLoadInitCheckpoint
+# ---------------------------------------------------------------------------
+
+
+class TestValidationVisuals:
+    """Test ERayZer validation-visualization guards (no GPU/model build needed)."""
+
+    def test_no_logger_is_noop(self) -> None:
+        # logger=None -> no image-capable experiment -> returns without error
+        standin = SimpleNamespace(logger=None)
+        ERayZer._log_validation_visuals(standin, {})
+
+    def test_logger_without_add_image_is_noop(self) -> None:
+        # an experiment lacking add_image is treated as not image-capable
+        standin = SimpleNamespace(logger=SimpleNamespace(experiment=object()))
+        ERayZer._log_validation_visuals(standin, {})
+
+    def test_forward_failure_is_swallowed(self) -> None:
+        # a capable logger but a get_model_outputs that raises must not propagate
+        class _Exp:
+            def add_image(self, *a, **k) -> None:
+                pass
+
+        def _boom(_batch) -> dict:
+            raise RuntimeError('forward exploded')
+
+        standin = SimpleNamespace(
+            logger=SimpleNamespace(experiment=_Exp()),
+            get_model_outputs=_boom,
+        )
+        ERayZer._log_validation_visuals(standin, {})
+
+
+class TestLoadInitCheckpoint:
+    """Test ERayZer._load_init_checkpoint file handling and strict=False load."""
+
+    def test_missing_file_raises(self, tmp_path) -> None:
+        # the file-existence check runs before any use of self, so a stand-in
+        # object exercises the error path without building the full model
+        missing = tmp_path / 'nope.bin'
+        with pytest.raises(FileNotFoundError, match='init_checkpoint not found'):
+            ERayZer._load_init_checkpoint(object(), str(missing))
+
+    def test_loads_matching_keys_strict_false(self, tmp_path) -> None:
+        # build a tiny module, save part of its state dict (plus a loss_computer
+        # key and an unexpected key), and confirm the loader maps what it can
+        module = nn.Sequential(nn.Linear(3, 4))
+        ckpt = {
+            'state_dict': {
+                '0.weight': torch.ones(4, 3),
+                '0.bias': torch.ones(4),
+                'loss_computer.vgg.x': torch.zeros(2),  # must be dropped
+                'unexpected.param': torch.zeros(1),     # tolerated by strict=False
+            },
+        }
+        path = tmp_path / 'ckpt.bin'
+        torch.save(ckpt, path)
+
+        result = ERayZer._load_init_checkpoint(module, str(path))
+
+        assert torch.allclose(module[0].weight, torch.ones(4, 3))
+        assert torch.allclose(module[0].bias, torch.ones(4))
+        # loss_computer.* dropped, so it is not reported as unexpected
+        assert result.unexpected_keys == ['unexpected.param']
