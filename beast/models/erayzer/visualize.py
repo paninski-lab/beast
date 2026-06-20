@@ -94,58 +94,38 @@ def make_render_grid(
     input_image: torch.Tensor,
     target_image: torch.Tensor,
     render: torch.Tensor,
+    render_input: torch.Tensor | None = None,
     sample_idx: int = 0,
 ) -> torch.Tensor:
-    """Build an input / GT-target / predicted-render comparison grid.
+    """Build a single comparison grid of input + target views and renders.
 
     Each input is a stack of per-view images shaped ``[B, V, 3, H, W]`` (or
-    ``[V, 3, H, W]``). The three rows are tiled horizontally over their views and
-    stacked vertically; rows with fewer views are right-padded so widths match.
+    ``[V, 3, H, W]``). Rows are tiled horizontally over their views and stacked
+    vertically; rows with fewer views are right-padded so widths match. When
+    ``render_input`` is given, the input-view reconstruction (NVS at the input
+    cameras) is included as its own row, so the input self-consistency and the
+    target novel-view synthesis appear in one image.
 
     Parameters
     ----------
     input_image: reference views fed to the model.
     target_image: ground-truth novel (target) views.
     render: predicted renders of the target views.
+    render_input: optional renders of the input views (input-view NVS).
     sample_idx: which batch element to visualize.
 
     Returns
     -------
-    a ``[3, H, W]`` float image in ``[0, 1]``: row 0 input, row 1 GT, row 2 pred.
+    a ``[3, H, W]`` float image in ``[0, 1]``. Rows: input GT, [input render],
+    GT target, predicted target render.
 
     """
-    return _stack_rows([
-        _hstack_views(input_image, sample_idx),
-        _hstack_views(target_image, sample_idx),
-        _hstack_views(render, sample_idx),
-    ])
-
-
-def make_recon_grid(
-    gt_views: torch.Tensor,
-    pred_views: torch.Tensor,
-    sample_idx: int = 0,
-) -> torch.Tensor:
-    """Build a GT-vs-render comparison grid for input-view reconstruction (NVS).
-
-    Rendering the predicted Gaussians from the *input* camera poses and comparing
-    against the input images is a self-reconstruction check on the geometry.
-
-    Parameters
-    ----------
-    gt_views: ground-truth views ``[B, V, 3, H, W]`` (or ``[V, 3, H, W]``).
-    pred_views: rendered views at the same cameras, matching shape.
-    sample_idx: which batch element to visualize.
-
-    Returns
-    -------
-    a ``[3, H, W]`` float image in ``[0, 1]``: row 0 GT, row 1 render.
-
-    """
-    return _stack_rows([
-        _hstack_views(gt_views, sample_idx),
-        _hstack_views(pred_views, sample_idx),
-    ])
+    rows = [_hstack_views(input_image, sample_idx)]
+    if render_input is not None:
+        rows.append(_hstack_views(render_input, sample_idx))
+    rows.append(_hstack_views(target_image, sample_idx))
+    rows.append(_hstack_views(render, sample_idx))
+    return _stack_rows(rows)
 
 
 def _select_cameras(c2w: torch.Tensor, sample_idx: int) -> np.ndarray:

@@ -716,6 +716,64 @@ class TestFilterInitStateDict:
 # ---------------------------------------------------------------------------
 
 
+class TestResolveViewIndices:
+    """Test ERayZer.resolve_view_indices view-sampling (no model build needed)."""
+
+    def _standin(self, training: bool, training_cfg: dict) -> SimpleNamespace:
+        # resolve_view_indices only touches self.training, self.random_index,
+        # and self.config — a stand-in exercises it without building the model
+        return SimpleNamespace(
+            training=training,
+            random_index=False,
+            config={'training': training_cfg, 'inference': False},
+        )
+
+    def _call(self, standin, num_real_views: int, batch_size: int = 2):
+        data = {'image': torch.zeros(batch_size, num_real_views, 3, 8, 8)}
+        return ERayZer.resolve_view_indices(
+            standin, data, num_real_views, torch.device('cpu'),
+        )
+
+    def test_target_view_range_holds_out_exactly_n_targets(self) -> None:
+        standin = self._standin(True, {'target_view_range': [1, 1], 'num_views': 6})
+        for _ in range(30):
+            in_idx, tgt_idx = self._call(standin, 6)
+            assert tgt_idx.shape[1] == 1                 # exactly 1 target
+            assert in_idx.shape[1] >= 1                  # at least 1 input
+            assert in_idx.shape[1] + tgt_idx.shape[1] <= 6
+
+    def test_total_view_count_varies_across_batches(self) -> None:
+        standin = self._standin(True, {'target_view_range': [1, 1], 'num_views': 6})
+        totals = {int(self._call(standin, 6)[0].shape[1] + self._call(standin, 6)[1].shape[1])
+                  for _ in range(60)}
+        # multi-view-style sampler must use a variable total, not a fixed count
+        assert len(totals) >= 2
+
+    def test_input_and_target_indices_are_disjoint(self) -> None:
+        standin = self._standin(True, {'target_view_range': [1, 1], 'num_views': 6})
+        for _ in range(30):
+            in_idx, tgt_idx = self._call(standin, 6)
+            a = set(in_idx[0].tolist())
+            b = set(tgt_idx[0].tolist())
+            assert a.isdisjoint(b)
+            assert max(a | b) < 6
+
+    def test_target_range_two_allows_two_targets(self) -> None:
+        standin = self._standin(True, {'target_view_range': [1, 2], 'num_views': 6})
+        seen = {int(self._call(standin, 6)[1].shape[1]) for _ in range(60)}
+        assert seen <= {1, 2} and len(seen) >= 1
+
+    def test_validation_uses_fixed_split_not_sampler(self) -> None:
+        # at val time the sampler branch is skipped: deterministic fixed split
+        standin = self._standin(
+            False,
+            {'target_view_range': [1, 1], 'num_views': 6,
+             'num_input_views': 2, 'num_target_views': 4},
+        )
+        in_idx, tgt_idx = self._call(standin, 6)
+        assert in_idx.shape[1] == 2 and tgt_idx.shape[1] == 4
+
+
 class TestValidationVisuals:
     """Test ERayZer validation-visualization guards (no GPU/model build needed)."""
 

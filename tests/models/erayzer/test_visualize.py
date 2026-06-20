@@ -9,7 +9,6 @@ from beast.models.erayzer.visualize import (
     camera_intrinsic_stats,
     export_gaussian_glb,
     make_camera_pose_image,
-    make_recon_grid,
     make_render_grid,
     viz_is_due,
 )
@@ -62,35 +61,17 @@ class TestMakeRenderGrid:
         grid = make_render_grid(inp, tgt, ren)
         assert grid.min() >= 0.0 and grid.max() <= 1.0
 
-
-# ---------------------------------------------------------------------------
-# TestMakeReconGrid
-# ---------------------------------------------------------------------------
-
-
-class TestMakeReconGrid:
-    """Test the make_recon_grid function (input-view NVS: GT vs render)."""
-
-    def test_returns_chw_float_in_unit_range(self) -> None:
-        gt = torch.rand(1, 2, 3, 8, 8)
-        pred = torch.rand(1, 2, 3, 8, 8)
-        grid = make_recon_grid(gt, pred)
-        assert grid.ndim == 3
-        assert grid.shape[0] == 3
-        assert grid.dtype == torch.float32
-        assert grid.min() >= 0.0 and grid.max() <= 1.0
-
-    def test_accepts_unbatched_inputs(self) -> None:
-        gt = torch.rand(3, 3, 8, 8)
-        pred = torch.rand(3, 3, 8, 8)
-        grid = make_recon_grid(gt, pred)
-        assert grid.shape[0] == 3
-
-    def test_clamps_out_of_range_values(self) -> None:
-        gt = torch.full((1, 1, 3, 8, 8), 9.0)
-        pred = torch.full((1, 1, 3, 8, 8), -9.0)
-        grid = make_recon_grid(gt, pred)
-        assert grid.min() >= 0.0 and grid.max() <= 1.0
+    def test_render_input_adds_a_row(self) -> None:
+        # merged grid: passing render_input must make the image taller (extra row)
+        inp = torch.rand(1, 2, 3, 8, 8)
+        tgt = torch.rand(1, 1, 3, 8, 8)
+        ren = torch.rand(1, 1, 3, 8, 8)
+        ren_in = torch.rand(1, 2, 3, 8, 8)
+        base = make_render_grid(inp, tgt, ren)
+        merged = make_render_grid(inp, tgt, ren, render_input=ren_in)
+        assert merged.shape[0] == 3
+        assert merged.shape[1] > base.shape[1]  # one more row of height
+        assert merged.min() >= 0.0 and merged.max() <= 1.0
 
 
 # ---------------------------------------------------------------------------

@@ -31,7 +31,6 @@ from beast.models.erayzer.visualize import (
     camera_intrinsic_stats,
     export_gaussian_glb,
     make_camera_pose_image,
-    make_recon_grid,
     make_render_grid,
     viz_is_due,
 )
@@ -1044,9 +1043,15 @@ class ERayZer(BaseLightningModel):
         try:
             out = self.get_model_outputs(batch_dict)
             step = self.global_step
+            # one merged grid: input GT / input render / GT target / pred target
             experiment.add_image(
-                'val/render_input_gt_pred',
-                make_render_grid(out['input_image'], out['target_image'], out['render']),
+                'val/render_grid',
+                make_render_grid(
+                    out['input_image'],
+                    out['target_image'],
+                    out['render'],
+                    render_input=out.get('render_input'),
+                ),
                 step,
             )
             experiment.add_image(
@@ -1054,13 +1059,6 @@ class ERayZer(BaseLightningModel):
                 make_camera_pose_image(out['c2w_target']),
                 step,
             )
-            # input-view reconstruction (NVS at the reference cameras)
-            if out.get('render_input') is not None:
-                experiment.add_image(
-                    'val/input_view_nvs',
-                    make_recon_grid(out['input_image'], out['render_input']),
-                    step,
-                )
             image_size = self.config['model']['image_tokenizer']['image_size']
             stats = camera_intrinsic_stats(out['fxfycxcy_target'], image_size)
             for name, value in stats.items():
@@ -1562,6 +1560,24 @@ class ERayZer(BaseLightningModel):
                 input_idx = data[input_key].to(device=device, dtype=torch.long)
                 target_idx = data['target_indices'].to(device=device, dtype=torch.long)
                 return input_idx, target_idx
+
+        # multi-view-style sampling (matches the multi-view sampler): each batch
+        # draws a random TOTAL view count in [2, num_views], holds out a small
+        # number of target views (target_view_range), and feeds the rest as
+        # input. The per-sample camera shuffle in the dataset makes which
+        # physical cameras land in each slot differ across samples.
+        target_view_range = self.config['training'].get('target_view_range')
+        if self.training and target_view_range:
+            total = int(torch.randint(2, num_real_views + 1, (1,), device=device).item())
+            lo = int(target_view_range[0])
+            hi = min(int(target_view_range[1]), total - 1)
+            hi = max(hi, lo)
+            num_target = int(torch.randint(lo, hi + 1, (1,), device=device).item())
+            num_input = total - num_target
+            perm = torch.randperm(num_real_views, device=device)
+            input_idx = perm[:num_input].unsqueeze(0).repeat(batch_size, 1)
+            target_idx = perm[num_input:total].unsqueeze(0).repeat(batch_size, 1)
+            return input_idx, target_idx
 
         # variable reference-view-count sampling: pick a random number of input
         # views in [min, max] (per batch, so all samples share a shape) and use

@@ -117,6 +117,7 @@ class ERayZerTrainingConfig(BaseModel):
     random_num_input_views: bool = False
     min_input_views: int = 2
     max_input_views: int = 5
+    target_view_range: list[int] | None = None
     freeze_focal_steps: int = 0
     max_fwdbwd_passes: int
     grad_checkpoint_every: int = 1
