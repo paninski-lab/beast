@@ -1056,7 +1056,7 @@ class ERayZer(BaseLightningModel):
             )
             experiment.add_image(
                 'val/pred_cameras',
-                make_camera_pose_image(out['c2w_target']),
+                make_camera_pose_image(out['c2w_input'], out['c2w_target']),
                 step,
             )
             image_size = self.config['model']['image_tokenizer']['image_size']

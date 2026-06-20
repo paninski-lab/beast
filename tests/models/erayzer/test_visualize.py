@@ -27,31 +27,47 @@ requires_trimesh = pytest.mark.skipif(not _HAS_TRIMESH, reason='trimesh not inst
 
 
 class TestMakeRenderGrid:
-    """Test the make_render_grid function."""
+    """Test the make_render_grid 2-row GT-vs-render grid."""
 
     def test_returns_chw_float_in_unit_range(self) -> None:
         inp = torch.rand(1, 2, 3, 8, 8)
         tgt = torch.rand(1, 4, 3, 8, 8)
         ren = torch.rand(1, 4, 3, 8, 8)
-        grid = make_render_grid(inp, tgt, ren)
+        ren_in = torch.rand(1, 2, 3, 8, 8)
+        grid = make_render_grid(inp, tgt, ren, render_input=ren_in)
         assert grid.ndim == 3
         assert grid.shape[0] == 3
         assert grid.dtype == torch.float32
         assert grid.min() >= 0.0 and grid.max() <= 1.0
 
-    def test_handles_unequal_view_counts(self) -> None:
-        # 2 input views vs 4 target views must not raise (padded to max width)
-        inp = torch.rand(1, 2, 3, 8, 8)
-        tgt = torch.rand(1, 4, 3, 8, 8)
-        ren = torch.rand(1, 4, 3, 8, 8)
-        grid = make_render_grid(inp, tgt, ren)
-        assert grid.shape[0] == 3
+    def test_is_two_rows_tall(self) -> None:
+        # output must be exactly 2 image rows (GT, render) plus a thin separator
+        h = 8
+        inp = torch.rand(1, 2, 3, h, h)
+        tgt = torch.rand(1, 3, 3, h, h)
+        ren = torch.rand(1, 3, 3, h, h)
+        ren_in = torch.rand(1, 2, 3, h, h)
+        grid = make_render_grid(inp, tgt, ren, render_input=ren_in)
+        assert 2 * h <= grid.shape[1] < 3 * h  # two rows, not three
+
+    def test_render_input_adds_columns_not_rows(self) -> None:
+        # input views add COLUMNS to the 2 rows, not extra rows
+        h = 8
+        inp = torch.rand(1, 2, 3, h, h)
+        tgt = torch.rand(1, 3, 3, h, h)
+        ren = torch.rand(1, 3, 3, h, h)
+        ren_in = torch.rand(1, 2, 3, h, h)
+        base = make_render_grid(inp, tgt, ren)                       # target only
+        merged = make_render_grid(inp, tgt, ren, render_input=ren_in)  # input + target
+        assert merged.shape[1] == base.shape[1]   # same height (still 2 rows)
+        assert merged.shape[2] > base.shape[2]    # wider (input columns added)
 
     def test_accepts_unbatched_inputs(self) -> None:
         inp = torch.rand(2, 3, 8, 8)
         tgt = torch.rand(3, 3, 8, 8)
         ren = torch.rand(3, 3, 8, 8)
-        grid = make_render_grid(inp, tgt, ren)
+        ren_in = torch.rand(2, 3, 8, 8)
+        grid = make_render_grid(inp, tgt, ren, render_input=ren_in)
         assert grid.shape[0] == 3
 
     def test_clamps_out_of_range_values(self) -> None:
@@ -60,18 +76,6 @@ class TestMakeRenderGrid:
         ren = torch.zeros(1, 1, 3, 8, 8)
         grid = make_render_grid(inp, tgt, ren)
         assert grid.min() >= 0.0 and grid.max() <= 1.0
-
-    def test_render_input_adds_a_row(self) -> None:
-        # merged grid: passing render_input must make the image taller (extra row)
-        inp = torch.rand(1, 2, 3, 8, 8)
-        tgt = torch.rand(1, 1, 3, 8, 8)
-        ren = torch.rand(1, 1, 3, 8, 8)
-        ren_in = torch.rand(1, 2, 3, 8, 8)
-        base = make_render_grid(inp, tgt, ren)
-        merged = make_render_grid(inp, tgt, ren, render_input=ren_in)
-        assert merged.shape[0] == 3
-        assert merged.shape[1] > base.shape[1]  # one more row of height
-        assert merged.min() >= 0.0 and merged.max() <= 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -121,26 +125,32 @@ class TestExportGaussianGlb:
 
 
 class TestMakeCameraPoseImage:
-    """Test the make_camera_pose_image function."""
+    """Test the make_camera_pose_image function (input + target frustums)."""
 
-    def _identity_cameras(self, v: int) -> torch.Tensor:
+    def _identity_cameras(self, v: int, offset: float = 0.0) -> torch.Tensor:
         c2w = torch.eye(4).reshape(1, 1, 4, 4).repeat(1, v, 1, 1)
         # spread the centers so the plot has extent
         for i in range(v):
-            c2w[0, i, :3, 3] = torch.tensor([float(i), 0.0, 0.0])
+            c2w[0, i, :3, 3] = torch.tensor([float(i) + offset, 0.0, 0.0])
         return c2w
 
-    def test_returns_chw_float_in_unit_range(self) -> None:
-        c2w = self._identity_cameras(4)
-        img = make_camera_pose_image(c2w)
+    def test_input_and_target_returns_chw_float(self) -> None:
+        c2w_in = self._identity_cameras(2)
+        c2w_tg = self._identity_cameras(4, offset=0.5)
+        img = make_camera_pose_image(c2w_in, c2w_tg)
         assert img.ndim == 3
         assert img.shape[0] == 3
         assert img.dtype == torch.float32
         assert img.min() >= 0.0 and img.max() <= 1.0
 
+    def test_input_only(self) -> None:
+        img = make_camera_pose_image(self._identity_cameras(4))
+        assert img.shape[0] == 3
+
     def test_accepts_unbatched_cameras(self) -> None:
-        c2w = self._identity_cameras(3)[0]  # [V, 4, 4]
-        img = make_camera_pose_image(c2w)
+        c2w_in = self._identity_cameras(3)[0]  # [V, 4, 4]
+        c2w_tg = self._identity_cameras(2)[0]
+        img = make_camera_pose_image(c2w_in, c2w_tg)
         assert img.shape[0] == 3
 
 
