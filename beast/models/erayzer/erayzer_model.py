@@ -86,6 +86,50 @@ def _filter_init_state_dict(
     }
 
 
+def _parse_hf_checkpoint_url(url: str) -> tuple[str, str, str]:
+    """Parse a huggingface.co URL into ``(repo_id, revision, filename)``.
+
+    Accepts both the ``.../<repo>/blob|resolve|raw/<rev>/<path>`` form and the
+    bare ``.../<repo>/<path>`` form (defaulting the revision to ``main``).
+    """
+    from urllib.parse import urlparse
+
+    segments = [s for s in urlparse(url).path.split('/') if s]
+    if len(segments) < 3:
+        raise ValueError(f'malformed Hugging Face URL: {url}')
+    repo_id = '/'.join(segments[:2])
+    if segments[2] in ('blob', 'resolve', 'raw'):
+        if len(segments) < 5:
+            raise ValueError(f'missing file path in Hugging Face URL: {url}')
+        return repo_id, segments[3], '/'.join(segments[4:])
+    return repo_id, 'main', '/'.join(segments[2:])
+
+
+def _resolve_init_checkpoint(spec: str) -> Path:
+    """Resolve an ``init_checkpoint`` spec to a local file path.
+
+    A ``huggingface.co`` URL is downloaded (and cached) via ``huggingface_hub``;
+    any other value is treated as a local filesystem path. This mirrors the
+    multi-view loader's ``pretrained_url`` so a pretrained checkpoint can be
+    fetched from the Hub without a manual download.
+
+    Parameters
+    ----------
+    spec: a local path or a huggingface.co checkpoint URL.
+
+    Returns
+    -------
+    local path to the checkpoint file.
+
+    """
+    if spec.startswith(('http://', 'https://')) and 'huggingface.co' in spec:
+        from huggingface_hub import hf_hub_download  # lazy: only needed for URLs
+
+        repo_id, revision, filename = _parse_hf_checkpoint_url(spec)
+        return Path(hf_hub_download(repo_id=repo_id, filename=filename, revision=revision))
+    return Path(spec)
+
+
 def sanitize(t: torch.Tensor) -> torch.Tensor:
     """Replace non-finite entries so downstream losses stay valid.
 
@@ -839,11 +883,12 @@ class ERayZer(BaseLightningModel):
         Reads the weights, drops non-model keys (e.g. the perceptual loss
         network), and loads with ``strict=False`` so a partially-overlapping
         checkpoint (different layer count, extra heads) still warm-starts the
-        shared parameters.
+        shared parameters. ``ckpt_path`` may be a local path or a huggingface.co
+        URL (auto-downloaded), matching the multi-view ``pretrained_url``.
 
         Parameters
         ----------
-        ckpt_path: path to a ``.pt``/``.bin``/``.ckpt`` weight file.
+        ckpt_path: local path or huggingface.co URL of a weight file.
 
         Returns
         -------
@@ -851,10 +896,10 @@ class ERayZer(BaseLightningModel):
 
         Raises
         ------
-        FileNotFoundError: if ``ckpt_path`` does not point to a file.
+        FileNotFoundError: if ``ckpt_path`` does not resolve to a file.
 
         """
-        path = Path(ckpt_path)
+        path = _resolve_init_checkpoint(ckpt_path)
         if not path.is_file():
             raise FileNotFoundError(f'init_checkpoint not found: {path}')
         raw = torch.load(str(path), map_location='cpu', weights_only=False)

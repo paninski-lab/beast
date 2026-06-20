@@ -1,6 +1,7 @@
 """Tests for beast.models.erayzer.erayzer_model components."""
 
 import copy
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -14,6 +15,8 @@ from beast.models.erayzer.erayzer_model import (
     LossComputer,
     PoseEstimator,
     _filter_init_state_dict,
+    _parse_hf_checkpoint_url,
+    _resolve_init_checkpoint,
     build_transformer_blocks,
     get_cam_se3,
     get_point_range_func,
@@ -801,6 +804,45 @@ class TestValidationVisuals:
             get_model_outputs=_boom,
         )
         ERayZer._log_validation_visuals(standin, {})
+
+
+class TestParseHfCheckpointUrl:
+    """Test the _parse_hf_checkpoint_url helper."""
+
+    def test_blob_url(self) -> None:
+        repo, rev, fn = _parse_hf_checkpoint_url(
+            'https://huggingface.co/qitaoz/E-RayZer/blob/main/checkpoints/erayzer_multi.pt',
+        )
+        assert repo == 'qitaoz/E-RayZer'
+        assert rev == 'main'
+        assert fn == 'checkpoints/erayzer_multi.pt'
+
+    def test_resolve_url_with_revision(self) -> None:
+        repo, rev, fn = _parse_hf_checkpoint_url(
+            'https://huggingface.co/org/repo/resolve/v1.0/sub/dir/model.pt',
+        )
+        assert repo == 'org/repo'
+        assert rev == 'v1.0'
+        assert fn == 'sub/dir/model.pt'
+
+    def test_bare_path_defaults_to_main(self) -> None:
+        repo, rev, fn = _parse_hf_checkpoint_url('https://huggingface.co/org/repo/model.pt')
+        assert repo == 'org/repo'
+        assert rev == 'main'
+        assert fn == 'model.pt'
+
+
+class TestResolveInitCheckpoint:
+    """Test the _resolve_init_checkpoint spec resolver."""
+
+    def test_local_path_passthrough(self, tmp_path) -> None:
+        p = tmp_path / 'weights.bin'
+        p.write_bytes(b'x')
+        assert _resolve_init_checkpoint(str(p)) == Path(p)
+
+    def test_nonexistent_local_path_still_returns_path(self) -> None:
+        # resolution doesn't check existence (the loader does)
+        assert _resolve_init_checkpoint('/no/such/file.pt') == Path('/no/such/file.pt')
 
 
 class TestLoadInitCheckpoint:
