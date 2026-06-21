@@ -1140,7 +1140,11 @@ class ERayZer(BaseLightningModel):
         _logger.info(f'saved validation point cloud ({n} pts): {path}')
 
     def configure_optimizers(self) -> dict:
-        """Configure AdamW optimizer with OneCycleLR scheduler.
+        """Configure the AdamW optimizer and LR schedule.
+
+        Optionally scales the LR by the global batch size (linear rule,
+        ``lr * global_batch_size / 256``) and selects either a constant schedule
+        (matching the multi-view recipe) or OneCycleLR (cosine warmup+decay).
 
         Returns
         -------
@@ -1148,23 +1152,39 @@ class ERayZer(BaseLightningModel):
 
         """
         cfg = self.config['optimizer']
+        lr = cfg['lr']
+        if cfg.get('scale_lr_by_batch', False):
+            tcfg = self.config['training']
+            global_batch_size = (
+                tcfg['train_batch_size'] * tcfg['num_gpus'] * tcfg['num_nodes']
+            )
+            lr = lr * global_batch_size / 256
+
         optimizer = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, self.parameters()),
-            lr=cfg['lr'],
+            lr=lr,
             betas=(cfg['beta1'], cfg['beta2']),
             weight_decay=cfg['wd'],
         )
-        total_steps = self.config['training']['max_fwdbwd_passes']
-        warmup_steps = cfg['warmup']
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer,
-            max_lr=cfg['lr'],
-            total_steps=total_steps,
-            pct_start=warmup_steps / total_steps,
-            anneal_strategy='cos',
-            div_factor=cfg.get('div_factor', 1.0),
-            final_div_factor=cfg.get('final_div_factor', 1.0),
-        )
+
+        schedule = cfg.get('schedule', 'onecycle')
+        if schedule == 'constant':
+            # fixed LR for the whole run (multi-view recipe)
+            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda _step: 1.0)
+        elif schedule == 'onecycle':
+            total_steps = self.config['training']['max_fwdbwd_passes']
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=lr,
+                total_steps=total_steps,
+                pct_start=cfg['warmup'] / total_steps,
+                anneal_strategy='cos',
+                div_factor=cfg.get('div_factor', 1.0),
+                final_div_factor=cfg.get('final_div_factor', 1.0),
+            )
+        else:
+            raise ValueError(f'unknown optimizer.schedule: {schedule!r}')
+
         return {
             'optimizer': optimizer,
             'lr_scheduler': {'scheduler': scheduler, 'interval': 'step'},

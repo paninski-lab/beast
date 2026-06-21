@@ -111,6 +111,7 @@ class ERayZerTrainingConfig(BaseModel):
     check_val_every_n_epoch: int = 1
     ckpt_every_n_epochs: int | None = None
     viz_every_n_epochs: int = 1
+    precision: str = '32-true'
     num_views: int
     num_input_views: int
     num_target_views: int
@@ -132,7 +133,13 @@ class ERayZerTrainingConfig(BaseModel):
 
 
 class ERayZerOptimizerConfig(BaseModel):
-    """Optimizer configuration for ERayZer (AdamW + OneCycleLR)."""
+    """Optimizer configuration for ERayZer (AdamW + LR schedule).
+
+    ``schedule`` selects the LR schedule: ``onecycle`` (cosine warmup+decay) or
+    ``constant`` (fixed LR, matching the multi-view recipe). ``scale_lr_by_batch``
+    applies the linear rule ``lr * global_batch_size / 256`` so the effective LR
+    tracks the global batch across GPUs/nodes.
+    """
 
     lr: float
     beta1: float = 0.9
@@ -142,3 +149,5 @@ class ERayZerOptimizerConfig(BaseModel):
     div_factor: float = 1.0
     final_div_factor: float = 1.0
     accumulate_grad_batches: int = 1
+    schedule: Literal['onecycle', 'constant'] = 'onecycle'
+    scale_lr_by_batch: bool = False

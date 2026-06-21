@@ -224,6 +224,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         accelerator='gpu',
         devices=config['training']['num_gpus'],
         num_nodes=config['training']['num_nodes'],
+        precision=config['training'].get('precision', '32-true'),
         check_val_every_n_epoch=config['training'].get('check_val_every_n_epoch', 1),
         log_every_n_steps=config['training'].get('log_every_n_steps', 10),
         callbacks=callbacks,

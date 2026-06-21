@@ -806,6 +806,77 @@ class TestValidationVisuals:
         ERayZer._log_validation_visuals(standin, {})
 
 
+class TestConfigureOptimizers:
+    """Test ERayZer.configure_optimizers LR scaling + schedule selection."""
+
+    def _standin(self, opt_cfg: dict, train_cfg: dict) -> SimpleNamespace:
+        param = nn.Parameter(torch.zeros(2))
+        return SimpleNamespace(
+            config={'optimizer': opt_cfg, 'training': train_cfg},
+            parameters=lambda: iter([param]),
+        )
+
+    def _train_cfg(self, **kw) -> dict:
+        cfg = {'train_batch_size': 8, 'num_gpus': 1, 'num_nodes': 1, 'max_fwdbwd_passes': 1000}
+        cfg.update(kw)
+        return cfg
+
+    def test_constant_schedule_is_lambdalr(self) -> None:
+        from torch.optim.lr_scheduler import LambdaLR
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05, 'schedule': 'constant'},
+            self._train_cfg(),
+        )
+        out = ERayZer.configure_optimizers(m)
+        assert isinstance(out['lr_scheduler']['scheduler'], LambdaLR)
+
+    def test_onecycle_schedule(self) -> None:
+        from torch.optim.lr_scheduler import OneCycleLR
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'warmup': 100,
+             'schedule': 'onecycle', 'div_factor': 10.0, 'final_div_factor': 100.0},
+            self._train_cfg(),
+        )
+        out = ERayZer.configure_optimizers(m)
+        assert isinstance(out['lr_scheduler']['scheduler'], OneCycleLR)
+
+    def test_unknown_schedule_raises(self) -> None:
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'schedule': 'bogus'},
+            self._train_cfg(),
+        )
+        with pytest.raises(ValueError, match='unknown optimizer.schedule'):
+            ERayZer.configure_optimizers(m)
+
+    def test_no_scaling_by_default(self) -> None:
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'schedule': 'constant'},
+            self._train_cfg(train_batch_size=8),
+        )
+        out = ERayZer.configure_optimizers(m)
+        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4)
+
+    def test_lr_batch_scaling_at_256_is_identity(self) -> None:
+        # global_batch_size = 32 * 8 * 1 = 256 -> scaled lr == base lr
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05,
+             'schedule': 'constant', 'scale_lr_by_batch': True},
+            self._train_cfg(train_batch_size=32, num_gpus=8),
+        )
+        out = ERayZer.configure_optimizers(m)
+        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4)
+
+    def test_lr_batch_scaling_small_batch(self) -> None:
+        # global_batch_size = 8 -> lr scaled down by 8/256
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05,
+             'schedule': 'constant', 'scale_lr_by_batch': True},
+            self._train_cfg(train_batch_size=8),
+        )
+        out = ERayZer.configure_optimizers(m)
+        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4 * 8 / 256)
+
+
 class TestParseHfCheckpointUrl:
     """Test the _parse_hf_checkpoint_url helper."""
 
