@@ -25,7 +25,13 @@ jobs:
         run: |
           # CPU-only torch is sufficient for type checking (avoids ~2GB CUDA download)
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[dev]"
+          # --no-build-isolation: gsplat's setup.py imports torch at build time;
+          # build isolation creates a clean venv that lacks the torch we just installed.
+          # poetry-core and ninja are needed because --no-build-isolation also skips
+          # auto-installing build backends and build tools.
+          # BUILD_NO_CUDA: skip compiling gsplat's CUDA kernels (no GPU on lint runner)
+          pip install poetry-core ninja
+          BUILD_NO_CUDA=1 pip install -e ".[dev]" --no-build-isolation
 
       - name: Lint with ruff
         run: ruff check beast tests
