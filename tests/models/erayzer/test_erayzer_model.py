@@ -722,12 +722,14 @@ class TestFilterInitStateDict:
 class TestResolveViewIndices:
     """Test ERayZer.resolve_view_indices view-sampling (no model build needed)."""
 
-    def _standin(self, training: bool, training_cfg: dict) -> SimpleNamespace:
+    def _standin(
+        self, training: bool, training_cfg: dict, random_index: bool = False,
+    ) -> SimpleNamespace:
         # resolve_view_indices only touches self.training, self.random_index,
         # and self.config — a stand-in exercises it without building the model
         return SimpleNamespace(
             training=training,
-            random_index=False,
+            random_index=random_index,
             config={'training': training_cfg, 'inference': False},
         )
 
@@ -775,6 +777,25 @@ class TestResolveViewIndices:
         )
         in_idx, tgt_idx = self._call(standin, 6)
         assert in_idx.shape[1] == 2 and tgt_idx.shape[1] == 4
+        assert in_idx[0].tolist() == [0, 1]            # deterministic order
+        assert tgt_idx[0].tolist() == [2, 3, 4, 5]
+
+    def test_validation_random_split_alternates_views(self) -> None:
+        # random_split (random_index=True) shuffles which cameras are input vs
+        # target at val, while keeping the 2/4 counts
+        standin = self._standin(
+            False,
+            {'target_view_range': [1, 1], 'num_views': 6,
+             'num_input_views': 2, 'num_target_views': 4},
+            random_index=True,
+        )
+        input_sets = set()
+        for _ in range(40):
+            in_idx, tgt_idx = self._call(standin, 6)
+            assert in_idx.shape[1] == 2 and tgt_idx.shape[1] == 4
+            assert set(in_idx[0].tolist()).isdisjoint(tgt_idx[0].tolist())
+            input_sets.add(tuple(sorted(in_idx[0].tolist())))
+        assert len(input_sets) >= 2  # the input/target assignment varies
 
 
 class TestValidationVisuals:

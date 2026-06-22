@@ -195,3 +195,5 @@ scripts/viz_erayzer.py
 
 # fine-tune config holds a machine-specific init_checkpoint path (kept local)
 configs/multiview/erayzer_cheese3d_ft.yaml
+# local model checkpoints (machine-specific, large)
+checkpoints/
