@@ -26,7 +26,10 @@ jobs:
           # CPU-only torch is sufficient for type checking (avoids ~2GB CUDA download)
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           # --no-build-isolation: gsplat's setup.py imports torch at build time;
-          # build isolation creates a clean venv that lacks the torch we just installed
+          # build isolation creates a clean venv that lacks the torch we just installed.
+          # poetry-core is needed because --no-build-isolation also skips installing
+          # our own build backend.
+          pip install poetry-core
           pip install -e ".[dev]" --no-build-isolation
 
       - name: Lint with ruff
