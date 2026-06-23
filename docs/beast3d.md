@@ -10,43 +10,66 @@ Documentation for BEAST3D multi-view self-supervised pretraining.
 
 ## Environment setup
 
-BEAST3D training uses [gsplat](https://github.com/nerfstudio-project/gsplat) for differentiable
-Gaussian splatting. Whether you need any extra setup depends on your hardware and PyTorch
-version — check first, then follow only the path that applies.
+BEAST3D depends on a [custom fork of gsplat](https://github.com/QitaoZhao/gsplat) for
+differentiable Gaussian splatting with intrinsics gradient support. This fork is compiled
+from source during installation because it is not available as a pre-built wheel.
 
-### Check whether gsplat is working
+### Prerequisites
+
+gsplat's `setup.py` imports `torch` at build time to find CUDA paths, so `torch` must be
+installed before gsplat. The build backend (`poetry-core`) must also be present. The
+standard beast install handles this:
+
+```bash
+pip install lightning poetry-core
+pip install -e . --no-build-isolation
+```
+
+`--no-build-isolation` tells pip to use the existing environment (where torch is already
+installed) rather than creating a temporary venv without it.
+
+### GPU architecture
+
+gsplat's CUDA kernels are compiled for the GPU architectures visible during the build.
+The compiled kernels only run on matching hardware. If you need to target a specific
+architecture (e.g. building on a machine without a GPU, or targeting a different GPU than
+the one present), set `TORCH_CUDA_ARCH_LIST`:
+
+```bash
+TORCH_CUDA_ARCH_LIST="8.6" pip install -e . --no-build-isolation
+```
+
+Common values: `7.5` (RTX 2080), `8.0` (A100), `8.6` (A40, RTX 3090), `8.9` (L40, RTX
+4090), `12.0` (RTX 5090).
+
+### Verifying the installation
 
 ```python
 from gsplat.cuda._backend import _C
 print(_C)   # should be a compiled module, not None
 ```
 
-If the output is a compiled module object, nothing more is needed.
+If the output is `None`, gsplat's CUDA extension did not load. Common causes:
 
-If the output is `None`, gsplat's CUDA extension did not load. The fix depends on your
-hardware:
+- **torch was not available during the build** — install lightning first, then reinstall
+  with `--no-build-isolation`.
+- **CUDA toolkit not found** — ensure `CUDA_HOME` is set, or that `nvcc` is on your PATH.
+- **Incompatible gcc** — nvcc requires gcc <= 12 for CUDA 12.x. Check with
+  `nvcc --version` and `gcc --version`.
+- **Architecture mismatch** — the kernels were compiled for a different GPU. Rebuild with
+  the correct `TORCH_CUDA_ARCH_LIST`.
 
-- **Mainstream hardware** (A100, A6000, L40, RTX 3090/4090 — SM 8.0–8.9) with a standard
-  PyTorch install (2.4–2.6, CUDA 12.1–12.4): the pre-compiled wheel should have worked.
-  Check that gsplat installed correctly (`pip show gsplat`) and that your GPU is detected
-  (`python -c "import torch; print(torch.cuda.is_available())"`).
-- **Blackwell GPUs** (RTX 5090, SM 12.0) or **PyTorch ≥ 2.7**: no pre-compiled wheel
-  supports this combination yet. You need to build gsplat from source — follow the steps
-  below.
+### Source build on Blackwell GPUs (SM 12.0) or PyTorch >= 2.7
 
-### Source build (Blackwell / PyTorch ≥ 2.7)
-
-Building from source requires the CUDA compiler and a full set of CUDA development headers.
-A standard conda/pip PyTorch install does not include these, so they must be added separately.
-
-**Step 1 — Install CUDA build tools**
-
-Match `cuda-nvcc` and `cuda-cudart-dev` to the CUDA version PyTorch was built against
-(`python -c "import torch; print(torch.version.cuda)"`). The math-library packages can be
-left unpinned:
+Building on newer hardware may require additional CUDA development headers not included in
+a standard conda/pip PyTorch install. These must be installed right after creating the conda
+env, before running `pip install`:
 
 ```bash
+conda create --yes --name beast python=3.10
 conda activate beast
+
+# install CUDA dev packages before anything else
 conda install -c nvidia \
     cuda-nvcc=<cuda_version> \
     cuda-cudart-dev=<cuda_version> \
@@ -57,49 +80,21 @@ conda install -c nvidia \
     libcusolver-dev
 ```
 
-For example, with CUDA 13.0:
+Match `<cuda_version>` to the CUDA version you plan to use with PyTorch (e.g. `13.0`).
 
-```bash
-conda install -c nvidia \
-    cuda-nvcc=13.0 \
-    cuda-cudart-dev=13.0 \
-    libcusparse-dev \
-    libcublas-dev \
-    libcurand-dev \
-    libcufft-dev \
-    libcusolver-dev
-```
-
-**Step 2 — Persist build environment variables**
-
-conda installs the CUDA headers under `targets/x86_64-linux/include/` rather than the
-standard `include/` that the C++ host compiler searches by default. These two variables
-tell the build system where to find them:
+If conda installs CUDA headers under `targets/x86_64-linux/include/` rather than the
+standard `include/`, set these environment variables before installing beast:
 
 ```bash
 conda env config vars set -n beast \
-    CPATH=/home/mattw/miniconda3/envs/beast/targets/x86_64-linux/include \
-    CUDA_HOME=/home/mattw/miniconda3/envs/beast
+    CPATH=$CONDA_PREFIX/targets/x86_64-linux/include \
+    CUDA_HOME=$CONDA_PREFIX
 conda activate beast   # re-activate so the variables take effect
 ```
 
-**Step 3 — Clone and build gsplat**
-
-gsplat 1.5.3 (the latest release) does not support SM 12.0 or PyTorch ≥ 2.7. The `main`
-branch has both fixes. Clone it and build in-place with `--no-build-isolation`, which makes
-pip use the beast env's torch headers instead of a temporary copy that won't have the CUDA
-dev packages:
+Then proceed with the standard install:
 
 ```bash
-pip uninstall gsplat -y
-git clone --depth 1 https://github.com/nerfstudio-project/gsplat.git /tmp/gsplat-src
-cd /tmp/gsplat-src
-git submodule update --init --depth 1
-TORCH_CUDA_ARCH_LIST="12.0" pip install --no-build-isolation .
-```
-
-Compilation takes 5–15 minutes. Verify:
-
-```bash
-python -c "from gsplat.cuda._backend import _C; print('gsplat CUDA:', _C)"
+pip install lightning poetry-core
+pip install -e . --no-build-isolation
 ```
