@@ -27,7 +27,7 @@ ml Miniforge-24.7.1-2
 ml gcc/10.4                        # nvcc requires gcc <= 12 for CUDA 12.4
 ml cuda/12.4.0
 export CC="$NVCC_CCBIN"
-export CXX="${NVCC_CCBIN/gcc/g++}"
+export CXX="$(dirname "$NVCC_CCBIN")/g++"
 export LD_PRELOAD=/home/$(whoami)/.conda/envs/$CONDA_ENV/lib/libstdc++.so.6
 export LD_LIBRARY_PATH=/share/apps/spack/gcc/14.1/lib64:$LD_LIBRARY_PATH
 conda activate $CONDA_ENV
