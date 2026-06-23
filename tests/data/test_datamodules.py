@@ -268,6 +268,7 @@ class TestMultiViewDataModule:
             data_dir=multiview_data_dir, image_size=_IMAGE_SIZE, train_fraction=1.0,
         )
         dm.setup()
+        assert dm.val_dataset is not None
         assert len(dm.val_dataset) >= 1
 
     def test_invalid_train_fraction_raises(self, multiview_data_dir) -> None:

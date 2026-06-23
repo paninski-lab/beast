@@ -6,7 +6,7 @@ import torch
 def get_1d_sincos_pos_emb_from_grid(
     embed_dim: int,
     pos: torch.Tensor,
-    device: str = 'cpu',
+    device: str | torch.device = 'cpu',
 ) -> torch.Tensor:
     """Generate 1D sinusoidal positional embeddings from grid positions.
 
@@ -39,7 +39,7 @@ def get_1d_sincos_pos_emb_from_grid(
 def get_2d_sincos_pos_embed(
     embed_dim: int,
     grid_size: tuple[int, int],
-    device: str = 'cpu',
+    device: str | torch.device = 'cpu',
 ) -> torch.Tensor:
     """Generate 2D sine-cosine positional embeddings with separate grid height and width.
 
@@ -71,7 +71,7 @@ def get_2d_sincos_pos_embed(
 def get_2d_sincos_pos_embed_from_grid(
     embed_dim: int,
     grid: torch.Tensor,
-    device: str = 'cpu',
+    device: str | torch.device = 'cpu',
 ) -> torch.Tensor:
     """Generate 2D sine-cosine positional embeddings from a grid.
 

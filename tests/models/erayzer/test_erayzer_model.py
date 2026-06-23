@@ -1,7 +1,9 @@
 """Tests for beast.models.erayzer.erayzer_model components."""
 
 import copy
+from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +15,9 @@ from beast.models.erayzer.erayzer_model import (
     GaussiansUpsampler,
     LossComputer,
     PoseEstimator,
+    _filter_init_state_dict,
+    _parse_hf_checkpoint_url,
+    _resolve_init_checkpoint,
     build_transformer_blocks,
     get_cam_se3,
     get_point_range_func,
@@ -143,7 +148,7 @@ class TestPoseEstimator:
     """Test the PoseEstimator module."""
 
     def _make_config(self, canonical: str = 'first', mode: str = 'pairwise',
-                     rep: str = '6d') -> dict:
+                     rep: str = '6d', per_view_focal: bool = False) -> dict:
         return {
             'model': {
                 'transformer': {'d': 32},
@@ -151,6 +156,7 @@ class TestPoseEstimator:
                     'canonical': canonical,
                     'mode': mode,
                     'representation': rep,
+                    'per_view_focal': per_view_focal,
                 },
             },
             'training': {'pose_consistency_reg_weight': 0.0},
@@ -213,6 +219,28 @@ class TestPoseEstimator:
         # last two columns are cx, cy
         assert torch.allclose(out[:, 11], torch.full((6,), 0.5), atol=1e-5)
         assert torch.allclose(out[:, 12], torch.full((6,), 0.5), atol=1e-5)
+
+    def test_per_view_focal_false_broadcasts_canonical(self) -> None:
+        # default (checkpoint-matching): focal predicted from the canonical view
+        # and broadcast, so every view shares the same fx
+        config = self._make_config(per_view_focal=False)
+        estimator = PoseEstimator(config)
+        b, v = 2, 4
+        x = torch.randn(b, v, 32)
+        out = estimator(x, v)  # [b, v, 13]
+        fx = out[..., 9]  # focal x is column 9 (after 6 rot + 3 trans)
+        assert torch.allclose(fx, fx[:, :1].expand(-1, v), atol=1e-6)
+
+    def test_per_view_focal_true_varies_per_view(self) -> None:
+        # opt-in: focal head applied per view, so distinct view tokens give
+        # distinct per-view focals
+        config = self._make_config(per_view_focal=True)
+        estimator = PoseEstimator(config)
+        b, v = 2, 4
+        x = torch.randn(b, v, 32)
+        out = estimator(x, v)
+        fx = out[..., 9]
+        assert not torch.allclose(fx, fx[:, :1].expand(-1, v), atol=1e-4)
 
 
 # ---------------------------------------------------------------------------
@@ -639,3 +667,308 @@ class TestERayZerIntegration:
         config = copy.deepcopy(config_erayzer)
         config['training']['perceptual_loss_weight'] = 0.1
         run_erayzer_model_test(config=config)
+
+
+# ---------------------------------------------------------------------------
+# TestFilterInitStateDict
+# ---------------------------------------------------------------------------
+
+
+class TestFilterInitStateDict:
+    """Test the _filter_init_state_dict checkpoint-extraction helper."""
+
+    def test_extracts_from_state_dict_key(self) -> None:
+        raw = {'state_dict': {'a': torch.zeros(1), 'b': torch.zeros(2)}}
+        out = _filter_init_state_dict(raw)
+        assert set(out) == {'a', 'b'}
+
+    def test_extracts_from_model_key(self) -> None:
+        raw = {'model': {'a': torch.zeros(1)}}
+        out = _filter_init_state_dict(raw)
+        assert set(out) == {'a'}
+
+    def test_handles_bare_top_level_state_dict(self) -> None:
+        raw = {'camera_token': torch.zeros(1), 'register_token': torch.zeros(2)}
+        out = _filter_init_state_dict(raw)
+        assert set(out) == {'camera_token', 'register_token'}
+
+    def test_drops_loss_computer_keys(self) -> None:
+        raw = {
+            'camera_token': torch.zeros(1),
+            'loss_computer.perceptual_loss_module.vgg.features.0.weight': torch.zeros(3),
+            'loss_computer.anything': torch.zeros(1),
+        }
+        out = _filter_init_state_dict(raw)
+        assert set(out) == {'camera_token'}
+
+    def test_keeps_non_dropped_keys(self) -> None:
+        raw = {'state_dict': {
+            'transformer_encoder.0.norm1.weight': torch.zeros(4),
+            'loss_computer.x': torch.zeros(1),
+        }}
+        out = _filter_init_state_dict(raw)
+        assert set(out) == {'transformer_encoder.0.norm1.weight'}
+
+    def test_custom_drop_prefix(self) -> None:
+        raw = {'keep.a': torch.zeros(1), 'drop.b': torch.zeros(1)}
+        out = _filter_init_state_dict(raw, drop_prefixes=('drop.',))
+        assert set(out) == {'keep.a'}
+
+
+# ---------------------------------------------------------------------------
+# TestLoadInitCheckpoint
+# ---------------------------------------------------------------------------
+
+
+class TestResolveViewIndices:
+    """Test ERayZer.resolve_view_indices view-sampling (no model build needed)."""
+
+    def _standin(
+        self, training: bool, training_cfg: dict, random_index: bool = False,
+    ) -> SimpleNamespace:
+        # resolve_view_indices only touches self.training, self.random_index,
+        # and self.config — a stand-in exercises it without building the model
+        return SimpleNamespace(
+            training=training,
+            random_index=random_index,
+            config={'training': training_cfg, 'inference': False},
+        )
+
+    def _call(self, standin, num_real_views: int, batch_size: int = 2):
+        data = {'image': torch.zeros(batch_size, num_real_views, 3, 8, 8)}
+        return ERayZer.resolve_view_indices(
+            standin, data, num_real_views, torch.device('cpu'),
+        )
+
+    def test_target_view_range_holds_out_exactly_n_targets(self) -> None:
+        standin = self._standin(True, {'target_view_range': [1, 1], 'num_views': 6})
+        for _ in range(30):
+            in_idx, tgt_idx = self._call(standin, 6)
+            assert tgt_idx.shape[1] == 1                 # exactly 1 target
+            assert in_idx.shape[1] >= 1                  # at least 1 input
+            assert in_idx.shape[1] + tgt_idx.shape[1] <= 6
+
+    def test_total_view_count_varies_across_batches(self) -> None:
+        standin = self._standin(True, {'target_view_range': [1, 1], 'num_views': 6})
+        totals = {int(self._call(standin, 6)[0].shape[1] + self._call(standin, 6)[1].shape[1])
+                  for _ in range(60)}
+        # multi-view-style sampler must use a variable total, not a fixed count
+        assert len(totals) >= 2
+
+    def test_input_and_target_indices_are_disjoint(self) -> None:
+        standin = self._standin(True, {'target_view_range': [1, 1], 'num_views': 6})
+        for _ in range(30):
+            in_idx, tgt_idx = self._call(standin, 6)
+            a = set(in_idx[0].tolist())
+            b = set(tgt_idx[0].tolist())
+            assert a.isdisjoint(b)
+            assert max(a | b) < 6
+
+    def test_target_range_two_allows_two_targets(self) -> None:
+        standin = self._standin(True, {'target_view_range': [1, 2], 'num_views': 6})
+        seen = {int(self._call(standin, 6)[1].shape[1]) for _ in range(60)}
+        assert seen <= {1, 2} and len(seen) >= 1
+
+    def test_validation_uses_fixed_split_not_sampler(self) -> None:
+        # at val time the sampler branch is skipped: deterministic fixed split
+        standin = self._standin(
+            False,
+            {'target_view_range': [1, 1], 'num_views': 6,
+             'num_input_views': 2, 'num_target_views': 4},
+        )
+        in_idx, tgt_idx = self._call(standin, 6)
+        assert in_idx.shape[1] == 2 and tgt_idx.shape[1] == 4
+        assert in_idx[0].tolist() == [0, 1]            # deterministic order
+        assert tgt_idx[0].tolist() == [2, 3, 4, 5]
+
+    def test_validation_random_split_alternates_views(self) -> None:
+        # random_split (random_index=True) shuffles which cameras are input vs
+        # target at val, while keeping the 2/4 counts
+        standin = self._standin(
+            False,
+            {'target_view_range': [1, 1], 'num_views': 6,
+             'num_input_views': 2, 'num_target_views': 4},
+            random_index=True,
+        )
+        input_sets = set()
+        for _ in range(40):
+            in_idx, tgt_idx = self._call(standin, 6)
+            assert in_idx.shape[1] == 2 and tgt_idx.shape[1] == 4
+            assert set(in_idx[0].tolist()).isdisjoint(tgt_idx[0].tolist())
+            input_sets.add(tuple(sorted(in_idx[0].tolist())))
+        assert len(input_sets) >= 2  # the input/target assignment varies
+
+
+class TestValidationVisuals:
+    """Test ERayZer validation-visualization guards (no GPU/model build needed)."""
+
+    def test_no_logger_is_noop(self) -> None:
+        # logger=None -> no image-capable experiment -> returns without error
+        standin = SimpleNamespace(logger=None)
+        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
+
+    def test_logger_without_add_image_is_noop(self) -> None:
+        # an experiment lacking add_image is treated as not image-capable
+        standin = SimpleNamespace(logger=SimpleNamespace(experiment=object()))
+        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
+
+    def test_forward_failure_is_swallowed(self) -> None:
+        # a capable logger but a get_model_outputs that raises must not propagate
+        class _Exp:
+            def add_image(self, *a, **k) -> None:
+                pass
+
+        def _boom(_batch) -> dict:
+            raise RuntimeError('forward exploded')
+
+        standin = SimpleNamespace(
+            logger=SimpleNamespace(experiment=_Exp()),
+            get_model_outputs=_boom,
+        )
+        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
+
+
+class TestConfigureOptimizers:
+    """Test ERayZer.configure_optimizers LR scaling + schedule selection."""
+
+    def _standin(self, opt_cfg: dict, train_cfg: dict) -> ERayZer:
+        # a duck-typed stand-in exercises configure_optimizers without a full build;
+        # cast so the unbound-method calls type-check against the real signature
+        param = nn.Parameter(torch.zeros(2))
+        return cast(ERayZer, SimpleNamespace(
+            config={'optimizer': opt_cfg, 'training': train_cfg},
+            parameters=lambda: iter([param]),
+        ))
+
+    def _train_cfg(self, **kw) -> dict:
+        cfg = {'train_batch_size': 8, 'num_gpus': 1, 'num_nodes': 1, 'max_fwdbwd_passes': 1000}
+        cfg.update(kw)
+        return cfg
+
+    def test_constant_schedule_is_lambdalr(self) -> None:
+        from torch.optim.lr_scheduler import LambdaLR
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05, 'schedule': 'constant'},
+            self._train_cfg(),
+        )
+        out = ERayZer.configure_optimizers(m)
+        assert isinstance(out['lr_scheduler']['scheduler'], LambdaLR)
+
+    def test_onecycle_schedule(self) -> None:
+        from torch.optim.lr_scheduler import OneCycleLR
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'warmup': 100,
+             'schedule': 'onecycle', 'div_factor': 10.0, 'final_div_factor': 100.0},
+            self._train_cfg(),
+        )
+        out = ERayZer.configure_optimizers(m)
+        assert isinstance(out['lr_scheduler']['scheduler'], OneCycleLR)
+
+    def test_unknown_schedule_raises(self) -> None:
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'schedule': 'bogus'},
+            self._train_cfg(),
+        )
+        with pytest.raises(ValueError, match='unknown optimizer.schedule'):
+            ERayZer.configure_optimizers(m)
+
+    def test_no_scaling_by_default(self) -> None:
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'schedule': 'constant'},
+            self._train_cfg(train_batch_size=8),
+        )
+        out = ERayZer.configure_optimizers(m)
+        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4)
+
+    def test_lr_batch_scaling_at_256_is_identity(self) -> None:
+        # global_batch_size = 32 * 8 * 1 = 256 -> scaled lr == base lr
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05,
+             'schedule': 'constant', 'scale_lr_by_batch': True},
+            self._train_cfg(train_batch_size=32, num_gpus=8),
+        )
+        out = ERayZer.configure_optimizers(m)
+        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4)
+
+    def test_lr_batch_scaling_small_batch(self) -> None:
+        # global_batch_size = 8 -> lr scaled down by 8/256
+        m = self._standin(
+            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05,
+             'schedule': 'constant', 'scale_lr_by_batch': True},
+            self._train_cfg(train_batch_size=8),
+        )
+        out = ERayZer.configure_optimizers(m)
+        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4 * 8 / 256)
+
+
+class TestParseHfCheckpointUrl:
+    """Test the _parse_hf_checkpoint_url helper."""
+
+    def test_blob_url(self) -> None:
+        repo, rev, fn = _parse_hf_checkpoint_url(
+            'https://huggingface.co/qitaoz/E-RayZer/blob/main/checkpoints/erayzer_multi.pt',
+        )
+        assert repo == 'qitaoz/E-RayZer'
+        assert rev == 'main'
+        assert fn == 'checkpoints/erayzer_multi.pt'
+
+    def test_resolve_url_with_revision(self) -> None:
+        repo, rev, fn = _parse_hf_checkpoint_url(
+            'https://huggingface.co/org/repo/resolve/v1.0/sub/dir/model.pt',
+        )
+        assert repo == 'org/repo'
+        assert rev == 'v1.0'
+        assert fn == 'sub/dir/model.pt'
+
+    def test_bare_path_defaults_to_main(self) -> None:
+        repo, rev, fn = _parse_hf_checkpoint_url('https://huggingface.co/org/repo/model.pt')
+        assert repo == 'org/repo'
+        assert rev == 'main'
+        assert fn == 'model.pt'
+
+
+class TestResolveInitCheckpoint:
+    """Test the _resolve_init_checkpoint spec resolver."""
+
+    def test_local_path_passthrough(self, tmp_path) -> None:
+        p = tmp_path / 'weights.bin'
+        p.write_bytes(b'x')
+        assert _resolve_init_checkpoint(str(p)) == Path(p)
+
+    def test_nonexistent_local_path_still_returns_path(self) -> None:
+        # resolution doesn't check existence (the loader does)
+        assert _resolve_init_checkpoint('/no/such/file.pt') == Path('/no/such/file.pt')
+
+
+class TestLoadInitCheckpoint:
+    """Test ERayZer._load_init_checkpoint file handling and strict=False load."""
+
+    def test_missing_file_raises(self, tmp_path) -> None:
+        # the file-existence check runs before any use of self, so a stand-in
+        # object exercises the error path without building the full model
+        missing = tmp_path / 'nope.bin'
+        with pytest.raises(FileNotFoundError, match='init_checkpoint not found'):
+            ERayZer._load_init_checkpoint(cast(ERayZer, object()), str(missing))
+
+    def test_loads_matching_keys_strict_false(self, tmp_path) -> None:
+        # build a tiny module, save part of its state dict (plus a loss_computer
+        # key and an unexpected key), and confirm the loader maps what it can
+        module = nn.Sequential(nn.Linear(3, 4))
+        ckpt = {
+            'state_dict': {
+                '0.weight': torch.ones(4, 3),
+                '0.bias': torch.ones(4),
+                'loss_computer.vgg.x': torch.zeros(2),  # must be dropped
+                'unexpected.param': torch.zeros(1),     # tolerated by strict=False
+            },
+        }
+        path = tmp_path / 'ckpt.bin'
+        torch.save(ckpt, path)
+
+        result = ERayZer._load_init_checkpoint(cast(ERayZer, module), str(path))
+
+        linear = cast(nn.Linear, module[0])
+        assert torch.allclose(linear.weight, torch.ones(4, 3))
+        assert torch.allclose(linear.bias, torch.ones(4))
+        # loss_computer.* dropped, so it is not reported as unexpected
+        assert result.unexpected_keys == ['unexpected.param']

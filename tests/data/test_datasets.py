@@ -114,7 +114,9 @@ class TestMultiViewDataset:
         ds = MultiViewDataset(
             data_dir=multiview_data_dir, image_size=_IMAGE_SIZE, normalize_cameras=False,
         )
-        assert ds[0]['c2w'][:, :3, 3].abs().max() > 1.0
+        item = ds[0]
+        assert 'c2w' in item
+        assert item['c2w'][:, :3, 3].abs().max() > 1.0
 
     def test_mask_loading(self, multiview_data_dir) -> None:
         ds = MultiViewDataset(

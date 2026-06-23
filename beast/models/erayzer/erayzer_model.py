@@ -11,19 +11,31 @@ ERayZer is the base class that includes a camera-prediction branch
 """
 
 import copy
+import logging
+from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
+from torch.nn.modules.module import _IncompatibleKeys
 
 from beast.geometry.camera import cam_info_to_plucker, get_interpolated_poses_many
 from beast.geometry.positional_encoding import get_2d_sincos_pos_embed
 from beast.geometry.rotations import quat2mat, rot6d2mat
 from beast.losses import masked_mse_loss
 from beast.models.base import BaseLightningModel
+from beast.models.erayzer.visualize import (
+    camera_intrinsic_stats,
+    export_gaussian_glb,
+    make_camera_pose_image,
+    make_render_grid,
+    viz_is_due,
+)
 from beast.nn.perceptual import VGGPerceptual
 from beast.nn.transformer import (
     QK_Norm_TransformerBlock,
@@ -35,6 +47,89 @@ from beast.rendering.gaussians_renderer import (
     deferred_gaussian_render,
     render_opencv_cam_gsplat,
 )
+
+_logger = logging.getLogger(__name__)
+
+_INIT_CKPT_CONTAINER_KEYS = ('state_dict', 'model', 'model_state_dict')
+_INIT_CKPT_DROP_PREFIXES = ('loss_computer.',)
+
+
+def _filter_init_state_dict(
+    raw: dict,
+    drop_prefixes: tuple[str, ...] = _INIT_CKPT_DROP_PREFIXES,
+) -> dict:
+    """Extract a model weight dict from a raw checkpoint and drop ignored keys.
+
+    Handles both bare state dicts and checkpoints that nest the weights under a
+    container key (``state_dict``, ``model``, or ``model_state_dict``). Keys
+    beginning with any of ``drop_prefixes`` are removed; the default drops the
+    perceptual loss network (``loss_computer.*``), which is not part of the
+    renderable model and is rebuilt from torchvision on demand.
+
+    Parameters
+    ----------
+    raw: object returned by ``torch.load`` on a checkpoint file.
+    drop_prefixes: key prefixes to exclude from the returned dict.
+
+    Returns
+    -------
+    Flat ``{name: tensor}`` state dict ready for ``load_state_dict``.
+
+    """
+    state_dict = raw
+    for key in _INIT_CKPT_CONTAINER_KEYS:
+        if isinstance(raw, dict) and isinstance(raw.get(key), dict):
+            state_dict = raw[key]
+            break
+    return {
+        name: tensor
+        for name, tensor in state_dict.items()
+        if not any(name.startswith(prefix) for prefix in drop_prefixes)
+    }
+
+
+def _parse_hf_checkpoint_url(url: str) -> tuple[str, str, str]:
+    """Parse a huggingface.co URL into ``(repo_id, revision, filename)``.
+
+    Accepts both the ``.../<repo>/blob|resolve|raw/<rev>/<path>`` form and the
+    bare ``.../<repo>/<path>`` form (defaulting the revision to ``main``).
+    """
+    from urllib.parse import urlparse
+
+    segments = [s for s in urlparse(url).path.split('/') if s]
+    if len(segments) < 3:
+        raise ValueError(f'malformed Hugging Face URL: {url}')
+    repo_id = '/'.join(segments[:2])
+    if segments[2] in ('blob', 'resolve', 'raw'):
+        if len(segments) < 5:
+            raise ValueError(f'missing file path in Hugging Face URL: {url}')
+        return repo_id, segments[3], '/'.join(segments[4:])
+    return repo_id, 'main', '/'.join(segments[2:])
+
+
+def _resolve_init_checkpoint(spec: str) -> Path:
+    """Resolve an ``init_checkpoint`` spec to a local file path.
+
+    A ``huggingface.co`` URL is downloaded (and cached) via ``huggingface_hub``;
+    any other value is treated as a local filesystem path. This mirrors the
+    multi-view loader's ``pretrained_url`` so a pretrained checkpoint can be
+    fetched from the Hub without a manual download.
+
+    Parameters
+    ----------
+    spec: a local path or a huggingface.co checkpoint URL.
+
+    Returns
+    -------
+    local path to the checkpoint file.
+
+    """
+    if spec.startswith(('http://', 'https://')) and 'huggingface.co' in spec:
+        from huggingface_hub import hf_hub_download  # lazy: only needed for URLs
+
+        repo_id, revision, filename = _parse_hf_checkpoint_url(spec)
+        return Path(hf_hub_download(repo_id=repo_id, filename=filename, revision=revision))
+    return Path(spec)
 
 
 def sanitize(t: torch.Tensor) -> torch.Tensor:
@@ -156,6 +251,10 @@ class PoseEstimator(nn.Module):
         if self.canonical not in ('first', 'middle', 'unordered'):
             raise ValueError(f'Unknown canonical mode: {self.canonical!r}')
         self.is_pairwise = pose_cfg.get('mode', 'pairwise') == 'pairwise'
+        # per_view_focal=False (default) predicts one focal from the canonical
+        # view and broadcasts it (matches the pretrained ERayZer checkpoint);
+        # True applies the focal head independently to every view
+        self.per_view_focal = pose_cfg.get('per_view_focal', False)
         self.pose_consistency_reg_weight = config['training'].get(
             'pose_consistency_reg_weight', 0.0,
         )
@@ -236,24 +335,37 @@ class PoseEstimator(nn.Module):
 
     def _predict_fxfy(
         self,
-        x_canonical: torch.Tensor,
+        x: torch.Tensor,
         v: int,
+        cano_idx: int = 0,
     ) -> torch.Tensor:
-        """Predict and broadcast focal lengths for all views.
+        """Predict focal lengths from camera tokens.
+
+        With ``per_view_focal`` the focal head is applied independently to every
+        view, so each camera gets its own focal length. Otherwise the head is
+        applied to the canonical view only and broadcast to all views, matching
+        how the pretrained ERayZer checkpoint was trained.
 
         Parameters
         ----------
-        x_canonical: canonical view tokens [B, 1, D].
-        v: total number of views to broadcast to.
+        x: per-view camera tokens of shape [B, V, D].
+        v: number of views to broadcast to.
+        cano_idx: index of the canonical view (used when not per-view).
 
         Returns
         -------
-        fxfy tensor of shape [B, V, 2].
+        fxfy tensor of shape [B, V, 2] (fx == fy per view).
 
         """
-        fxfy = self.canonical_k_head(x_canonical[:, 0]) + self._FOCAL_BIAS  # [B, 1]
-        fxfy = fxfy.unsqueeze(1).expand(-1, -1, 2)                          # [B, 1, 2]
-        return fxfy.expand(-1, v, -1)                                        # [B, V, 2]
+        if self.per_view_focal:
+            fxfy = self.canonical_k_head(x) + self._FOCAL_BIAS    # [B, V', 1]
+            if fxfy.shape[1] == 1 and v > 1:
+                fxfy = fxfy.expand(-1, v, -1)                     # broadcast single view
+        else:
+            x_cano = x[:, cano_idx:cano_idx + 1]                  # [B, 1, D]
+            fxfy = self.canonical_k_head(x_cano) + self._FOCAL_BIAS  # [B, 1, 1]
+            fxfy = fxfy.expand(-1, v, -1)                         # [B, V, 1]
+        return fxfy.expand(-1, -1, 2)                            # [B, V, 2]
 
     def _append_cxcy(self, info: torch.Tensor) -> torch.Tensor:
         """Append fixed cx=0.5, cy=0.5 principal point to all views."""
@@ -286,9 +398,9 @@ class PoseEstimator(nn.Module):
         x_canonical = x[:, cano_idx:cano_idx + 1]  # [B, 1, D]
         x_rel = x[:, rel_indices]                    # [B, V-1, D]
 
-        # identity canonical pose + broadcast fxfy
+        # identity canonical pose + fxfy (per-view or canonical-broadcast)
         rt_cano = self._identity_rt(b, device, dtype)                    # [B, 1, num_pose+3]
-        fxfy = self._predict_fxfy(x_canonical, v)                        # [B, V, 2]
+        fxfy = self._predict_fxfy(x, v, cano_idx)                        # [B, V, 2]
         info = torch.cat([rt_cano.expand(b, v, -1), fxfy], dim=-1)       # [B, V, num_pose+3+2]
 
         # relative pose residuals
@@ -304,7 +416,7 @@ class PoseEstimator(nn.Module):
         """Degenerate single-view case: identity pose broadcast to all views."""
         b = x.shape[0]
         rt_cano = self._identity_rt(b, x.device, x.dtype)
-        fxfy = self._predict_fxfy(x[:, 0:1], v)
+        fxfy = self._predict_fxfy(x, v, cano_idx=0)
         info = torch.cat([rt_cano.expand(b, v, -1), fxfy], dim=-1)
         return self._append_cxcy(info)
 
@@ -322,6 +434,7 @@ class PoseEstimator(nn.Module):
         residuals = self.rel_head(x)  # [B, V, num_pose+3]
 
         if canonical == 'unordered':
+            cano_idx = 0
             rt_final = rt_canonical + residuals
         else:
             if canonical == 'first':
@@ -334,7 +447,7 @@ class PoseEstimator(nn.Module):
             mask[:, cano_idx, :] = 0.0
             rt_final = rt_canonical + residuals * mask
 
-        fxfy = self._predict_fxfy(x[:, 0:1], v)
+        fxfy = self._predict_fxfy(x, v, cano_idx)                        # [B, V, 2]
         info = torch.cat([rt_final, fxfy], dim=-1)
         return self._append_cxcy(info)
 
@@ -467,7 +580,9 @@ class Renderer(nn.Module):
                     pc, height, width, C2W[i], fxfycxcy[i], self.sh_degree,
                     near_plane=near_plane,
                 )
-                renderings[i] = buffers['render']
+                render = buffers['render']
+                assert render is not None
+                renderings[i] = render
                 if 'depth' in buffers and buffers['depth'] is not None:
                     depth[i] = buffers['depth']
                 if 'alpha' in buffers and buffers['alpha'] is not None:
@@ -495,27 +610,27 @@ def get_point_range_func(gaussians_config: dict):
     """
     range_setting = gaussians_config.get('range_setting', {'type': 'object_centric_depth'})
     if range_setting['type'] == 'object_centric_depth':
-        def rangefunc(t):
+        def range_object_centric(t):
             return (2.0 * torch.sigmoid(t) - 1.0) * 1.5 + 2.7
-        return rangefunc
+        return range_object_centric
     elif range_setting['type'] == 'linear_depth':
         near = range_setting.get('near', 0.0)
         far = range_setting.get('far', 500.0)
-        def rangefunc(t):
+        def range_linear(t):
             return torch.sigmoid(t) * (far - near) + near
-        return rangefunc
+        return range_linear
     elif range_setting['type'] == 'log_depth':
         near = range_setting.get('near', -6.2)
         far = range_setting.get('far', 6.2)
-        def rangefunc(t):
+        def range_log(t):
             return torch.exp(torch.sigmoid(t) * (far - near) + near)
-        return rangefunc
+        return range_log
     elif range_setting['type'] == 'disparity':
         near = range_setting.get('near', 0.1)
         far = range_setting.get('far', 500.0)
-        def rangefunc(t):
+        def range_disparity(t):
             return 1.0 / (torch.sigmoid(t) * (1.0 / near - 1.0 / far) + 1.0 / far)
-        return rangefunc
+        return range_disparity
     else:
         raise NotImplementedError(f'Unknown range_setting type: {range_setting["type"]}')
 
@@ -753,13 +868,50 @@ class ERayZer(BaseLightningModel):
         self.config_bk = copy.deepcopy(config)
         self.render_interpolate = config['training'].get('render_interpolate', False)
 
-        if config['model']['transformer'].get('fix_decoder', False):
-            self.freeze_weights()
-
         if config.get('inference', False):
             self.random_index = config['training'].get('random_inputs', False)
         else:
             self.random_index = config['training'].get('random_split', False)
+
+        # warm-start fine-tuning from a pretrained ERayZer checkpoint, if given
+        init_checkpoint = config['model'].get('init_checkpoint')
+        if init_checkpoint:
+            self._load_init_checkpoint(init_checkpoint)
+
+    def _load_init_checkpoint(self, ckpt_path: str) -> _IncompatibleKeys:
+        """Load pretrained model weights (only) from a checkpoint file.
+
+        Reads the weights, drops non-model keys (e.g. the perceptual loss
+        network), and loads with ``strict=False`` so a partially-overlapping
+        checkpoint (different layer count, extra heads) still warm-starts the
+        shared parameters. ``ckpt_path`` may be a local path or a huggingface.co
+        URL (auto-downloaded), matching the multi-view ``pretrained_url``.
+
+        Parameters
+        ----------
+        ckpt_path: local path or huggingface.co URL of a weight file.
+
+        Returns
+        -------
+        the ``load_state_dict`` result with ``missing_keys``/``unexpected_keys``.
+
+        Raises
+        ------
+        FileNotFoundError: if ``ckpt_path`` does not resolve to a file.
+
+        """
+        path = _resolve_init_checkpoint(ckpt_path)
+        if not path.is_file():
+            raise FileNotFoundError(f'init_checkpoint not found: {path}')
+        raw = torch.load(str(path), map_location='cpu', weights_only=False)
+        state_dict = _filter_init_state_dict(raw)
+        result = self.load_state_dict(state_dict, strict=False)
+        _logger.info(
+            f'loaded init_checkpoint {path.name}: {len(state_dict)} tensors '
+            f'({len(result.missing_keys)} missing, '
+            f'{len(result.unexpected_keys)} unexpected)'
+        )
+        return result
 
     # ------------------------------------------------------------------
     # Camera resolution hook
@@ -825,7 +977,14 @@ class ERayZer(BaseLightningModel):
         cam_info = self.pose_predictor(cam_out, v_all)  # [B*V, pose_dim]
         pred_c2w, pred_fxfycxcy = get_cam_se3(cam_info)
         pred_c2w = rearrange(pred_c2w, '(b v) h w -> b v h w', b=b)
-        pred_fxfycxcy = rearrange(pred_fxfycxcy, '(b v) d -> b v d', b=b).detach()
+        pred_fxfycxcy = rearrange(pred_fxfycxcy, '(b v) d -> b v d', b=b)
+
+        # learn intrinsics end-to-end through the render loss (requires the
+        # gsplat fork's v_Ks); freeze them for an initial warmup so geometry can
+        # stabilize first (freeze_focal_steps=0 disables the freeze)
+        freeze_steps = self.config['training'].get('freeze_focal_steps', 0)
+        if self.global_step < freeze_steps:
+            pred_fxfycxcy = pred_fxfycxcy.detach()
 
         return pred_c2w, pred_fxfycxcy, True
 
@@ -894,8 +1053,99 @@ class ERayZer(BaseLightningModel):
         """
         return self.get_model_outputs(batch_dict)
 
+    def validation_step(self, batch_dict: dict, batch_idx: int) -> None:
+        """Run validation and, on cadence, log render/camera/intrinsic visuals.
+
+        Extends the base validation (loss logging) by logging an input/GT/pred
+        render grid, a 3D predicted-camera plot, and intrinsic/Gaussian scalars
+        to TensorBoard for the first validation batch every ``viz_every_n_epochs``.
+
+        Parameters
+        ----------
+        batch_dict: batch from the validation dataloader.
+        batch_idx: index of the current validation batch.
+
+        """
+        self.evaluate_batch(batch_dict, 'val')
+        every = self.config['training'].get('viz_every_n_epochs', 1)
+        if viz_is_due(batch_idx, self.current_epoch, every):
+            self._log_validation_visuals(batch_dict)
+
+    @torch.no_grad()
+    def _log_validation_visuals(self, batch_dict: dict) -> None:
+        """Log render grid, camera-pose plot, and scalar stats to TensorBoard.
+
+        Best-effort: any failure is logged as a warning and never interrupts
+        training. No-ops when no image-capable logger is attached.
+
+        Parameters
+        ----------
+        batch_dict: batch from the validation dataloader.
+
+        """
+        experiment = getattr(self.logger, 'experiment', None)
+        if experiment is None or not hasattr(experiment, 'add_image'):
+            return
+        try:
+            out = self.get_model_outputs(batch_dict)
+            step = self.global_step
+            # one merged grid: input GT / input render / GT target / pred target
+            experiment.add_image(
+                'val/render_grid',
+                make_render_grid(
+                    out['input_image'],
+                    out['target_image'],
+                    out['render'],
+                    render_input=out.get('render_input'),
+                ),
+                step,
+            )
+            experiment.add_image(
+                'val/pred_cameras',
+                make_camera_pose_image(out['c2w_input'], out['c2w_target']),
+                step,
+            )
+            image_size = self.config['model']['image_tokenizer']['image_size']
+            stats = camera_intrinsic_stats(out['fxfycxcy_target'], image_size)
+            for name, value in stats.items():
+                experiment.add_scalar(f'val/{name}', value, step)
+
+            gaussians = out.get('gaussians')
+            if gaussians:
+                opacity = torch.cat([g.get_opacity.flatten() for g in gaussians]).mean()
+                scaling = torch.cat([g.get_scaling.flatten() for g in gaussians]).mean()
+                experiment.add_scalar('val/opacity_mean', opacity.item(), step)
+                experiment.add_scalar('val/scale_mean', scaling.item(), step)
+                self._export_validation_pointcloud(gaussians[0], step)
+        except Exception as exc:  # noqa: BLE001 — viz must never break training
+            _logger.warning(f'validation visualization failed: {exc}')
+
+    def _export_validation_pointcloud(self, gaussian_model, step: int) -> None:
+        """Export the predicted Gaussian point cloud as a GLB under the log dir.
+
+        Writes ``<log_dir>/pointclouds/val_step<step>.glb``. Best-effort: a
+        missing log dir or export failure is logged and otherwise ignored.
+
+        Parameters
+        ----------
+        gaussian_model: GaussianModel for the sample to export.
+        step: current global step (used in the filename).
+
+        """
+        log_dir = getattr(self.logger, 'log_dir', None)
+        if log_dir is None:
+            return
+        path = Path(log_dir) / 'pointclouds' / f'val_step{step:07d}.glb'
+        # drop near-transparent Gaussians (opacity <= 0.05) from the export
+        n = export_gaussian_glb(gaussian_model, path, opacity_threshold=0.05)
+        _logger.info(f'saved validation point cloud ({n} pts): {path}')
+
     def configure_optimizers(self) -> dict:
-        """Configure AdamW optimizer with OneCycleLR scheduler.
+        """Configure the AdamW optimizer and LR schedule.
+
+        Optionally scales the LR by the global batch size (linear rule,
+        ``lr * global_batch_size / 256``) and selects either a constant schedule
+        (matching the multi-view recipe) or OneCycleLR (cosine warmup+decay).
 
         Returns
         -------
@@ -903,23 +1153,39 @@ class ERayZer(BaseLightningModel):
 
         """
         cfg = self.config['optimizer']
+        lr = cfg['lr']
+        if cfg.get('scale_lr_by_batch', False):
+            tcfg = self.config['training']
+            global_batch_size = (
+                tcfg['train_batch_size'] * tcfg['num_gpus'] * tcfg['num_nodes']
+            )
+            lr = lr * global_batch_size / 256
+
         optimizer = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, self.parameters()),
-            lr=cfg['lr'],
+            lr=lr,
             betas=(cfg['beta1'], cfg['beta2']),
             weight_decay=cfg['wd'],
         )
-        total_steps = self.config['training']['max_fwdbwd_passes']
-        warmup_steps = cfg['warmup']
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer,
-            max_lr=cfg['lr'],
-            total_steps=total_steps,
-            pct_start=warmup_steps / total_steps,
-            anneal_strategy='cos',
-            div_factor=cfg.get('div_factor', 1.0),
-            final_div_factor=cfg.get('final_div_factor', 1.0),
-        )
+
+        schedule = cfg.get('schedule', 'onecycle')
+        if schedule == 'constant':
+            # fixed LR for the whole run (multi-view recipe)
+            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda _step: 1.0)
+        elif schedule == 'onecycle':
+            total_steps = self.config['training']['max_fwdbwd_passes']
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=lr,
+                total_steps=total_steps,
+                pct_start=cfg['warmup'] / total_steps,
+                anneal_strategy='cos',
+                div_factor=cfg.get('div_factor', 1.0),
+                final_div_factor=cfg.get('final_div_factor', 1.0),
+            )
+        else:
+            raise ValueError(f'unknown optimizer.schedule: {schedule!r}')
+
         return {
             'optimizer': optimizer,
             'lr_scheduler': {'scheduler': scheduler, 'interval': 'step'},
@@ -1100,6 +1366,21 @@ class ERayZer(BaseLightningModel):
             height, width, C2W=c2w_target, fxfycxcy=fxfycxcy_target,
         )
 
+        # input-view reconstruction: render the Gaussians back at the reference
+        # cameras as a self-consistency check; computed at val/inference only
+        render_input = None
+        if not self.training or self.config.get('inference', False):
+            fxfycxcy_input_px = fxfycxcy_input
+            if normalized:
+                fxfycxcy_input_px = fxfycxcy_input * fxfycxcy_input.new_tensor(
+                    [width, height, width, height],
+                )
+            with torch.no_grad():
+                render_input = self.renderer(
+                    xyz, features, scaling, rotation, opacity,
+                    height, width, C2W=c2w_input, fxfycxcy=fxfycxcy_input_px,
+                ).render
+
         vis_only_results = None
         should_render_video = (
             render_video
@@ -1166,6 +1447,7 @@ class ERayZer(BaseLightningModel):
             input_image=data['image'][batch_idx, input_idx.clamp(max=v_real - 1), ...],
             target_image=data['image'][batch_idx, target_idx, ...],
             render=render.render,
+            render_input=render_input,
             c2w_input=c2w_input,
             fxfycxcy_input=fxfycxcy_input,
             c2w_target=c2w_target,
@@ -1322,7 +1604,7 @@ class ERayZer(BaseLightningModel):
         self,
         data: dict[str, torch.Tensor],
         num_real_views: int,
-        device: torch.device,
+        device: str | torch.device,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Resolve input and target view indices from the batch or config.
 
@@ -1344,6 +1626,38 @@ class ERayZer(BaseLightningModel):
                 input_idx = data[input_key].to(device=device, dtype=torch.long)
                 target_idx = data['target_indices'].to(device=device, dtype=torch.long)
                 return input_idx, target_idx
+
+        # multi-view-style sampling (matches the multi-view sampler): each batch
+        # draws a random TOTAL view count in [2, num_views], holds out a small
+        # number of target views (target_view_range), and feeds the rest as
+        # input. The per-sample camera shuffle in the dataset makes which
+        # physical cameras land in each slot differ across samples.
+        target_view_range = self.config['training'].get('target_view_range')
+        if self.training and target_view_range:
+            total = int(torch.randint(2, num_real_views + 1, (1,), device=device).item())
+            lo = int(target_view_range[0])
+            hi = min(int(target_view_range[1]), total - 1)
+            hi = max(hi, lo)
+            num_target = int(torch.randint(lo, hi + 1, (1,), device=device).item())
+            num_input = total - num_target
+            perm = torch.randperm(num_real_views, device=device)
+            input_idx = perm[:num_input].unsqueeze(0).repeat(batch_size, 1)
+            target_idx = perm[num_input:total].unsqueeze(0).repeat(batch_size, 1)
+            return input_idx, target_idx
+
+        # variable reference-view-count sampling: pick a random number of input
+        # views in [min, max] (per batch, so all samples share a shape) and use
+        # the remaining views as targets. The dataset shuffles which physical
+        # cameras occupy each slot per sample, so this is random-N-random-which.
+        if self.training and self.config['training'].get('random_num_input_views', False):
+            lo = self.config['training'].get('min_input_views', 2)
+            hi = min(self.config['training'].get('max_input_views', 5), num_real_views - 1)
+            hi = max(hi, lo)
+            num_input = int(torch.randint(lo, hi + 1, (1,), device=device).item())
+            perm = torch.randperm(num_real_views, device=device)
+            input_idx = perm[:num_input].unsqueeze(0).repeat(batch_size, 1)
+            target_idx = perm[num_input:].unsqueeze(0).repeat(batch_size, 1)
+            return input_idx, target_idx
 
         num_input = self.config['training'].get('num_input_views', num_real_views)
         num_target = self.config['training'].get('num_target_views', num_real_views)
@@ -1380,7 +1694,7 @@ class ERayZer(BaseLightningModel):
         self,
         input_idx: torch.Tensor,
         target_idx: torch.Tensor,
-        device: torch.device,
+        device: str | torch.device,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Randomly swap input and target view indices for two-view training.
 
@@ -1467,10 +1781,13 @@ class ERayZer(BaseLightningModel):
                 all_tokens = rearrange(all_tokens, 'b (v n) d -> (b v) n d', v=v)
             else:
                 all_tokens = rearrange(all_tokens, '(b v) n d -> b (v n) d', b=b)
-            all_tokens = torch.utils.checkpoint.checkpoint(
-                self._run_layers_encoder(i, i + 1),
-                all_tokens,
-                use_reentrant=False,
+            all_tokens = cast(
+                torch.Tensor,
+                torch.utils.checkpoint.checkpoint(
+                    self._run_layers_encoder(i, i + 1),
+                    all_tokens,
+                    use_reentrant=False,
+                ),
             )
             if checkpoint_every > 1:
                 all_tokens = self._run_layers_encoder(i + 1, i + checkpoint_every)(all_tokens)
@@ -1520,10 +1837,13 @@ class ERayZer(BaseLightningModel):
                 all_tokens = rearrange(all_tokens, 'b (v n) d -> (b v) n d', v=v)
             else:
                 all_tokens = rearrange(all_tokens, '(b v) n d -> b (v n) d', b=b)
-            all_tokens = torch.utils.checkpoint.checkpoint(
-                self._run_layers_geom(i, i + 1),
-                all_tokens,
-                use_reentrant=False,
+            all_tokens = cast(
+                torch.Tensor,
+                torch.utils.checkpoint.checkpoint(
+                    self._run_layers_geom(i, i + 1),
+                    all_tokens,
+                    use_reentrant=False,
+                ),
             )
             if checkpoint_every > 1:
                 all_tokens = self._run_layers_geom(i + 1, i + checkpoint_every)(all_tokens)

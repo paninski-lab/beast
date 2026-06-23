@@ -65,6 +65,10 @@ training:
   num_views: 3                # cameras per sample in the dataset
   num_input_views: 2          # views fed to the geometry encoder
   num_target_views: 1         # novel views to render and supervise
+  random_num_input_views: false  # train with a random number of input views in [min,max]
+  min_input_views: 2          # min reference views when random_num_input_views
+  max_input_views: 5          # max reference views when random_num_input_views
+  freeze_focal_steps: 200     # detach predicted intrinsics for this many steps, then learn
 
   train_batch_size: 8         # per GPU
   val_batch_size: 4

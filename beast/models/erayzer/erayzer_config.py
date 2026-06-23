@@ -39,6 +39,7 @@ class ERayZerPoseLatentConfig(BaseModel):
     canonical: Literal['first', 'middle', 'unordered'] = 'first'
     mode: Literal['pairwise', 'global'] = 'pairwise'
     representation: Literal['6d', 'quat'] = '6d'
+    per_view_focal: bool = False
 
 
 class ERayZerRangeSettingConfig(BaseModel):
@@ -66,11 +67,18 @@ class ERayZerGaussiansConfig(BaseModel):
 
 
 class ERayZerModelConfig(BaseModel):
-    """Complete model-section config for ERayZer."""
+    """Complete model-section config for ERayZer.
+
+    ``checkpoint`` resumes a full Lightning training state. ``init_checkpoint``
+    instead loads model weights only (``strict=False``, dropping non-model keys
+    such as the perceptual loss network) to warm-start fine-tuning from a
+    pretrained ERayZer checkpoint.
+    """
 
     model_class: Literal['erayzer']
     seed: int = 0
     checkpoint: str | None = None
+    init_checkpoint: str | None = None
 
     image_tokenizer: ERayZerImageTokenizerConfig = ERayZerImageTokenizerConfig()
     target_image: ERayZerTargetImageConfig = ERayZerTargetImageConfig()
@@ -102,9 +110,16 @@ class ERayZerTrainingConfig(BaseModel):
     log_every_n_steps: int = 10
     check_val_every_n_epoch: int = 1
     ckpt_every_n_epochs: int | None = None
+    viz_every_n_epochs: int = 1
+    precision: str = '32-true'
     num_views: int
     num_input_views: int
     num_target_views: int
+    random_num_input_views: bool = False
+    min_input_views: int = 2
+    max_input_views: int = 5
+    target_view_range: list[int] | None = None
+    freeze_focal_steps: int = 0
     max_fwdbwd_passes: int
     grad_checkpoint_every: int = 1
     train_fraction: float = 0.9
@@ -118,7 +133,13 @@ class ERayZerTrainingConfig(BaseModel):
 
 
 class ERayZerOptimizerConfig(BaseModel):
-    """Optimizer configuration for ERayZer (AdamW + OneCycleLR)."""
+    """Optimizer configuration for ERayZer (AdamW + LR schedule).
+
+    ``schedule`` selects the LR schedule: ``onecycle`` (cosine warmup+decay) or
+    ``constant`` (fixed LR, matching the multi-view recipe). ``scale_lr_by_batch``
+    applies the linear rule ``lr * global_batch_size / 256`` so the effective LR
+    tracks the global batch across GPUs/nodes.
+    """
 
     lr: float
     beta1: float = 0.9
@@ -128,3 +149,5 @@ class ERayZerOptimizerConfig(BaseModel):
     div_factor: float = 1.0
     final_div_factor: float = 1.0
     accumulate_grad_batches: int = 1
+    schedule: Literal['onecycle', 'constant'] = 'onecycle'
+    scale_lr_by_batch: bool = False

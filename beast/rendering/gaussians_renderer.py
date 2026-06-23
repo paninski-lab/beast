@@ -4,6 +4,7 @@ import logging
 import math
 from collections import OrderedDict
 from pathlib import Path
+from typing import TypeVar
 
 import matplotlib
 import numpy as np
@@ -115,6 +116,10 @@ def build_scaling_rotation(s: torch.Tensor, r: torch.Tensor) -> torch.Tensor:
 
 C0 = 0.28209479177387814
 
+# SH<->RGB conversions are pure arithmetic and work on either tensors or arrays;
+# the TypeVar preserves the input type in the return so callers keep ndarray methods
+TensorOrArray = TypeVar('TensorOrArray', torch.Tensor, np.ndarray)
+
 
 def RGB2SH(rgb: torch.Tensor) -> torch.Tensor:
     """Convert RGB to SH coefficients.
@@ -131,16 +136,16 @@ def RGB2SH(rgb: torch.Tensor) -> torch.Tensor:
     return (rgb - 0.5) / C0
 
 
-def SH2RGB(sh: torch.Tensor) -> torch.Tensor:
+def SH2RGB(sh: TensorOrArray) -> TensorOrArray:
     """Convert SH coefficients to RGB.
 
     Parameters
     ----------
-    sh: SH coefficient tensor.
+    sh: SH coefficient tensor or array.
 
     Returns
     -------
-    RGB tensor.
+    RGB tensor or array (matching the input type).
 
     """
     return sh * C0 + 0.5
@@ -241,6 +246,7 @@ class GaussianModel:
         self._xyz = self._xyz.to(device)
         self._features_dc = self._features_dc.to(device)
         if self.sh_degree > 0:
+            assert self._features_rest is not None
             self._features_rest = self._features_rest.to(device)
         self._scaling = self._scaling.to(device)
         self._rotation = self._rotation.to(device)
@@ -262,6 +268,7 @@ class GaussianModel:
         self._xyz = self._xyz[valid_mask]
         self._features_dc = self._features_dc[valid_mask]
         if self.sh_degree > 0:
+            assert self._features_rest is not None
             self._features_rest = self._features_rest[valid_mask]
         self._scaling = self._scaling[valid_mask]
         self._rotation = self._rotation[valid_mask]
@@ -418,6 +425,7 @@ class GaussianModel:
             f'{self._features_dc.min().item()}, {self._features_dc.max().item()}'
         )
         if self.sh_degree > 0:
+            assert self._features_rest is not None
             _logger.info(
                 f'features_rest: {self._features_rest.shape}, '
                 f'{self._features_rest.min().item()}, {self._features_rest.max().item()}'
@@ -481,6 +489,7 @@ class GaussianModel:
     def get_features(self) -> torch.Tensor:
         """Return all SH feature coefficients."""
         if self.sh_degree > 0:
+            assert self._features_rest is not None
             features_dc = self._features_dc
             features_rest = self._features_rest
             return torch.cat((features_dc, features_rest), dim=1)
@@ -544,6 +553,7 @@ class GaussianModel:
                     dtype_list.append((f'f_rest_{i}', 'f4'))
             else:
                 if self.sh_degree > 0:
+                    assert self._features_rest is not None
                     for i in range(
                         self._features_rest.shape[1] * self._features_rest.shape[2]
                     ):
@@ -567,6 +577,7 @@ class GaussianModel:
                 dtype_list.append((f'f_dc_{i}', 'f2'))
 
             if self.sh_degree > 0:
+                assert self._features_rest is not None
                 for i in range(
                     self._features_rest.shape[1] * self._features_rest.shape[2]
                 ):
@@ -627,6 +638,7 @@ class GaussianModel:
 
         f_rest = None
         if self.sh_degree > 0:
+            assert self._features_rest is not None
             f_rest = (
                 self._features_rest.detach()
                 .transpose(1, 2)
@@ -892,9 +904,12 @@ def render_opencv_cam(
         render_depth=render_depth,
     )
     if squeeze_view:
-        buffers['render'] = buffers['render'][0]
-        if torch.is_tensor(buffers.get('depth')):
-            buffers['depth'] = buffers['depth'][0]
+        render = buffers['render']
+        assert render is not None
+        buffers['render'] = render[0]
+        depth = buffers.get('depth')
+        if depth is not None:
+            buffers['depth'] = depth[0]
     buffers.setdefault('alpha', None)
     return buffers
 
@@ -1013,6 +1028,7 @@ class DeferredGaussianRender(torch.autograd.Function):
                         pc, height, width, C2W[i, j], fxfycxcy[i, j],
                     )['render']
 
+                    assert render is not None
                     render.backward(grad_output[i, j])
 
         del gaussians_model
