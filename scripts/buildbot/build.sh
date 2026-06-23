@@ -57,7 +57,7 @@ else
 fi
 
 # Install with checks
-pip install -e ".[dev]"
+pip install -e ".[dev]" --no-build-isolation
 echo "Pip install exit code: $?"
 pip show beast
 python -c "import beast; print('Beast location:', beast.__file__); print('Beast import successful')"
