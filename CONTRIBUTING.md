@@ -15,7 +15,8 @@ See our [code of conduct](CODE_OF_CONDUCT.md) for more information.
 install in editable mode with dev dependencies:
 
 ```bash
-pip install -e ".[dev]"
+pip install lightning poetry-core
+pip install -e ".[dev]" --no-build-isolation
 pre-commit install
 ```
 

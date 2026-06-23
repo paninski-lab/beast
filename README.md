@@ -45,14 +45,22 @@ For Github cloning:
 ```commandline
 git clone https://github.com/paninski-lab/beast
 cd beast
-pip install -e .
+pip install lightning poetry-core
+pip install -e . --no-build-isolation
 ```
 
 For installation through PyPI:
 
 ```commandline
-pip install beast-backbones
+pip install lightning poetry-core
+pip install beast-backbones --no-build-isolation
 ```
+
+> **Note:** `beast` depends on a custom fork of
+> [gsplat](https://github.com/QitaoZhao/gsplat) that must be compiled from source. The
+> `gsplat` build requires `torch` (provided by `lightning`) and the build backend requires
+> `poetry-core`. Installing these first and using `--no-build-isolation` lets the build find
+> them in your environment.
 
 ## Usage
 
