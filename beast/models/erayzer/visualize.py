@@ -366,7 +366,8 @@ def export_gaussian_glb(gaussian_model, path, opacity_threshold: float = 0.0) ->
     """
     from pathlib import Path
 
-    import trimesh  # lazy: keep trimesh optional for the core model import
+    # lazy import keeps trimesh optional for the core model import
+    import trimesh  # pyright: ignore[reportMissingImports]
 
     xyz = gaussian_model.get_xyz.detach().cpu().float()
     feat = gaussian_model.get_features.detach().cpu().float()  # [N, K, 3]

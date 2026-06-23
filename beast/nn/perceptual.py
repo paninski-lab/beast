@@ -99,9 +99,8 @@ class VGGPerceptual(Perceptual):
         self.blocks = nn.ModuleList()
         features = cast(nn.Sequential, self.vgg.features)
         for i in range(len(output_indices) - 1):
-            block = nn.Sequential(
-                *list(features[output_indices[i]:output_indices[i + 1]])
-            )
+            layers = cast(nn.Sequential, features[output_indices[i]:output_indices[i + 1]])
+            block = nn.Sequential(*layers)
             block = block.to(self.device).eval()
             for param in block.parameters():
                 param.requires_grad = False

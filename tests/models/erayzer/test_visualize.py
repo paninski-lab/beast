@@ -14,7 +14,7 @@ from beast.models.erayzer.visualize import (
 )
 
 try:
-    import trimesh  # noqa: F401
+    import trimesh  # noqa: F401  # pyright: ignore[reportMissingImports]
     _HAS_TRIMESH = True
 except Exception:
     _HAS_TRIMESH = False
