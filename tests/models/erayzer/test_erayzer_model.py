@@ -3,6 +3,7 @@
 import copy
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -804,12 +805,12 @@ class TestValidationVisuals:
     def test_no_logger_is_noop(self) -> None:
         # logger=None -> no image-capable experiment -> returns without error
         standin = SimpleNamespace(logger=None)
-        ERayZer._log_validation_visuals(standin, {})
+        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
 
     def test_logger_without_add_image_is_noop(self) -> None:
         # an experiment lacking add_image is treated as not image-capable
         standin = SimpleNamespace(logger=SimpleNamespace(experiment=object()))
-        ERayZer._log_validation_visuals(standin, {})
+        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
 
     def test_forward_failure_is_swallowed(self) -> None:
         # a capable logger but a get_model_outputs that raises must not propagate
@@ -824,18 +825,20 @@ class TestValidationVisuals:
             logger=SimpleNamespace(experiment=_Exp()),
             get_model_outputs=_boom,
         )
-        ERayZer._log_validation_visuals(standin, {})
+        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
 
 
 class TestConfigureOptimizers:
     """Test ERayZer.configure_optimizers LR scaling + schedule selection."""
 
-    def _standin(self, opt_cfg: dict, train_cfg: dict) -> SimpleNamespace:
+    def _standin(self, opt_cfg: dict, train_cfg: dict) -> ERayZer:
+        # a duck-typed stand-in exercises configure_optimizers without a full build;
+        # cast so the unbound-method calls type-check against the real signature
         param = nn.Parameter(torch.zeros(2))
-        return SimpleNamespace(
+        return cast(ERayZer, SimpleNamespace(
             config={'optimizer': opt_cfg, 'training': train_cfg},
             parameters=lambda: iter([param]),
-        )
+        ))
 
     def _train_cfg(self, **kw) -> dict:
         cfg = {'train_batch_size': 8, 'num_gpus': 1, 'num_nodes': 1, 'max_fwdbwd_passes': 1000}
@@ -945,7 +948,7 @@ class TestLoadInitCheckpoint:
         # object exercises the error path without building the full model
         missing = tmp_path / 'nope.bin'
         with pytest.raises(FileNotFoundError, match='init_checkpoint not found'):
-            ERayZer._load_init_checkpoint(object(), str(missing))
+            ERayZer._load_init_checkpoint(cast(ERayZer, object()), str(missing))
 
     def test_loads_matching_keys_strict_false(self, tmp_path) -> None:
         # build a tiny module, save part of its state dict (plus a loss_computer
@@ -962,9 +965,10 @@ class TestLoadInitCheckpoint:
         path = tmp_path / 'ckpt.bin'
         torch.save(ckpt, path)
 
-        result = ERayZer._load_init_checkpoint(module, str(path))
+        result = ERayZer._load_init_checkpoint(cast(ERayZer, module), str(path))
 
-        assert torch.allclose(module[0].weight, torch.ones(4, 3))
-        assert torch.allclose(module[0].bias, torch.ones(4))
+        linear = cast(nn.Linear, module[0])
+        assert torch.allclose(linear.weight, torch.ones(4, 3))
+        assert torch.allclose(linear.bias, torch.ones(4))
         # loss_computer.* dropped, so it is not reported as unexpected
         assert result.unexpected_keys == ['unexpected.param']

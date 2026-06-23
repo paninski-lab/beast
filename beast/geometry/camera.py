@@ -8,6 +8,7 @@ Licensed under the Apache License, Version 2.0.
 import math
 
 import numpy as np
+import numpy.typing as npt
 import torch
 from einops import rearrange
 from jaxtyping import Float
@@ -135,7 +136,7 @@ def quaternion_slerp(
     return q0
 
 
-def quaternion_matrix(quaternion: np.ndarray) -> np.ndarray:
+def quaternion_matrix(quaternion: npt.ArrayLike) -> np.ndarray:
     """Return homogeneous rotation matrix from quaternion.
 
     Parameters
@@ -163,7 +164,7 @@ def get_interpolated_poses(
     pose_a: np.ndarray,
     pose_b: np.ndarray,
     steps: int = 10,
-) -> list[float]:
+) -> list[np.ndarray]:
     """Return interpolation of poses with the specified number of steps.
 
     Parameters

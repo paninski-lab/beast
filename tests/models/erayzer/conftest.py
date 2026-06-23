@@ -14,8 +14,8 @@ from beast.data.datamodules import MultiViewDataModule
 def _gsplat_cuda_available() -> bool:
     """Return True if gsplat's CUDA extension compiled and loaded successfully."""
     try:
-        from gsplat.cuda._backend import _C  # noqa: F401
-        return _C is not None
+        import gsplat.cuda._backend as gsplat_backend
+        return getattr(gsplat_backend, '_C', None) is not None
     except Exception:
         return False
 

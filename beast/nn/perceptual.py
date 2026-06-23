@@ -1,5 +1,7 @@
 """Perceptual loss modules using pretrained feature extractors."""
 
+from typing import cast
+
 import torch
 import torch.nn as nn
 import torchvision
@@ -82,9 +84,10 @@ class VGGPerceptual(Perceptual):
     def _build_vgg(self) -> nn.Module:
         """Build VGG19 with ImageNet weights, replacing MaxPool layers with AvgPool."""
         model = vgg19(weights=VGG19_Weights.IMAGENET1K_V1)
-        for idx, layer in enumerate(model.features):
+        features = cast(nn.Sequential, model.features)
+        for idx, layer in enumerate(features):
             if isinstance(layer, nn.MaxPool2d):
-                model.features[idx] = nn.AvgPool2d(kernel_size=2, stride=2)
+                features[idx] = nn.AvgPool2d(kernel_size=2, stride=2)
         model = model.to(self.device).eval()
         for param in model.parameters():
             param.requires_grad = False
@@ -94,9 +97,10 @@ class VGGPerceptual(Perceptual):
         """Build sequential feature extraction blocks from VGG19 layers."""
         output_indices = [0, 4, 9, 14, 23, 32]
         self.blocks = nn.ModuleList()
+        features = cast(nn.Sequential, self.vgg.features)
         for i in range(len(output_indices) - 1):
             block = nn.Sequential(
-                *list(self.vgg.features[output_indices[i]:output_indices[i + 1]])
+                *list(features[output_indices[i]:output_indices[i + 1]])
             )
             block = block.to(self.device).eval()
             for param in block.parameters():

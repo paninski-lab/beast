@@ -236,7 +236,9 @@ class MultiViewDataset(torch.utils.data.Dataset):
         if not self.unique_frame_ids:
             raise ValueError(f'{self.data_dir} contains no multi-view frame data')
 
-        self.img_transform = transforms.Compose([
+        # ToTensor makes both pipelines return a Tensor; Compose's stub keeps the
+        # input type, so annotate the callables to reflect the real output
+        self.img_transform: Callable[[Image.Image], torch.Tensor] = transforms.Compose([
             transforms.Resize(
                 (image_size, image_size),
                 interpolation=transforms.InterpolationMode.BICUBIC,
@@ -244,7 +246,7 @@ class MultiViewDataset(torch.utils.data.Dataset):
             ),
             transforms.ToTensor(),
         ])
-        self.mask_transform = transforms.Compose([
+        self.mask_transform: Callable[[Image.Image], torch.Tensor] = transforms.Compose([
             transforms.Resize(
                 (image_size, image_size),
                 interpolation=transforms.InterpolationMode.NEAREST,

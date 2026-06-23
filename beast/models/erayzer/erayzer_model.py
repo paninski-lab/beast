@@ -14,10 +14,12 @@ import copy
 import logging
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from torch.nn.modules.module import _IncompatibleKeys
@@ -578,7 +580,9 @@ class Renderer(nn.Module):
                     pc, height, width, C2W[i], fxfycxcy[i], self.sh_degree,
                     near_plane=near_plane,
                 )
-                renderings[i] = buffers['render']
+                render = buffers['render']
+                assert render is not None
+                renderings[i] = render
                 if 'depth' in buffers and buffers['depth'] is not None:
                     depth[i] = buffers['depth']
                 if 'alpha' in buffers and buffers['alpha'] is not None:
@@ -606,27 +610,27 @@ def get_point_range_func(gaussians_config: dict):
     """
     range_setting = gaussians_config.get('range_setting', {'type': 'object_centric_depth'})
     if range_setting['type'] == 'object_centric_depth':
-        def rangefunc(t):
+        def range_object_centric(t):
             return (2.0 * torch.sigmoid(t) - 1.0) * 1.5 + 2.7
-        return rangefunc
+        return range_object_centric
     elif range_setting['type'] == 'linear_depth':
         near = range_setting.get('near', 0.0)
         far = range_setting.get('far', 500.0)
-        def rangefunc(t):
+        def range_linear(t):
             return torch.sigmoid(t) * (far - near) + near
-        return rangefunc
+        return range_linear
     elif range_setting['type'] == 'log_depth':
         near = range_setting.get('near', -6.2)
         far = range_setting.get('far', 6.2)
-        def rangefunc(t):
+        def range_log(t):
             return torch.exp(torch.sigmoid(t) * (far - near) + near)
-        return rangefunc
+        return range_log
     elif range_setting['type'] == 'disparity':
         near = range_setting.get('near', 0.1)
         far = range_setting.get('far', 500.0)
-        def rangefunc(t):
+        def range_disparity(t):
             return 1.0 / (torch.sigmoid(t) * (1.0 / near - 1.0 / far) + 1.0 / far)
-        return rangefunc
+        return range_disparity
     else:
         raise NotImplementedError(f'Unknown range_setting type: {range_setting["type"]}')
 
@@ -863,9 +867,6 @@ class ERayZer(BaseLightningModel):
 
         self.config_bk = copy.deepcopy(config)
         self.render_interpolate = config['training'].get('render_interpolate', False)
-
-        if config['model']['transformer'].get('fix_decoder', False):
-            self.freeze_weights()
 
         if config.get('inference', False):
             self.random_index = config['training'].get('random_inputs', False)
@@ -1603,7 +1604,7 @@ class ERayZer(BaseLightningModel):
         self,
         data: dict[str, torch.Tensor],
         num_real_views: int,
-        device: torch.device,
+        device: str | torch.device,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Resolve input and target view indices from the batch or config.
 
@@ -1693,7 +1694,7 @@ class ERayZer(BaseLightningModel):
         self,
         input_idx: torch.Tensor,
         target_idx: torch.Tensor,
-        device: torch.device,
+        device: str | torch.device,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Randomly swap input and target view indices for two-view training.
 
@@ -1780,10 +1781,13 @@ class ERayZer(BaseLightningModel):
                 all_tokens = rearrange(all_tokens, 'b (v n) d -> (b v) n d', v=v)
             else:
                 all_tokens = rearrange(all_tokens, '(b v) n d -> b (v n) d', b=b)
-            all_tokens = torch.utils.checkpoint.checkpoint(
-                self._run_layers_encoder(i, i + 1),
-                all_tokens,
-                use_reentrant=False,
+            all_tokens = cast(
+                torch.Tensor,
+                torch.utils.checkpoint.checkpoint(
+                    self._run_layers_encoder(i, i + 1),
+                    all_tokens,
+                    use_reentrant=False,
+                ),
             )
             if checkpoint_every > 1:
                 all_tokens = self._run_layers_encoder(i + 1, i + checkpoint_every)(all_tokens)
@@ -1833,10 +1837,13 @@ class ERayZer(BaseLightningModel):
                 all_tokens = rearrange(all_tokens, 'b (v n) d -> (b v) n d', v=v)
             else:
                 all_tokens = rearrange(all_tokens, '(b v) n d -> b (v n) d', b=b)
-            all_tokens = torch.utils.checkpoint.checkpoint(
-                self._run_layers_geom(i, i + 1),
-                all_tokens,
-                use_reentrant=False,
+            all_tokens = cast(
+                torch.Tensor,
+                torch.utils.checkpoint.checkpoint(
+                    self._run_layers_geom(i, i + 1),
+                    all_tokens,
+                    use_reentrant=False,
+                ),
             )
             if checkpoint_every > 1:
                 all_tokens = self._run_layers_geom(i + 1, i + checkpoint_every)(all_tokens)

@@ -231,8 +231,13 @@ def _draw_camera_frustums(
 ) -> None:
     """Plot one set of camera frustums plus center markers on ``ax``."""
     centers = c2w_np[:, :3, 3]
-    ax.scatter(centers[:, 0], centers[:, 1], centers[:, 2],
-               color=color, s=24, depthshade=False, label=label)
+    # Axes3D.scatter accepts an array for zs at runtime; its stub types it as int
+    ax.scatter(
+        centers[:, 0],
+        centers[:, 1],
+        centers[:, 2],  # pyright: ignore[reportArgumentType]
+        color=color, s=24, depthshade=False, label=label,
+    )
     for v in range(c2w_np.shape[0]):
         for p0, p1 in _frustum_segments(c2w_np[v], scale):
             ax.plot([p0[0], p1[0]], [p0[1], p1[1]], [p0[2], p1[2]],
@@ -296,7 +301,8 @@ def make_camera_pose_image(
     ax.set_zlabel('Z')
     ax.set_xticklabels([])
     ax.set_yticklabels([])
-    ax.set_zticklabels([])
+    # set_zticklabels is wrapped by a descriptor the stub types as non-callable
+    ax.set_zticklabels([])  # pyright: ignore[reportCallIssue]
     ax.legend(loc='upper right', fontsize=9)
     ax.set_title('predicted cameras (green=input, red=target)')
 
