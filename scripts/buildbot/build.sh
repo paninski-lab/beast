@@ -25,6 +25,7 @@ echo "Setting up environment..."
 source ~/.bashrc
 ml Miniforge-24.7.1-2
 ml gcc/14.1                        # satisfies NumPy >= 2 requirement
+ml cuda/12.4.0
 export LD_PRELOAD=/home/$(whoami)/.conda/envs/$CONDA_ENV/lib/libstdc++.so.6
 export LD_LIBRARY_PATH=/share/apps/spack/gcc/14.1/lib64:$LD_LIBRARY_PATH
 conda activate $CONDA_ENV
