@@ -1,4 +1,4 @@
-"""Resnet-based autoencoder implementation.
+"""ResNet autoencoder implementation.
 
 Adapted from https://github.com/Horizon2333/imagenet-autoencoder
 

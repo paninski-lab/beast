@@ -10,14 +10,12 @@ from typing import Any
 
 import torch
 
-from beast.config import BeastConfig
+from beast.config import get_beast_config_class
 from beast.inference import predict_images, predict_video
 from beast.io import load_config
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
-from beast.models.resnets import ResnetAutoencoder
-from beast.models.vits import VisionTransformer
-from beast.train import train
+from beast.models.registry import MODEL_REGISTRY, TRAIN_REGISTRY
 
 _logger = logging.getLogger(__name__)
 
@@ -45,12 +43,6 @@ class Model:
 
     This class manages both the model and the training/inference processes.
     """
-
-    MODEL_REGISTRY = {
-        'vit': VisionTransformer,
-        'resnet': ResnetAutoencoder,
-        # Add more models as needed
-    }
 
     def __init__(
         self,
@@ -83,11 +75,11 @@ class Model:
         config = load_config(config_path)
 
         model_type = config['model'].get('model_class', '').lower()
-        if model_type not in cls.MODEL_REGISTRY:
+        if model_type not in MODEL_REGISTRY:
             raise ValueError(f'Unknown model type: {model_type}')
 
         # Initialize the LightningModule
-        model_class = cls.MODEL_REGISTRY[model_type]
+        model_class = MODEL_REGISTRY[model_type]
         model = model_class(config)
 
         _logger.info(f'Loaded a {model_class} model')
@@ -116,14 +108,15 @@ class Model:
         if not isinstance(config_path, dict):
             config = load_config(config_path)
         else:
-            config = BeastConfig.model_validate(config_path).model_dump()
+            model_class = (config_path.get('model') or {}).get('model_class', '')
+            config = get_beast_config_class(model_class).model_validate(config_path).model_dump()
 
         model_type = config['model'].get('model_class', '').lower()
-        if model_type not in cls.MODEL_REGISTRY:
+        if model_type not in MODEL_REGISTRY:
             raise ValueError(f'Unknown model type: {model_type}')
 
         # Initialize the LightningModule
-        model_class = cls.MODEL_REGISTRY[model_type]
+        model_class = MODEL_REGISTRY[model_type]
         log_step(f"Creating {model_type} model instance", level='debug')
         log_step(
             f"About to call {model_class.__name__}.__init__() - this may take several"
@@ -148,8 +141,10 @@ class Model:
 
         """
         self.model_dir = Path(output_dir)
+        model_type = self.config['model'].get('model_class', '').lower()
+        train_fn = TRAIN_REGISTRY[model_type]
         with chdir(self.model_dir):
-            self.model = train(self.config, self.model, output_dir=self.model_dir)
+            self.model = train_fn(self.config, self.model, output_dir=self.model_dir)
 
     def predict_images(
         self,

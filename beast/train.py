@@ -16,7 +16,7 @@ from lightning.pytorch.utilities import rank_zero_only
 
 import beast
 from beast.data.augmentations import imgaug_pipeline
-from beast.data.datamodules import BaseDataModule
+from beast.data.datamodules import BaseDataModule, MultiViewDataModule
 from beast.data.datasets import BaseDataset
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
@@ -96,59 +96,87 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
     # Set up data objects
     # ----------------------------------------------------------------------------------
 
-    # imgaug transform
-    if rank_zero_only.rank == 0:
-        log_step("Setting up imgaug pipeline", level='debug')
-    pipe_params = config.get('training', {}).get('imgaug', 'none')
-    if isinstance(pipe_params, str):
-        from beast.data.augmentations import expand_imgaug_str_to_dict
-        pipe_params = expand_imgaug_str_to_dict(pipe_params)  # type: ignore[arg-type]
-    imgaug_pipeline_ = imgaug_pipeline(pipe_params)
-    if rank_zero_only.rank == 0:
-        log_step("Imgaug pipeline created", level='debug')
+    model_class = config['model'].get('model_class', '').lower()
 
-    # dataset
-    dataset = BaseDataset(
-        data_dir=config['data']['data_dir'],
-        imgaug_pipeline=imgaug_pipeline_,
-        num_channels=config['model']['model_params'].get('num_channels', 3),
-    )
-
-    # datamodule; breaks up dataset into train/val/test
-    if rank_zero_only.rank == 0:
-        log_step("Creating BaseDataModule", level='debug')
-    datamodule = BaseDataModule(
-        dataset=dataset,
-        train_batch_size=config['training']['train_batch_size'],
-        val_batch_size=config['training']['val_batch_size'],
-        test_batch_size=config['training']['test_batch_size'],
-        use_sampler=config['model']['model_params'].get('use_infoNCE', False),
-        num_workers=config['training']['num_workers'],
-        train_probability=config['training'].get('train_probability', 0.95),
-        val_probability=config['training'].get('val_probability', 0.05),
-        seed=config['training']['seed'],
-    )
-    if rank_zero_only.rank == 0:
-        log_step("BaseDataModule created", level='debug')
-
-    # update number of training steps (for learning rate scheduler with step information)
-    if rank_zero_only.rank == 0:
-        log_step("Calculating training steps", level='debug')
-    num_epochs = config['training']['num_epochs']
-    train_size = int(np.floor(config['training'].get('train_probability', 0.95) * len(dataset)))
-    steps_per_epoch = int(np.ceil(
-        train_size
-        / config['training']['train_batch_size']
-        / config['training']['num_gpus']
-        / config['training']['num_nodes']
-    ))
-    model.config['optimizer']['steps_per_epoch'] = steps_per_epoch
-    model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
-    if rank_zero_only.rank == 0:
-        log_step(
-            f"Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs",
-            level='debug',
+    if model_class == 'erayzer':
+        if rank_zero_only.rank == 0:
+            log_step('Creating MultiViewDataModule', level='debug')
+        datamodule = MultiViewDataModule(
+            data_dir=config['data']['data_dir'],
+            image_size=config['model']['image_tokenizer']['image_size'],
+            train_batch_size=config['training']['train_batch_size'],
+            val_batch_size=config['training']['val_batch_size'],
+            train_fraction=config['training'].get('train_fraction', 0.9),
+            num_workers=config['training']['num_workers'],
+            seed=config['training'].get('seed', 0),
         )
+        datamodule.setup()
+        if rank_zero_only.rank == 0:
+            log_step('MultiViewDataModule created', level='debug')
+        # ERayZer schedules by steps; max_fwdbwd_passes drives OneCycleLR directly
+        trainer_epoch_kwargs: dict = {
+            'max_steps': config['training']['max_fwdbwd_passes'],
+        }
+        use_distributed_sampler = True
+    else:
+        # imgaug transform
+        if rank_zero_only.rank == 0:
+            log_step('Setting up imgaug pipeline', level='debug')
+        pipe_params = config.get('training', {}).get('imgaug', 'none')
+        if isinstance(pipe_params, str):
+            from beast.data.augmentations import expand_imgaug_str_to_dict
+            pipe_params = expand_imgaug_str_to_dict(pipe_params)  # type: ignore[arg-type]
+        imgaug_pipeline_ = imgaug_pipeline(pipe_params)
+        if rank_zero_only.rank == 0:
+            log_step('Imgaug pipeline created', level='debug')
+
+        # dataset
+        dataset = BaseDataset(
+            data_dir=config['data']['data_dir'],
+            imgaug_pipeline=imgaug_pipeline_,
+            num_channels=config['model']['model_params'].get('num_channels', 3),
+        )
+
+        # datamodule; breaks up dataset into train/val/test
+        if rank_zero_only.rank == 0:
+            log_step('Creating BaseDataModule', level='debug')
+        datamodule = BaseDataModule(
+            dataset=dataset,
+            train_batch_size=config['training']['train_batch_size'],
+            val_batch_size=config['training']['val_batch_size'],
+            test_batch_size=config['training']['test_batch_size'],
+            use_sampler=config['model']['model_params'].get('use_infoNCE', False),
+            num_workers=config['training']['num_workers'],
+            train_probability=config['training'].get('train_probability', 0.95),
+            val_probability=config['training'].get('val_probability', 0.05),
+            seed=config['training']['seed'],
+        )
+        if rank_zero_only.rank == 0:
+            log_step('BaseDataModule created', level='debug')
+
+        # update number of training steps (for learning rate scheduler)
+        if rank_zero_only.rank == 0:
+            log_step('Calculating training steps', level='debug')
+        num_epochs = config['training']['num_epochs']
+        train_size = int(
+            np.floor(config['training'].get('train_probability', 0.95) * len(dataset))
+        )
+        steps_per_epoch = int(np.ceil(
+            train_size
+            / config['training']['train_batch_size']
+            / config['training']['num_gpus']
+            / config['training']['num_nodes']
+        ))
+        model.config['optimizer']['steps_per_epoch'] = steps_per_epoch
+        model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
+        if rank_zero_only.rank == 0:
+            log_step(
+                f'Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs',
+                level='debug',
+            )
+
+        trainer_epoch_kwargs = {'max_epochs': num_epochs, 'min_epochs': num_epochs}
+        use_distributed_sampler = not config['model']['model_params'].get('use_infoNCE', False)
 
     # ----------------------------------------------------------------------------------
     # Save configuration in output directory
@@ -157,13 +185,13 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
 
     # save config file
     if rank_zero_only.rank == 0:
-        log_step(f"Saving config to {output_dir}", level='debug')
+        log_step(f'Saving config to {output_dir}', level='debug')
     output_dir.mkdir(parents=True, exist_ok=True)
     dest_config_file = Path(output_dir) / 'config.yaml'
     with open(dest_config_file, 'w') as file:
         yaml.dump(config, file)
     if rank_zero_only.rank == 0:
-        log_step("Config saved", level='debug')
+        log_step('Config saved', level='debug')
 
     # ----------------------------------------------------------------------------------
     # Set up and run training
@@ -171,43 +199,32 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
 
     # logger
     if rank_zero_only.rank == 0:
-        log_step("Creating TensorBoardLogger", level='debug')
+        log_step('Creating TensorBoardLogger', level='debug')
     logger = pl_loggers.TensorBoardLogger('tb_logs', name='')
     if rank_zero_only.rank == 0:
-        log_step("TensorBoardLogger created", level='debug')
+        log_step('TensorBoardLogger created', level='debug')
 
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
     if rank_zero_only.rank == 0:
-        log_step("Setting up callbacks", level='debug')
+        log_step('Setting up callbacks', level='debug')
     callbacks = get_callbacks(
         lr_monitor=True,
         ckpt_every_n_epochs=config['training'].get('ckpt_every_n_epochs', None),
     )
     if rank_zero_only.rank == 0:
-        log_step(f"Callbacks created: {len(callbacks)} callbacks", level='debug')
-
-    # initialize to Trainer defaults. Note max_steps defaults to -1.
-    min_epochs = config['training']['num_epochs']
-    max_epochs = min_epochs
-
-    # our custom sampler does not play nice with DDP
-    if config['model']['model_params'].get('use_infoNCE', False):
-        use_distributed_sampler = False
-    else:
-        use_distributed_sampler = True
+        log_step(f'Callbacks created: {len(callbacks)} callbacks', level='debug')
 
     if rank_zero_only.rank == 0:
-        log_step("Creating PyTorch Lightning Trainer", level='debug')
-        log_step("  - accelerator: gpu", level='debug')
+        log_step('Creating PyTorch Lightning Trainer', level='debug')
+        log_step('  - accelerator: gpu', level='debug')
         log_step(f"  - devices: {config['training']['num_gpus']}", level='debug')
         log_step(f"  - num_nodes: {config['training']['num_nodes']}", level='debug')
-        log_step(f"  - max_epochs: {max_epochs}", level='debug')
+        log_step(f'  - trainer_epoch_kwargs: {trainer_epoch_kwargs}', level='debug')
     trainer = pl.Trainer(
         accelerator='gpu',
         devices=config['training']['num_gpus'],
         num_nodes=config['training']['num_nodes'],
-        max_epochs=max_epochs,
-        min_epochs=min_epochs,
+        precision=config['training'].get('precision', '32-true'),
         check_val_every_n_epoch=config['training'].get('check_val_every_n_epoch', 1),
         log_every_n_steps=config['training'].get('log_every_n_steps', 10),
         callbacks=callbacks,
@@ -215,6 +232,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         accumulate_grad_batches=config['optimizer'].get('accumulate_grad_batches', 1),
         sync_batchnorm=True,
         use_distributed_sampler=use_distributed_sampler,
+        **trainer_epoch_kwargs,
     )
     if rank_zero_only.rank == 0:
         log_step("Trainer created", level='debug')

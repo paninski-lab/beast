@@ -29,12 +29,16 @@ classifiers = [
 
 dependencies = [
     "aniposelib (>=0.8.0)",
+    "einops",
+    "gsplat @ git+https://github.com/QitaoZhao/gsplat.git@daad91d9e667cf49bab815d872aa65a5cda0a77e",
     "imaug",
     "jaxtyping",
     "lightning (~=2.5)",
+    "matplotlib",
     "numpy (>=2.0.0)",
     "opencv-python-headless",
     "pillow",
+    "plyfile",
     "pydantic",
     "scikit-learn",
     "tensorboard",
@@ -42,6 +46,7 @@ dependencies = [
     "torchvision",
     "tqdm",
     "transformers",
+    "typing_extensions",
 ]
 
 [project.urls]

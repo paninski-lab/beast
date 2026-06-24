@@ -5,7 +5,11 @@ import pytest
 import torch
 from torch.utils.data import DataLoader, RandomSampler
 
-from beast.data.datamodules import BaseDataModule, split_sizes_from_probabilities
+from beast.data.datamodules import (
+    BaseDataModule,
+    MultiViewDataModule,
+    split_sizes_from_probabilities,
+)
 from beast.data.datasets import BaseDataset
 from beast.data.samplers import ContrastBatchSampler
 
@@ -203,3 +207,84 @@ class TestSplitSizesFromProbabilities:
                 val_probability=0.1,
                 test_probability=0.2,
             )
+
+
+# ---------------------------------------------------------------------------
+# MultiViewDataModule tests
+# ---------------------------------------------------------------------------
+
+_IMAGE_SIZE = 64
+_N_VIEWS = 3
+_N_TOTAL_FRAMES = 20  # 2 sessions × 10 frames
+
+
+class TestMultiViewDataModule:
+    """Test the MultiViewDataModule class."""
+
+    def test_setup_creates_splits(self, multiview_datamodule) -> None:
+        assert multiview_datamodule.train_dataset is not None
+        assert multiview_datamodule.val_dataset is not None
+        assert (
+            len(multiview_datamodule.train_dataset) + len(multiview_datamodule.val_dataset)
+            == _N_TOTAL_FRAMES
+        )
+
+    def test_split_sizes(self, multiview_datamodule) -> None:
+        assert len(multiview_datamodule.train_dataset) == 16
+        assert len(multiview_datamodule.val_dataset) == 4
+
+    def test_train_batch_shape(self, multiview_datamodule) -> None:
+        batch = next(iter(multiview_datamodule.train_dataloader()))
+        assert batch['image'].shape == (2, _N_VIEWS, 3, _IMAGE_SIZE, _IMAGE_SIZE)
+        assert batch['c2w'].shape == (2, _N_VIEWS, 4, 4)
+        assert batch['fxfycxcy'].shape == (2, _N_VIEWS, 4)
+
+    def test_val_batch_shape(self, multiview_datamodule) -> None:
+        batch = next(iter(multiview_datamodule.val_dataloader()))
+        assert batch['image'].shape == (2, _N_VIEWS, 3, _IMAGE_SIZE, _IMAGE_SIZE)
+
+    def test_train_mode_shuffles_views_val_does_not(self, multiview_datamodule) -> None:
+        assert multiview_datamodule.train_dataset.mode == 'train'
+        assert multiview_datamodule.val_dataset.mode == 'test'
+
+    def test_sequential_split_no_overlap(self, multiview_datamodule) -> None:
+        train_ids = set(multiview_datamodule.train_dataset.unique_frame_ids)
+        val_ids = set(multiview_datamodule.val_dataset.unique_frame_ids)
+        assert train_ids.isdisjoint(val_ids)
+
+    def test_mask_propagated_to_batch(self, multiview_data_dir) -> None:
+        dm = MultiViewDataModule(
+            data_dir=multiview_data_dir, image_size=_IMAGE_SIZE,
+            train_batch_size=2, use_mask=True, num_workers=0,
+        )
+        dm.setup()
+        batch = next(iter(dm.train_dataloader()))
+        assert 'input_mask' in batch
+        assert batch['input_mask'].shape == (2, _N_VIEWS, 1, _IMAGE_SIZE, _IMAGE_SIZE)
+
+    def test_val_at_least_one_frame(self, multiview_data_dir) -> None:
+        # train_fraction=1.0 should still give at least one val frame
+        dm = MultiViewDataModule(
+            data_dir=multiview_data_dir, image_size=_IMAGE_SIZE, train_fraction=1.0,
+        )
+        dm.setup()
+        assert dm.val_dataset is not None
+        assert len(dm.val_dataset) >= 1
+
+    def test_invalid_train_fraction_raises(self, multiview_data_dir) -> None:
+        with pytest.raises(ValueError, match='train_fraction'):
+            MultiViewDataModule(
+                data_dir=multiview_data_dir, image_size=_IMAGE_SIZE, train_fraction=0.0,
+            )
+
+    def test_setup_required_before_dataloader(self, multiview_data_dir) -> None:
+        dm = MultiViewDataModule(data_dir=multiview_data_dir, image_size=_IMAGE_SIZE)
+        with pytest.raises(RuntimeError, match='call setup()'):
+            dm.train_dataloader()
+        with pytest.raises(RuntimeError, match='call setup()'):
+            dm.val_dataloader()
+
+    def test_slurm_env_var_sets_num_workers(self, multiview_data_dir, monkeypatch) -> None:
+        monkeypatch.setenv('SLURM_CPUS_PER_TASK', '4')
+        dm = MultiViewDataModule(data_dir=multiview_data_dir, image_size=_IMAGE_SIZE)
+        assert dm.num_workers == 4

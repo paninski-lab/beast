@@ -18,6 +18,7 @@ from beast.video import (
     downsample_video,
     get_frames_from_idxs,
     get_video_stats,
+    merge_videos,
     read_nth_frames,
     reencode_video,
     trim_video,
@@ -386,3 +387,43 @@ class TestDownsampleVideo:
         with patch('beast.video.subprocess.run', return_value=mock_result):
             with pytest.raises(RuntimeError, match='ffmpeg downsample failed'):
                 downsample_video(Path('in.mp4'), tmp_path / 'out.mp4', target_fps=5.0)
+
+
+class TestMergeVideos:
+    """Test the merge_videos function."""
+
+    def test_empty_list_returns_without_writing(self, tmp_path) -> None:
+        output = tmp_path / 'out.mp4'
+        merge_videos([], str(output), fps=30)
+        assert not output.exists()
+
+    def test_single_video_copies_without_ffmpeg(self, tmp_path) -> None:
+        src = tmp_path / 'src.mp4'
+        src.write_bytes(b'fake video bytes')
+        dst = tmp_path / 'out.mp4'
+        with patch('beast.video.subprocess.run') as mock_run:
+            merge_videos([str(src)], str(dst), fps=30)
+        mock_run.assert_not_called()
+        assert dst.read_bytes() == b'fake video bytes'
+
+    def test_multiple_videos_calls_ffmpeg_concat(self, tmp_path) -> None:
+        mock_result = Mock(returncode=0)
+        with patch('beast.video.subprocess.run', return_value=mock_result) as mock_run:
+            merge_videos(['/a.mp4', '/b.mp4'], str(tmp_path / 'out.mp4'), fps=30)
+        cmd = mock_run.call_args[0][0]
+        assert 'ffmpeg' in cmd
+        assert '-f' in cmd
+        assert 'concat' in cmd
+
+    def test_file_list_cleaned_up_on_success(self, tmp_path) -> None:
+        mock_result = Mock(returncode=0)
+        with patch('beast.video.subprocess.run', return_value=mock_result):
+            merge_videos(['/a.mp4', '/b.mp4'], str(tmp_path / 'out.mp4'), fps=30)
+        assert not (tmp_path / 'video_list.txt').exists()
+
+    def test_ffmpeg_failure_raises_and_cleans_up(self, tmp_path) -> None:
+        mock_result = Mock(returncode=1, stderr='fatal error')
+        with patch('beast.video.subprocess.run', return_value=mock_result):
+            with pytest.raises(RuntimeError, match='ffmpeg merge failed'):
+                merge_videos(['/a.mp4', '/b.mp4'], str(tmp_path / 'out.mp4'), fps=30)
+        assert not (tmp_path / 'video_list.txt').exists()

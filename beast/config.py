@@ -1,4 +1,32 @@
-"""Pydantic models for BEAST configuration validation."""
+"""Pydantic schemas for BEAST configuration validation and per-model dispatch.
+
+Top-level config classes
+------------------------
+BeastConfig
+    Used for models that share the standard training loop (resnet, vit).
+    Contains TrainingConfig, OptimizerConfig, and DataConfig.
+
+ERayZerBeastConfig
+    Used for ERayZer and its subclasses (e.g. BEAST3D if they share ERayZer's
+    training schema).  Contains ERayZerTrainingConfig and ERayZerOptimizerConfig.
+
+Shared schemas (reusable for new models)
+-----------------------------------------
+TrainingConfig     — standard epoch-based training fields (batch sizes, epochs, imgaug, …)
+OptimizerConfig    — AdamW/Adam + cosine/step scheduler fields
+DataConfig         — data_dir only; extend or replace for richer data configs
+
+Per-model dispatch
+------------------
+get_beast_config_class(model_class) returns the correct top-level config class for a
+given model_class string.  Both beast.io.load_config and beast.api.model.Model.from_config
+use this function so that YAML files and raw dicts are validated against the right schema.
+
+To add a new model with a divergent training schema:
+  1. Define <Model>TrainingConfig and <Model>OptimizerConfig in the model's *_config.py
+  2. Define <Model>BeastConfig here (avoids circular imports since DataConfig lives here)
+  3. Add 'model_class': <Model>BeastConfig to _MODEL_CONFIG_CLASSES
+"""
 
 from __future__ import annotations
 
@@ -7,68 +35,21 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
+from beast.models.beast_vit.beast_vit_config import VitModelConfig
+from beast.models.erayzer.erayzer_config import (
+    ERayZerModelConfig,
+    ERayZerOptimizerConfig,
+    ERayZerTrainingConfig,
+)
+
 
 class BeastConfig(BaseModel):
     model: ModelConfig
     training: TrainingConfig
     optimizer: OptimizerConfig
     data: DataConfig
-
-
-class ResnetModelConfig(BaseModel):
-    model_class: Literal['resnet']
-    model_params: ResnetModelParams
-    seed: int = 0
-    checkpoint: str | None = None
-
-
-class ResnetModelParams(BaseModel):
-    backbone: Literal[
-        'resnet18',
-        'resnet34',
-        'resnet50',
-        'resnet101',
-        'resnet152',
-    ] = 'resnet18'
-    num_latents: int | None = None
-    image_size: int = 224
-    num_channels: int = 3
-
-
-class VitModelConfig(BaseModel):
-    model_class: Literal['vit']
-    model_params: VitModelParams
-    seed: int = 0
-    checkpoint: str | None = None
-
-
-class VitModelParams(BaseModel):
-    hidden_size: int = 768
-    num_hidden_layers: int = 12
-    num_attention_heads: int = 12
-    intermediate_size: int = 3072
-    hidden_act: str = 'gelu'
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
-    initializer_range: float = 0.02
-    layer_norm_eps: float = 1e-12
-    image_size: int = 224
-    patch_size: int = 16
-    num_channels: int = 3
-    qkv_bias: bool = True
-    decoder_num_attention_heads: int = 16
-    decoder_hidden_size: int = 512
-    decoder_num_hidden_layers: int = 8
-    decoder_intermediate_size: int = 2048
-    mask_ratio: float = 0.75
-    norm_pix_loss: bool = False
-    embed_size: int = 768
-    temp_scale: bool = False
-    random_init: bool = False
-    use_infoNCE: bool = False
-    infoNCE_weight: float = 0.03
-    use_perceptual_loss: bool = False
-    lambda_perceptual: float = 10.0
+    inference: bool = False
 
 
 ModelConfig = Annotated[
@@ -111,6 +92,36 @@ class OptimizerConfig(BaseModel):
 
 class DataConfig(BaseModel):
     data_dir: str | Path
+
+
+class ERayZerBeastConfig(BaseModel):
+    """Complete top-level config for ERayZer training runs."""
+
+    model: ERayZerModelConfig
+    training: ERayZerTrainingConfig
+    optimizer: ERayZerOptimizerConfig
+    data: DataConfig
+    inference: bool = False
+
+
+_MODEL_CONFIG_CLASSES: dict[str, type[BaseModel]] = {
+    'erayzer': ERayZerBeastConfig,
+}
+
+
+def get_beast_config_class(model_class: str) -> type[BaseModel]:
+    """Return the top-level Pydantic config class for the given model_class identifier.
+
+    Parameters
+    ----------
+    model_class: model type identifier string (e.g., 'resnet', 'vit', 'erayzer')
+
+    Returns
+    -------
+    Pydantic model class for the full top-level config
+
+    """
+    return _MODEL_CONFIG_CLASSES.get(model_class, BeastConfig)
 
 
 BeastConfig.model_rebuild()

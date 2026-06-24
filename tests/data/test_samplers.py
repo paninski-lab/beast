@@ -8,7 +8,7 @@ from beast.data.samplers import (
     contrastive_collate_fn,
     extract_anchor_indices,
 )
-from beast.models.vits import batch_wise_contrastive_loss, topk
+from beast.models.beast_vit.beast_vit_model import batch_wise_contrastive_loss, topk
 
 
 class TestExtractAnchorIndices:

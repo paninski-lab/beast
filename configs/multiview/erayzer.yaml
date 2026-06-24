@@ -1,0 +1,118 @@
+# ERayZer: feed-forward multi-view 3D Gaussian splatting model.
+# Encodes posed (or to-be-posed) multi-view images into a 3D Gaussian field
+# and renders novel views via Gaussian splatting.
+#
+# Camera source:
+#   base ERayZer  — learns to predict cameras from image context
+#   BEAST3D       — reads GT cameras from the dataset (override _resolve_cameras)
+#
+# Run with: beast train --config configs/multiview/erayzer.yaml
+
+# ---------------------------------------------------------------------------
+# Model architecture
+# ---------------------------------------------------------------------------
+model:
+  model_class: erayzer
+  seed: 0
+  checkpoint: null            # path to .ckpt for fine-tuning or inference
+
+  image_tokenizer:
+    image_size: 256           # square input resolution (H = W)
+    patch_size: 16            # spatial tokens per view: (image_size / patch_size)^2
+    in_channels: 3            # RGB
+
+  target_image:
+    height: 256               # novel-view render resolution
+    width: 256
+
+  transformer:
+    d: 768                    # token embedding dimension
+    d_head: 64                # per-head dimension (d must be divisible by d_head)
+    encoder_n_layer: 12       # camera-prediction encoder depth (must be even; 0 to disable)
+    encoder_geom_n_layer: 12  # geometry encoder depth (must be even)
+    use_qk_norm: true         # QK normalization inside attention
+    special_init: true        # apply layerwise weight scaling at init
+    depth_init: true          # scale init std by layer depth rather than total depth
+    fix_decoder: false        # freeze Gaussian decoder (encoder-only fine-tuning)
+
+  pose_latent:
+    canonical: first          # canonical anchor view: first | middle | unordered
+    mode: pairwise            # pairwise (anchor+relative) | global (all-views direct)
+    representation: 6d        # rotation parameterization: 6d (continuous) | quat
+
+  gaussians:
+    sh_degree: 3              # spherical-harmonics degree (0 = RGB only, 3 = full SH)
+    range_setting:
+      type: object_centric_depth  # depth mapping: object_centric_depth | linear_depth |
+                                  #   log_depth | disparity
+
+  hard_pixelalign: false      # project each Gaussian onto its source pixel ray
+  input_with_pe: true         # add 2-D sinusoidal positional encoding to image tokens
+  mask_ratio: 0.0             # random token dropout during training (0 = disabled)
+
+  # Gaussian activation biases (applied before exp/sigmoid in GaussiansUpsampler)
+  scaling_bias: -2.3
+  scaling_max: -1.2
+  opacity_bias: -2.0
+
+  near_plane: 0.2             # near clipping plane passed to gsplat rasterizer
+
+# ---------------------------------------------------------------------------
+# Training
+# ---------------------------------------------------------------------------
+training:
+  seed: 0
+  num_views: 3                # cameras per sample in the dataset
+  num_input_views: 2          # views fed to the geometry encoder
+  num_target_views: 1         # novel views to render and supervise
+  random_num_input_views: false  # train with a random number of input views in [min,max]
+  min_input_views: 2          # min reference views when random_num_input_views
+  max_input_views: 5          # max reference views when random_num_input_views
+  freeze_focal_steps: 200     # detach predicted intrinsics for this many steps, then learn
+
+  train_batch_size: 8         # per GPU
+  val_batch_size: 4
+  num_epochs: 200
+  num_workers: 8
+  num_gpus: 1
+  num_nodes: 1
+
+  max_fwdbwd_passes: 200000   # total gradient steps (controls OneCycleLR span)
+  grad_checkpoint_every: 1    # gradient-checkpoint granularity (1 = per layer)
+
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+
+  train_fraction: 0.9         # fraction of samples used for training (rest = validation)
+  random_split: false         # randomize input/target partition order per batch
+  random_inputs: false        # randomize which views are used as input
+  render_interpolate: false   # render an interpolated video trajectory at eval time
+
+  # Loss weights (0 = disabled)
+  l2_loss_weight: 1.0
+  gs_reg_loss_weight: 0.0
+  perceptual_loss_weight: 0.0
+  pose_consistency_reg_weight: 0.0
+
+# ---------------------------------------------------------------------------
+# Optimizer  (AdamW + OneCycleLR)
+# ---------------------------------------------------------------------------
+optimizer:
+  lr: 4.0e-4
+  beta1: 0.9
+  beta2: 0.95
+  wd: 0.05
+  warmup: 3000                # warmup steps for OneCycleLR pct_start
+  div_factor: 1.0             # initial_lr = lr / div_factor
+  final_div_factor: 1.0       # min_lr = initial_lr / final_div_factor
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+data:
+  data_dir: /PATH/TO/MULTIVIEW/DATA   # root of a beast extract_3d output directory
+
+# ---------------------------------------------------------------------------
+# Runtime flags
+# ---------------------------------------------------------------------------
+inference: false    # set to true at inference time; disables view split and enables video render

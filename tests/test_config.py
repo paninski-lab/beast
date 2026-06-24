@@ -7,15 +7,21 @@ from pydantic import ValidationError
 
 from beast.config import (
     BeastConfig,
+    ERayZerBeastConfig,
     OptimizerConfig,
-    ResnetModelParams,
     TrainingConfig,
-    VitModelParams,
+    get_beast_config_class,
 )
 from beast.io import load_config
+from beast.models.beast_resnet.beast_resnet_config import ResnetModelParams
+from beast.models.beast_vit.beast_vit_config import VitModelParams
+from beast.models.erayzer.erayzer_config import ERayZerOptimizerConfig, ERayZerTrainingConfig
 
 _CONFIGS_DIR = Path(__file__).parent.parent / 'configs'
-_CONFIG_FILES = list(_CONFIGS_DIR.glob('*.yaml'))
+_NON_BEAST_CONFIG_NAMES = {'extraction_pipeline.yaml'}
+_CONFIG_FILES = sorted(
+    p for p in _CONFIGS_DIR.rglob('*.yaml') if p.name not in _NON_BEAST_CONFIG_NAMES
+)
 
 _MINIMAL_RESNET = {
     'model': {'model_class': 'resnet', 'model_params': {}},
@@ -28,6 +34,23 @@ _MINIMAL_VIT = {
     'model': {'model_class': 'vit', 'model_params': {}},
     'training': {'train_batch_size': 32, 'val_batch_size': 64},
     'optimizer': {'lr': 1e-4},
+    'data': {'data_dir': '/path/to/data'},
+}
+
+_MINIMAL_ERAYZER = {
+    'model': {
+        'model_class': 'erayzer',
+        'transformer': {'d': 256, 'd_head': 64, 'encoder_geom_n_layer': 4},
+    },
+    'training': {
+        'train_batch_size': 4,
+        'val_batch_size': 2,
+        'num_views': 3,
+        'num_input_views': 2,
+        'num_target_views': 1,
+        'max_fwdbwd_passes': 50000,
+    },
+    'optimizer': {'lr': 4e-4},
     'data': {'data_dir': '/path/to/data'},
 }
 
@@ -135,10 +158,93 @@ class TestVitModelParams:
         assert cfg.use_perceptual_loss is False
 
 
+class TestERayZerTrainingConfig:
+    """Test the ERayZerTrainingConfig model."""
+
+    def test_defaults_applied(self) -> None:
+        cfg = ERayZerTrainingConfig(
+            train_batch_size=4,
+            val_batch_size=2,
+            num_views=3,
+            num_input_views=2,
+            num_target_views=1,
+            max_fwdbwd_passes=50000,
+        )
+        assert cfg.num_epochs == 200
+        assert cfg.seed == 0
+        assert cfg.train_fraction == 0.9
+        assert cfg.l2_loss_weight == 1.0
+        assert cfg.random_split is False
+        assert cfg.ckpt_every_n_epochs is None
+
+    def test_missing_required_fields_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            ERayZerTrainingConfig(train_batch_size=4, val_batch_size=2)  # type: ignore[call-arg]
+
+
+class TestERayZerOptimizerConfig:
+    """Test the ERayZerOptimizerConfig model."""
+
+    def test_defaults_applied(self) -> None:
+        cfg = ERayZerOptimizerConfig(lr=4e-4)
+        assert cfg.beta1 == 0.9
+        assert cfg.beta2 == 0.95
+        assert cfg.wd == 0.05
+        assert cfg.warmup == 3000
+        assert cfg.div_factor == 1.0
+        assert cfg.accumulate_grad_batches == 1
+
+    def test_missing_lr_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            ERayZerOptimizerConfig()  # type: ignore[call-arg]
+
+
+class TestERayZerBeastConfig:
+    """Test the ERayZerBeastConfig model."""
+
+    def test_valid_config(self) -> None:
+        ERayZerBeastConfig.model_validate(_MINIMAL_ERAYZER)
+
+    def test_missing_required_training_field_raises(self) -> None:
+        raw = {**_MINIMAL_ERAYZER, 'training': {'train_batch_size': 4, 'val_batch_size': 2}}
+        with pytest.raises(ValidationError):
+            ERayZerBeastConfig.model_validate(raw)
+
+    def test_model_dump_contains_erayzer_fields(self) -> None:
+        config = ERayZerBeastConfig.model_validate(_MINIMAL_ERAYZER)
+        dumped = config.model_dump()
+        assert dumped['training']['num_views'] == 3
+        assert dumped['training']['max_fwdbwd_passes'] == 50000
+        assert 'beta1' in dumped['optimizer']
+
+
+class TestGetBeastConfigClass:
+    """Test the get_beast_config_class dispatcher."""
+
+    def test_erayzer_returns_erayzer_beast_config(self) -> None:
+        assert get_beast_config_class('erayzer') is ERayZerBeastConfig
+
+    def test_resnet_falls_back_to_beast_config(self) -> None:
+        assert get_beast_config_class('resnet') is BeastConfig
+
+    def test_vit_falls_back_to_beast_config(self) -> None:
+        assert get_beast_config_class('vit') is BeastConfig
+
+    def test_unknown_falls_back_to_beast_config(self) -> None:
+        assert get_beast_config_class('totally_unknown_model') is BeastConfig
+
+    def test_empty_string_falls_back_to_beast_config(self) -> None:
+        assert get_beast_config_class('') is BeastConfig
+
+
 class TestConfigFiles:
     """Validate all config files in the configs/ directory."""
 
-    @pytest.mark.parametrize('config_path', _CONFIG_FILES, ids=[p.name for p in _CONFIG_FILES])
+    @pytest.mark.parametrize(
+        'config_path',
+        _CONFIG_FILES,
+        ids=[str(p.relative_to(_CONFIGS_DIR)) for p in _CONFIG_FILES],
+    )
     def test_config_is_valid(self, config_path: Path) -> None:
         config = load_config(config_path)
         assert isinstance(config, dict)

@@ -4,6 +4,7 @@ import copy
 import logging
 import multiprocessing
 import os
+from pathlib import Path
 from typing import cast
 
 import lightning.pytorch as pl
@@ -12,7 +13,7 @@ import torch
 from lightning.pytorch.utilities import rank_zero_only
 from torch.utils.data import DataLoader, Subset, random_split
 
-from beast.data.datasets import BaseDataset
+from beast.data.datasets import BaseDataset, MultiViewDataset
 from beast.data.samplers import ContrastBatchSampler, contrastive_collate_fn
 
 _logger = logging.getLogger(__name__)
@@ -332,3 +333,140 @@ def split_sizes_from_probabilities(
         )
 
     return [train_number, val_number, test_number]
+
+
+class MultiViewDataModule(pl.LightningDataModule):
+    """Lightning data module for BEAST3D multi-view self-supervised training.
+
+    Splits unique frame IDs sequentially into train and val sets (no shuffle before
+    splitting, so later sessions end up in val — avoids temporal leakage).  Each split
+    gets its own ``MultiViewDataset`` instance with the appropriate mode so that
+    view-order shuffling is only applied during training.
+    """
+
+    def __init__(
+        self,
+        data_dir: str | Path,
+        image_size: int,
+        train_batch_size: int = 4,
+        val_batch_size: int = 4,
+        train_fraction: float = 0.9,
+        use_mask: bool = False,
+        normalize_cameras: bool = True,
+        num_workers: int | None = None,
+        seed: int = 42,
+    ) -> None:
+        """Initialize the multi-view data module.
+
+        Parameters
+        ----------
+        data_dir: path to the ``dataset/`` directory produced by ``beast extract_3d``.
+        image_size: square size to resize images to.
+        train_batch_size: batch size for the training dataloader.
+        val_batch_size: batch size for the validation dataloader.
+        train_fraction: fraction of unique frames used for training; the rest go to val.
+        use_mask: if True, load binary segmentation masks.
+        normalize_cameras: if True, normalize camera poses per sample.
+        num_workers: dataloader worker count; defaults to SLURM_CPUS_PER_TASK or cpu_count.
+        seed: random seed for the training dataloader shuffle.
+
+        """
+        if not 0 < train_fraction <= 1:
+            raise ValueError(f'train_fraction must be in (0, 1], got {train_fraction}')
+
+        super().__init__()
+        self.data_dir = Path(data_dir)
+        self.image_size = image_size
+        self.train_batch_size = train_batch_size
+        self.val_batch_size = val_batch_size
+        self.train_fraction = train_fraction
+        self.use_mask = use_mask
+        self.normalize_cameras = normalize_cameras
+        self.seed = seed
+
+        if num_workers is not None:
+            self.num_workers = num_workers
+        else:
+            slurm_cpus = os.getenv('SLURM_CPUS_PER_TASK')
+            self.num_workers = int(slurm_cpus) if slurm_cpus else (os.cpu_count() or 0)
+
+        self.train_dataset: MultiViewDataset | None = None
+        self.val_dataset: MultiViewDataset | None = None
+
+    def setup(self, stage: str | None = None) -> None:
+        """Build train and val datasets by splitting unique frame IDs.
+
+        Parameters
+        ----------
+        stage: Lightning stage string (unused; both splits are always built).
+
+        """
+        # build a temporary dataset just to enumerate all frame IDs
+        full = MultiViewDataset(
+            data_dir=self.data_dir,
+            image_size=self.image_size,
+            mode='test',
+            use_mask=False,
+            normalize_cameras=self.normalize_cameras,
+        )
+        all_ids = full.unique_frame_ids
+        n_train = max(1, int(len(all_ids) * self.train_fraction))
+        train_ids = all_ids[:n_train]
+        val_ids = all_ids[n_train:] or all_ids[-1:]  # at least one val sample
+
+        self.train_dataset = MultiViewDataset(
+            data_dir=self.data_dir,
+            image_size=self.image_size,
+            mode='train',
+            use_mask=self.use_mask,
+            normalize_cameras=self.normalize_cameras,
+            frame_ids=train_ids,
+        )
+        self.val_dataset = MultiViewDataset(
+            data_dir=self.data_dir,
+            image_size=self.image_size,
+            mode='test',
+            use_mask=self.use_mask,
+            normalize_cameras=self.normalize_cameras,
+            frame_ids=val_ids,
+        )
+
+        if rank_zero_only.rank == 0:
+            _logger.info(
+                f'MultiViewDataModule: {len(train_ids)} train frames, '
+                f'{len(val_ids)} val frames'
+            )
+
+    def train_dataloader(self) -> DataLoader:
+        """Return the training dataloader."""
+        if self.train_dataset is None:
+            raise RuntimeError('call setup() before train_dataloader()')
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.train_batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            persistent_workers=self.num_workers > 0,
+            pin_memory=True,
+            drop_last=True,
+            generator=torch.Generator().manual_seed(self.seed),
+            multiprocessing_context=(
+                multiprocessing.get_context('spawn') if self.num_workers > 0 else None
+            ),
+        )
+
+    def val_dataloader(self) -> DataLoader:
+        """Return the validation dataloader."""
+        if self.val_dataset is None:
+            raise RuntimeError('call setup() before val_dataloader()')
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.val_batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            persistent_workers=self.num_workers > 0,
+            pin_memory=True,
+            multiprocessing_context=(
+                multiprocessing.get_context('spawn') if self.num_workers > 0 else None
+            ),
+        )
