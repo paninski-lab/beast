@@ -8,6 +8,7 @@ from beast.rendering.gaussians_renderer import (
     SH2RGB,
     build_rotation,
     build_scaling_rotation,
+    camera_frustum_constraint,
     strip_lowerdiag,
     strip_symmetric,
 )
@@ -139,3 +140,55 @@ class TestSH2RGB:
     def test_output_shape_preserved(self) -> None:
         sh = torch.randn(8, 3)
         assert SH2RGB(sh).shape == (8, 3)
+
+
+class TestCameraFrustumConstraint:
+    """Test the camera_frustum_constraint function (CPU-only, no rasterizer)."""
+
+    @staticmethod
+    def _identity_cam() -> tuple[torch.Tensor, torch.Tensor]:
+        """A single camera at the origin looking down +z with a 64x64 image."""
+        c2w = torch.eye(4).unsqueeze(0)  # [1, 4, 4]
+        # fx = fy = 100, principal point at image centre (cx = cy = 32)
+        fxfycxcy = torch.tensor([[100.0, 100.0, 32.0, 32.0]])
+        return c2w, fxfycxcy
+
+    def test_point_in_front_kept(self) -> None:
+        c2w, fxfycxcy = self._identity_cam()
+        xyz = torch.tensor([[0.0, 0.0, 2.0]])  # on-axis, in front
+        opacity = torch.tensor([[0.8]])
+        out = camera_frustum_constraint(xyz, opacity, c2w, fxfycxcy, 64, 64)
+        assert torch.allclose(out, opacity)
+
+    def test_point_behind_camera_zeroed(self) -> None:
+        c2w, fxfycxcy = self._identity_cam()
+        xyz = torch.tensor([[0.0, 0.0, -2.0]])  # behind the camera
+        opacity = torch.tensor([[0.8]])
+        out = camera_frustum_constraint(xyz, opacity, c2w, fxfycxcy, 64, 64)
+        assert out.item() == 0.0
+
+    def test_point_outside_fov_zeroed(self) -> None:
+        c2w, fxfycxcy = self._identity_cam()
+        xyz = torch.tensor([[10.0, 0.0, 2.0]])  # far off-axis, projects outside image
+        opacity = torch.tensor([[0.8]])
+        out = camera_frustum_constraint(xyz, opacity, c2w, fxfycxcy, 64, 64)
+        assert out.item() == 0.0
+
+    def test_intersection_of_two_cameras(self) -> None:
+        # cam0 at origin sees (0,0,2); cam1 shifted far along +x does not.
+        c2w0 = torch.eye(4)
+        c2w1 = torch.eye(4)
+        c2w1[0, 3] = 100.0  # translate camera centre by +100 in world x
+        c2w = torch.stack([c2w0, c2w1])  # [2, 4, 4]
+        fxfycxcy = torch.tensor([[100.0, 100.0, 32.0, 32.0]]).expand(2, -1)
+        xyz = torch.tensor([[0.0, 0.0, 2.0]])
+        opacity = torch.tensor([[0.8]])
+        out = camera_frustum_constraint(xyz, opacity, c2w, fxfycxcy, 64, 64)
+        assert out.item() == 0.0  # not seen by cam1 → excluded from the intersection
+
+    def test_opacity_shape_preserved(self) -> None:
+        c2w, fxfycxcy = self._identity_cam()
+        xyz = torch.randn(50, 3)
+        opacity = torch.rand(50, 1)
+        out = camera_frustum_constraint(xyz, opacity, c2w, fxfycxcy, 64, 64)
+        assert out.shape == opacity.shape

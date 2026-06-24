@@ -1,0 +1,123 @@
+# BEAST3D: ERayZer with a frozen DINOv3 tokenizer, ground-truth cameras, and
+# frustum-constrained 3D Gaussian splatting.
+#
+# Differences from erayzer.yaml:
+#   - cameras come from the dataset (c2w / fxfycxcy), so the pose-prediction
+#     branch is disabled: transformer.encoder_n_layer = 0
+#   - images are tokenized by a frozen DINOv3 ViT-base (d must be 768)
+#   - rendering is frustum-constrained and supervised with masked photometric +
+#     alpha losses against the GT foreground mask (random background during train)
+#
+# Run with: beast train --config configs/multiview/beast3d.yaml
+
+# ---------------------------------------------------------------------------
+# Model architecture
+# ---------------------------------------------------------------------------
+model:
+  model_class: beast3d
+  seed: 0
+  checkpoint: null            # path to .ckpt for fine-tuning or inference
+  init_checkpoint: null       # path / HF URL for weight-only warm-start
+
+  # BEAST3D-specific
+  use_dinov3: true            # frozen DINOv3 ViT-base tokenizer (d must be 768)
+  freeze_dinov3: true
+  dino_model_name: facebook/dinov3-vitb16-pretrain-lvd1689m
+  frustum_constraint: true    # restrict Gaussians to the intersection of input frustums
+  random_background: true     # composite a random background into masked targets (train)
+  mask_loss_weight: 0.1       # weight of the rendered-alpha vs foreground-mask MSE
+
+  image_tokenizer:
+    image_size: 256           # square input resolution (must match DINOv3 patches)
+    patch_size: 16            # DINOv3 ViT-base/16 → 16x16 = 256 patch tokens per view
+    in_channels: 3
+
+  target_image:
+    height: 256               # novel-view render resolution
+    width: 256
+
+  transformer:
+    d: 768                    # token embedding dimension (= DINOv3 embed_dim)
+    d_head: 64                # per-head dimension
+    encoder_n_layer: 0        # camera-prediction branch disabled (GT cameras)
+    encoder_geom_n_layer: 16  # geometry encoder depth (must be even)
+    use_qk_norm: true
+    special_init: true
+    depth_init: true
+    fix_decoder: false
+
+  pose_latent:                # unused when encoder_n_layer = 0 (kept for schema)
+    canonical: middle
+    mode: pairwise
+    representation: 6d
+
+  gaussians:
+    sh_degree: 3
+    range_setting:
+      type: linear_depth      # depth mapping for hard pixel alignment
+      near: 0.0
+      far: 8.0                # scene depth in world units; tune per dataset
+
+  hard_pixelalign: true       # project each Gaussian onto its source pixel ray
+  input_with_pe: true
+  mask_ratio: 0.0
+
+  # Gaussian activation biases
+  scaling_bias: -3.0
+  scaling_max: -2.0
+  opacity_bias: -2.0
+
+  near_plane: 0.2             # near clipping plane passed to gsplat
+
+# ---------------------------------------------------------------------------
+# Training
+# ---------------------------------------------------------------------------
+training:
+  seed: 0
+  num_views: 10               # cameras per sample in the dataset
+  num_input_views: 5          # views fed to the geometry encoder
+  num_target_views: 5         # novel views to render and supervise
+  random_split: true          # randomize input/target partition order per batch
+
+  train_batch_size: 8         # per GPU
+  val_batch_size: 4
+  num_epochs: 1000
+  num_workers: 8
+  num_gpus: 1
+  num_nodes: 1
+
+  max_fwdbwd_passes: 152000   # total gradient steps (controls OneCycleLR span)
+  grad_checkpoint_every: 1
+
+  log_every_n_steps: 10
+  check_val_every_n_epoch: 1
+
+  train_fraction: 0.9
+
+  # Loss weights (0 = disabled)
+  l2_loss_weight: 1.0
+  gs_reg_loss_weight: 0.0
+  perceptual_loss_weight: 0.2
+
+# ---------------------------------------------------------------------------
+# Optimizer  (AdamW + OneCycleLR)
+# ---------------------------------------------------------------------------
+optimizer:
+  lr: 4.0e-4
+  beta1: 0.9
+  beta2: 0.95
+  wd: 0.05
+  warmup: 3000
+  div_factor: 1.0
+  final_div_factor: 1.0
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+data:
+  data_dir: /PATH/TO/MULTIVIEW/DATA   # root of a beast extract_3d output directory
+
+# ---------------------------------------------------------------------------
+# Runtime flags
+# ---------------------------------------------------------------------------
+inference: false

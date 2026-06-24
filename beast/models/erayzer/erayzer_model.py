@@ -537,6 +537,8 @@ class Renderer(nn.Module):
         width,
         C2W,
         fxfycxcy,
+        frustum_constraint: bool = False,
+        backgrounds: torch.Tensor | None = None,
     ):
         """Render Gaussians for all batch items and views.
 
@@ -551,6 +553,11 @@ class Renderer(nn.Module):
         width: render width in pixels.
         C2W: camera-to-world matrices of shape [b, v, 4, 4].
         fxfycxcy: intrinsics of shape [b, v, 4].
+        frustum_constraint: if True, restrict Gaussians to the intersection of
+            all view frustums (BEAST3D); off by default so base ERayZer is
+            unaffected.
+        backgrounds: optional background colour [3] passed to the rasteriser;
+            None keeps the renderer default (white).
 
         Returns
         -------
@@ -579,6 +586,8 @@ class Renderer(nn.Module):
                 buffers = render_opencv_cam_gsplat(
                     pc, height, width, C2W[i], fxfycxcy[i], self.sh_degree,
                     near_plane=near_plane,
+                    bg_color=backgrounds,
+                    frustum_constraint=frustum_constraint,
                 )
                 render = buffers['render']
                 assert render is not None
@@ -989,6 +998,79 @@ class ERayZer(BaseLightningModel):
         return pred_c2w, pred_fxfycxcy, True
 
     # ------------------------------------------------------------------
+    # Subclass hooks (no-ops in base ERayZer; overridden by BEAST3D)
+    # ------------------------------------------------------------------
+
+    def _tokenize_images(self, images: torch.Tensor) -> torch.Tensor:
+        """Tokenize images into per-patch embeddings.
+
+        Base ERayZer rescales ``[0, 1]`` images to ``[-1, 1]`` and applies the
+        learned patch tokenizer. Subclasses (BEAST3D) override this to use a
+        different tokenizer such as a frozen DINOv3 backbone.
+
+        Parameters
+        ----------
+        images: image tensor of shape [B, V, 3, H, W] in [0, 1].
+
+        Returns
+        -------
+        patch tokens of shape [B*V, n, d].
+
+        """
+        return self.image_tokenizer(images * 2.0 - 1.0)
+
+    def _sample_background(
+        self,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> torch.Tensor | None:
+        """Return a background colour for rendering and target compositing.
+
+        Base ERayZer returns None, leaving the renderer's default background.
+        BEAST3D overrides this to randomize the background during training.
+
+        Parameters
+        ----------
+        device: device for the colour tensor.
+        dtype: dtype for the colour tensor.
+
+        Returns
+        -------
+        a colour tensor of shape [3], or None to keep the renderer default.
+
+        """
+        return None
+
+    def _prepare_target(
+        self,
+        target_image: torch.Tensor,
+        data: dict,
+        batch_idx: torch.Tensor,
+        target_idx: torch.Tensor,
+        bg_color: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Return the photometric target and an optional foreground mask.
+
+        Base ERayZer supervises the raw target image with no mask. BEAST3D
+        overrides this to composite ``bg_color`` into the masked background and
+        return the foreground mask for masked-photometric + alpha supervision.
+
+        Parameters
+        ----------
+        target_image: target views of shape [B, v_target, 3, H, W].
+        data: batch dict (source of GT masks for overrides).
+        batch_idx: batch index helper of shape [B, 1].
+        target_idx: target view indices of shape [B, v_target].
+        bg_color: the background colour used by the renderer, or None.
+
+        Returns
+        -------
+        tuple of (target_image, pixel_mask or None).
+
+        """
+        return target_image, None
+
+    # ------------------------------------------------------------------
     # BaseLightningModel interface
     # ------------------------------------------------------------------
 
@@ -1218,7 +1300,7 @@ class ERayZer(BaseLightningModel):
         SimpleNamespace with rendered images and auxiliary fields.
 
         """
-        image_all = data['image'] * 2.0 - 1.0  # [B, V, 3, H, W], rescale [0,1] → [-1,1]
+        image_all = data['image']  # [B, V, 3, H, W] in [0, 1]
 
         b, v_real, c, h, w = image_all.shape
         device = image_all.device
@@ -1241,8 +1323,8 @@ class ERayZer(BaseLightningModel):
         else:
             v_all = v_real
 
-        # tokenize all views and add spatial PE
-        img_tokens = self.image_tokenizer(image_all)  # [B*V, n, d]
+        # tokenize all views and add spatial PE (subclasses may swap the tokenizer)
+        img_tokens = self._tokenize_images(image_all)  # [B*V, n, d]
         _, n, d = img_tokens.shape
         if self.use_pe_embedding_layer:
             img_tokens = self.add_spatial_pe(
@@ -1361,9 +1443,15 @@ class ERayZer(BaseLightningModel):
             scale = fxfycxcy_target.new_tensor([width, height, width, height])
             fxfycxcy_target = fxfycxcy_target * scale
 
+        # frustum_constraint + random background are no-ops for base ERayZer
+        # (flag absent / _sample_background returns None) and active for BEAST3D.
+        frustum_constraint = self.config['model'].get('frustum_constraint', False)
+        bg_color = self._sample_background(device, image_all.dtype)
+
         render = self.renderer(
             xyz, features, scaling, rotation, opacity,
             height, width, C2W=c2w_target, fxfycxcy=fxfycxcy_target,
+            frustum_constraint=frustum_constraint, backgrounds=bg_color,
         )
 
         # input-view reconstruction: render the Gaussians back at the reference
@@ -1379,6 +1467,7 @@ class ERayZer(BaseLightningModel):
                 render_input = self.renderer(
                     xyz, features, scaling, rotation, opacity,
                     height, width, C2W=c2w_input, fxfycxcy=fxfycxcy_input_px,
+                    frustum_constraint=frustum_constraint,
                 ).render
 
         vis_only_results = None
@@ -1439,15 +1528,24 @@ class ERayZer(BaseLightningModel):
             pixelalign_xyz.append(pa_xyz)
         pixelalign_xyz = torch.stack(pixelalign_xyz, dim=0)
 
+        # photometric target + optional foreground mask (BEAST3D composites the
+        # background and returns a mask; base ERayZer returns the raw target, None)
+        target_image = data['image'][batch_idx, target_idx, ...]
+        target_image, pixel_mask = self._prepare_target(
+            target_image, data, batch_idx, target_idx, bg_color,
+        )
+
         return SimpleNamespace(
             ray_o=ray_o,
             gaussians=gaussians,
             pixelalign_xyz=pixelalign_xyz,
             image=data['image'],
             input_image=data['image'][batch_idx, input_idx.clamp(max=v_real - 1), ...],
-            target_image=data['image'][batch_idx, target_idx, ...],
+            target_image=target_image,
             render=render.render,
+            render_alphas=render.alpha,
             render_input=render_input,
+            pixel_mask=pixel_mask,
             c2w_input=c2w_input,
             fxfycxcy_input=fxfycxcy_input,
             c2w_target=c2w_target,

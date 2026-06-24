@@ -35,6 +35,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from beast.models.beast3d.beast3d_config import Beast3DModelConfig
 from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
 from beast.models.beast_vit.beast_vit_config import VitModelConfig
 from beast.models.erayzer.erayzer_config import (
@@ -104,8 +105,23 @@ class ERayZerBeastConfig(BaseModel):
     inference: bool = False
 
 
+class Beast3DBeastConfig(BaseModel):
+    """Complete top-level config for BEAST3D training runs.
+
+    BEAST3D reuses ERayZer's training and optimizer schemas; only the model
+    section differs (see beast.models.beast3d.beast3d_config.Beast3DModelConfig).
+    """
+
+    model: Beast3DModelConfig
+    training: ERayZerTrainingConfig
+    optimizer: ERayZerOptimizerConfig
+    data: DataConfig
+    inference: bool = False
+
+
 _MODEL_CONFIG_CLASSES: dict[str, type[BaseModel]] = {
     'erayzer': ERayZerBeastConfig,
+    'beast3d': Beast3DBeastConfig,
 }
 
 

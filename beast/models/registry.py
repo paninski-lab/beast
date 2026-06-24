@@ -26,6 +26,9 @@ CONFIG_REGISTRY: dict[str, type[BaseModel]] = {}
 
 def _register_all() -> None:
     """Import all model packages so they can populate the registries."""
+    from beast.models.beast3d.beast3d_config import Beast3DModelConfig
+    from beast.models.beast3d.beast3d_model import Beast3D
+    from beast.models.beast3d.beast3d_train import train as beast3d_train
     from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
     from beast.models.beast_resnet.beast_resnet_model import ResnetAutoencoder
     from beast.models.beast_resnet.beast_resnet_train import train as resnet_train
@@ -47,6 +50,10 @@ def _register_all() -> None:
     MODEL_REGISTRY['erayzer'] = ERayZer
     TRAIN_REGISTRY['erayzer'] = erayzer_train
     CONFIG_REGISTRY['erayzer'] = ERayZerModelConfig
+
+    MODEL_REGISTRY['beast3d'] = Beast3D
+    TRAIN_REGISTRY['beast3d'] = beast3d_train
+    CONFIG_REGISTRY['beast3d'] = Beast3DModelConfig
 
 
 def get_model_class(model_class: str) -> type:
