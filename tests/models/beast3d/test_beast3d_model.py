@@ -134,8 +134,9 @@ class TestBeast3DResolveCameras:
     def test_returns_gt_cameras_unnormalized(self, config_beast3d) -> None:
         model = Beast3D(config_beast3d)
         data = _gt_cameras(b=2, v=3)
+        # img_tokens is ignored by the GT-camera override; pass a throwaway tensor
         c2w, fxfycxcy, normalized = model._resolve_cameras(
-            None, b=2, v_all=3, n=16, data=data, device=torch.device('cpu'),
+            torch.empty(0), b=2, v_all=3, n=16, data=data, device=torch.device('cpu'),
         )
         assert normalized is False
         assert c2w.shape == (2, 3, 4, 4)
@@ -146,7 +147,7 @@ class TestBeast3DResolveCameras:
         model = Beast3D(config_beast3d)
         data = _gt_cameras(b=1, v=3)
         c2w, fxfycxcy, _ = model._resolve_cameras(
-            None, b=1, v_all=10, n=16, data=data, device=torch.device('cpu'),
+            torch.empty(0), b=1, v_all=10, n=16, data=data, device=torch.device('cpu'),
         )
         assert c2w.shape == (1, 10, 4, 4)
         assert fxfycxcy.shape == (1, 10, 4)
@@ -224,6 +225,7 @@ class TestBeast3DBackgroundAndTarget:
         target_idx = torch.zeros(b, v, dtype=torch.long)
         bg = torch.tensor([0.2, 0.4, 0.6])
         out, mask = model._prepare_target(target, data, batch_idx, target_idx, bg)
+        assert mask is not None
         assert mask.shape == (b, v, 1, h, w)
         # with a zero foreground mask the whole image becomes the background colour
         assert torch.allclose(out[:, :, 0], torch.full((b, v, h, w), 0.2))
