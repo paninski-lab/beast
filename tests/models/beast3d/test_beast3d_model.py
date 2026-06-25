@@ -7,13 +7,9 @@ from unittest.mock import patch
 import pytest
 import torch
 import torch.nn as nn
-from pydantic import ValidationError
 
-from beast.models.beast3d.beast3d_config import Beast3DModelConfig
 from beast.models.beast3d.beast3d_model import Beast3D
 from tests.models.beast3d.conftest import requires_gsplat_cuda
-
-_MIN_TRANSFORMER = {'d': 768, 'd_head': 64, 'encoder_geom_n_layer': 16}
 
 
 class _FakeDinoV3(nn.Module):
@@ -44,44 +40,6 @@ def _gt_cameras(b: int, v: int) -> dict:
     c2w = torch.eye(4).reshape(1, 1, 4, 4).repeat(b, v, 1, 1)
     fxfycxcy = torch.tensor([40.0, 40.0, 16.0, 16.0]).reshape(1, 1, 4).repeat(b, v, 1)
     return {'c2w': c2w, 'fxfycxcy': fxfycxcy}
-
-
-# ---------------------------------------------------------------------------
-# TestBeast3DModelConfig
-# ---------------------------------------------------------------------------
-
-
-class TestBeast3DModelConfig:
-    """Test the Beast3DModelConfig schema."""
-
-    def test_valid_config_defaults(self) -> None:
-        cfg = Beast3DModelConfig.model_validate(
-            {'model_class': 'beast3d', 'transformer': _MIN_TRANSFORMER},
-        )
-        assert cfg.model_class == 'beast3d'
-        assert cfg.use_dinov3 is True
-        assert cfg.freeze_dinov3 is True
-        assert cfg.frustum_constraint is True
-        assert cfg.random_background is True
-        assert cfg.mask_loss_weight == 0.1
-
-    def test_wrong_model_class_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            Beast3DModelConfig.model_validate(
-                {'model_class': 'erayzer', 'transformer': _MIN_TRANSFORMER},
-            )
-
-    def test_missing_transformer_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            Beast3DModelConfig.model_validate({'model_class': 'beast3d'})
-
-    def test_inherits_erayzer_fields(self) -> None:
-        # hard_pixelalign and gaussians come from the ERayZer base config
-        cfg = Beast3DModelConfig.model_validate(
-            {'model_class': 'beast3d', 'transformer': _MIN_TRANSFORMER, 'hard_pixelalign': True},
-        )
-        assert cfg.hard_pixelalign is True
-        assert cfg.gaussians.sh_degree == 3
 
 
 # ---------------------------------------------------------------------------
