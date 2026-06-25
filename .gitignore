@@ -193,7 +193,8 @@ scripts/preview_pointcloud.py
 scripts/smoke_erayzer_load.py
 scripts/viz_erayzer.py
 
-# fine-tune config holds a machine-specific init_checkpoint path (kept local)
+# fine-tune configs hold machine-specific data_dir / init_checkpoint paths (kept local)
 configs/multiview/erayzer_cheese3d_ft.yaml
+configs/multiview/beast3d_cheese3d_ft.yaml
 # local model checkpoints (machine-specific, large)
 checkpoints/

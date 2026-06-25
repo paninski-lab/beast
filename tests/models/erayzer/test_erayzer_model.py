@@ -591,7 +591,8 @@ class TestERayZer:
         data = {'image': torch.rand(b, v, 3, h, w)}
 
         def _fake_render(xyz, features, scaling, rotation, opacity,
-                         height, width, C2W, fxfycxcy):
+                         height, width, C2W, fxfycxcy,
+                         frustum_constraint=False, backgrounds=None):
             return SimpleNamespace(
                 render=torch.zeros(C2W.shape[0], C2W.shape[1], 3, height, width),
                 depth=torch.zeros(C2W.shape[0], C2W.shape[1], 1, height, width),
@@ -619,7 +620,8 @@ class TestERayZer:
         data = {'image': torch.rand(b, v, 3, h, w)}
 
         def _fake_render(xyz, features, scaling, rotation, opacity,
-                         height, width, C2W, fxfycxcy):
+                         height, width, C2W, fxfycxcy,
+                         frustum_constraint=False, backgrounds=None):
             return SimpleNamespace(
                 render=torch.zeros(C2W.shape[0], C2W.shape[1], 3, height, width),
                 depth=torch.zeros(C2W.shape[0], C2W.shape[1], 1, height, width),
@@ -636,6 +638,51 @@ class TestERayZer:
         opt_cfg = model.configure_optimizers()
         assert 'optimizer' in opt_cfg
         assert 'lr_scheduler' in opt_cfg
+
+    def test_tokenize_images_default_matches_image_tokenizer(self, config_erayzer) -> None:
+        # the default _tokenize_images hook rescales [0,1] → [-1,1] then tokenizes
+        model = ERayZer(config_erayzer)
+        h = w = config_erayzer['model']['image_tokenizer']['image_size']
+        images = torch.rand(1, 2, 3, h, w)
+        out = model._tokenize_images(images)
+        expected = model.image_tokenizer(images * 2.0 - 1.0)
+        assert torch.allclose(out, expected)
+
+    def test_sample_background_default_is_none(self, config_erayzer) -> None:
+        model = ERayZer(config_erayzer)
+        assert model._sample_background(torch.device('cpu'), torch.float32) is None
+
+    def test_prepare_target_default_is_identity(self, config_erayzer) -> None:
+        model = ERayZer(config_erayzer)
+        target = torch.rand(2, 1, 3, 8, 8)
+        out, mask = model._prepare_target(
+            target, {}, torch.zeros(2, 1, dtype=torch.long),
+            torch.zeros(2, 1, dtype=torch.long), None,
+        )
+        assert out is target
+        assert mask is None
+
+    def test_forward_exposes_alpha_and_mask(self, config_erayzer) -> None:
+        # base ERayZer forward now exposes render_alphas and a (None) pixel_mask
+        model = ERayZer(config_erayzer)
+        model.eval()
+        b, v, h, w = 1, 3, 32, 32
+        data = {'image': torch.rand(b, v, 3, h, w)}
+
+        def _fake_render(xyz, features, scaling, rotation, opacity,
+                         height, width, C2W, fxfycxcy,
+                         frustum_constraint=False, backgrounds=None):
+            return SimpleNamespace(
+                render=torch.zeros(C2W.shape[0], C2W.shape[1], 3, height, width),
+                depth=torch.zeros(C2W.shape[0], C2W.shape[1], 1, height, width),
+                alpha=torch.zeros(C2W.shape[0], C2W.shape[1], 1, height, width),
+            )
+
+        with patch.object(model.renderer, 'forward', side_effect=_fake_render):
+            result = model(data)
+
+        assert hasattr(result, 'render_alphas')
+        assert result.pixel_mask is None  # base ERayZer supervises without a mask
 
 
 # ---------------------------------------------------------------------------

@@ -177,6 +177,39 @@ def config_erayzer(config_erayzer_path) -> dict:
 
 
 @pytest.fixture
+def config_beast3d_path() -> Path:
+    return ROOT.joinpath('configs/multiview/beast3d.yaml')
+
+
+@pytest.fixture
+def config_beast3d(config_beast3d_path) -> dict:
+    # shrink the reference config for fast CPU unit tests; use_dinov3=False keeps
+    # the small learned patch tokenizer (no DINOv3 download / 768-dim requirement)
+    config = load_config(config_beast3d_path)
+    config['model']['use_dinov3'] = False
+    config['model']['image_tokenizer']['image_size'] = 32
+    config['model']['image_tokenizer']['patch_size'] = 8   # 4×4 = 16 tokens per view
+    config['model']['target_image']['height'] = 32
+    config['model']['target_image']['width'] = 32
+    config['model']['transformer']['d'] = 32
+    config['model']['transformer']['d_head'] = 8
+    config['model']['transformer']['encoder_n_layer'] = 0   # GT cameras, no pose branch
+    config['model']['transformer']['encoder_geom_n_layer'] = 2
+    config['model']['transformer']['use_qk_norm'] = False
+    config['model']['transformer']['special_init'] = False
+    config['model']['transformer']['depth_init'] = False
+    config['model']['gaussians']['sh_degree'] = 0
+    config['training']['num_views'] = 3
+    config['training']['num_input_views'] = 2
+    config['training']['num_target_views'] = 1
+    config['training']['grad_checkpoint_every'] = 1
+    config['training']['max_fwdbwd_passes'] = 100
+    config['training']['perceptual_loss_weight'] = 0.0   # VGG needs > 8px images
+    config['optimizer']['warmup'] = 10   # must be < max_fwdbwd_passes
+    return copy.deepcopy(config)
+
+
+@pytest.fixture
 def aug_pipeline() -> Callable:
     params_dict = expand_imgaug_str_to_dict('default')
     pipeline = imgaug_pipeline(params_dict)

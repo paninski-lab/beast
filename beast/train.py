@@ -98,9 +98,10 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
 
     model_class = config['model'].get('model_class', '').lower()
 
-    if model_class == 'erayzer':
+    if model_class in ('erayzer', 'beast3d'):
         if rank_zero_only.rank == 0:
             log_step('Creating MultiViewDataModule', level='debug')
+        # BEAST3D supervises the rendered alpha against GT foreground masks
         datamodule = MultiViewDataModule(
             data_dir=config['data']['data_dir'],
             image_size=config['model']['image_tokenizer']['image_size'],
@@ -109,6 +110,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
             train_fraction=config['training'].get('train_fraction', 0.9),
             num_workers=config['training']['num_workers'],
             seed=config['training'].get('seed', 0),
+            use_mask=(model_class == 'beast3d'),
         )
         datamodule.setup()
         if rank_zero_only.rank == 0:

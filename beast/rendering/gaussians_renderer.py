@@ -755,6 +755,70 @@ class GaussianModel:
         self._rotation = torch.from_numpy(rots.astype(np.float32)).contiguous()
 
 
+def camera_frustum_constraint(
+    xyz: torch.Tensor,
+    opacity: torch.Tensor,
+    c2w: torch.Tensor,
+    fxfycxcy: torch.Tensor,
+    height: int,
+    width: int,
+    normalized: bool = False,
+) -> torch.Tensor:
+    """Zero the opacity of Gaussians outside the intersection of all view frustums.
+
+    A Gaussian is kept only when it projects inside the image bounds and in front
+    of *every* camera in ``c2w`` (logical AND across views), restricting the
+    rendered field to the space jointly observed by all input cameras. This is the
+    frustum constraint used by BEAST3D; the base ERayZer renderer leaves it off.
+
+    Parameters
+    ----------
+    xyz: Gaussian centres of shape [N, 3].
+    opacity: per-Gaussian opacity of shape [N, 1].
+    c2w: camera-to-world matrices of shape [V, 4, 4].
+    fxfycxcy: intrinsics of shape [V, 4].
+    height: image height in pixels.
+    width: image width in pixels.
+    normalized: True if intrinsics are normalized to [0, 1] rather than pixels.
+
+    Returns
+    -------
+    opacity with out-of-frustum Gaussians set to zero, shape [N, 1].
+
+    """
+    num_points = xyz.shape[0]
+    ones = torch.ones(num_points, 1, device=xyz.device, dtype=xyz.dtype)
+    xyz_h = torch.cat([xyz, ones], dim=-1)
+    valid = torch.ones(num_points, device=xyz.device, dtype=torch.bool)
+
+    for v in range(c2w.shape[0]):
+        w2c_v = torch.inverse(c2w[v])
+        fx, fy, cx, cy = fxfycxcy[v, 0], fxfycxcy[v, 1], fxfycxcy[v, 2], fxfycxcy[v, 3]
+
+        # transform into this camera's frame and project through the pinhole model
+        xyz_c = torch.matmul(xyz_h, w2c_v.transpose(-1, -2))[..., :3]
+        z = xyz_c[..., 2:3] + 1e-6
+        u = (xyz_c[..., 0:1] / z) * fx + cx
+        v_coord = (xyz_c[..., 1:2] / z) * fy + cy
+
+        # normalize pixel coords to [-1, 1] for the in-bounds test
+        if normalized:
+            u_norm = u * 2.0 - 1.0
+            v_norm = v_coord * 2.0 - 1.0
+        else:
+            u_norm = (u / (width - 1)) * 2.0 - 1.0
+            v_norm = (v_coord / (height - 1)) * 2.0 - 1.0
+
+        in_fov = (
+            (u_norm.squeeze(-1).abs() <= 1.0)
+            & (v_norm.squeeze(-1).abs() <= 1.0)
+            & (z.squeeze(-1) > 0)
+        )
+        valid = valid & in_fov
+
+    return torch.where(valid.unsqueeze(-1), opacity, torch.zeros_like(opacity))
+
+
 def render_opencv_cam_gsplat(
     pc: GaussianModel,
     height: int,
@@ -763,8 +827,9 @@ def render_opencv_cam_gsplat(
     fxfycxcy: torch.Tensor,
     sh_degree: int | None = None,
     near_plane: float = 0.2,
-    bg_color: tuple[float, float, float] | torch.Tensor = (1.0, 1.0, 1.0),
+    bg_color: tuple[float, float, float] | torch.Tensor | None = (1.0, 1.0, 1.0),
     render_depth: bool = False,
+    frustum_constraint: bool = False,
 ) -> dict[str, torch.Tensor | None]:
     """Render a batch of views using gsplat rasterisation.
 
@@ -779,10 +844,14 @@ def render_opencv_cam_gsplat(
     near_plane: near clipping plane distance.
     bg_color: background colour (1-D or 2-D tensor or tuple).
     render_depth: whether to also render a depth map.
+    frustum_constraint: if True, zero opacity for Gaussians outside the
+        intersection of all view frustums (BEAST3D); off by default.
 
     Returns
     -------
-    dict with keys 'render' ([V, 3, H, W]) and 'depth' ([V, 1, H, W] or None).
+    dict with keys 'render' ([V, 3, H, W]), 'depth' ([V, 1, H, W] or None),
+    'alpha' ([V, 1, H, W]), and 'sigmoid_opacity' ([N, 1], the opacity actually
+    rasterised, after any frustum masking).
 
     """
     means3D = pc.get_xyz
@@ -797,6 +866,8 @@ def render_opencv_cam_gsplat(
                 'Check model outputs and consider using float32 or clamping scales.'
             )
     num_cams = C2W.size(0)
+    if bg_color is None:
+        bg_color = (1.0, 1.0, 1.0)
     if torch.is_tensor(bg_color):
         bg_color = bg_color.to(device=C2W.device, dtype=torch.float32)
     else:
@@ -829,8 +900,11 @@ def render_opencv_cam_gsplat(
     intr[:, 1, 2] = fxfycxcy[:, 3]
     intr[:, 2, 2] = 1.0
 
+    if frustum_constraint:
+        opacity = camera_frustum_constraint(means3D, opacity, C2W, fxfycxcy, height, width)
+
     render_mode = 'RGB+ED' if render_depth else 'RGB'
-    render_colors, _, _ = rasterization(
+    render_colors, render_alphas, _ = rasterization(
         means3D, rotations, scales, opacity.squeeze(),
         shs, W2C, intr, width, height,
         near_plane=near_plane,
@@ -848,6 +922,8 @@ def render_opencv_cam_gsplat(
         'depth': (
             render_depth_map.permute(0, 3, 1, 2) if torch.is_tensor(render_depth_map) else None
         ),
+        'alpha': render_alphas.permute(0, 3, 1, 2),
+        'sigmoid_opacity': opacity,
     }
 
 
