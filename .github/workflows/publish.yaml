@@ -54,9 +54,6 @@ jobs:
         fi
         echo "Version verification passed"
 
-    - name: Install dependencies
-      run: poetry install --only-root
-
     - name: Build package
       run: poetry build
 
