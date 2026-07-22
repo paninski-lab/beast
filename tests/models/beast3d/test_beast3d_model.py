@@ -152,10 +152,12 @@ class TestBeast3DTokenize:
 class TestBeast3DBackgroundAndTarget:
     """Test _sample_background and _prepare_target."""
 
-    def test_background_none_in_eval(self, config_beast3d) -> None:
+    def test_background_black_in_eval(self, config_beast3d) -> None:
         model = Beast3D(config_beast3d)
         model.eval()
-        assert model._sample_background(torch.device('cpu'), torch.float32) is None
+        bg = model._sample_background(torch.device('cpu'), torch.float32)
+        assert bg is not None and bg.shape == (3,)
+        assert torch.all(bg == 0)
 
     def test_background_random_in_train(self, config_beast3d) -> None:
         model = Beast3D(config_beast3d)
