@@ -161,7 +161,7 @@ class Beast3D(ERayZer):
         """
         if self.training and self.random_background:
             return torch.rand(3, device=device, dtype=dtype)
-        return None
+        return torch.zeros(3, device=device, dtype=dtype)
 
     def _prepare_target(
         self,
