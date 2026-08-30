@@ -157,7 +157,7 @@ class TestImagePredictionHandler:
         """Test processing batch with reconstructions only."""
         predictions = {
             'reconstructions': sample_batch_tensor,
-            'latents': sample_latents
+            'latents': sample_latents,
         }
 
         result = handler.process_batch_predictions(
@@ -191,14 +191,14 @@ class TestImagePredictionHandler:
         """Test processing batch with latents only."""
         predictions = {
             'reconstructions': sample_batch_tensor,
-            'latents': sample_latents
+            'latents': sample_latents,
         }
 
         result = handler.process_batch_predictions(
             predictions,
             sample_metadata,
             save_reconstructions=False,
-            save_latents=True
+            save_latents=True,
         )
 
         # Should have saved latents only
@@ -217,14 +217,14 @@ class TestImagePredictionHandler:
         """Test processing batch with both reconstructions and latents."""
         predictions = {
             'reconstructions': sample_batch_tensor,
-            'latents': sample_latents
+            'latents': sample_latents,
         }
 
         result = handler.process_batch_predictions(
             predictions,
             sample_metadata,
             save_reconstructions=True,
-            save_latents=True
+            save_latents=True,
         )
 
         # Should have saved both
@@ -245,7 +245,7 @@ class TestImagePredictionHandler:
                 'original_path': '/path/to/original.png',
                 'reconstruction_path': '/path/to/recon.png',
                 'video': 'video1',
-                'idx': 0
+                'idx': 0,
             }
         ]
         handler.metadata = test_metadata
@@ -273,14 +273,14 @@ class TestImagePredictionHandler:
             {
                 'reconstructions': sample_batch_tensor,
                 'latents': sample_latents,
-                'metadata': sample_metadata
+                'metadata': sample_metadata,
             }
         ]
 
         result = handler.process_predictions(
             predictions,
             save_reconstructions=True,
-            save_latents=True
+            save_latents=True,
         )
 
         # Check results structure
@@ -336,14 +336,14 @@ class TestImagePredictionHandler:
             {
                 'reconstructions': sample_batch_tensor,
                 'latents': sample_latents,
-                'metadata': sample_metadata
+                'metadata': sample_metadata,
             }
         ]
 
         result = handler.process_predictions(
             predictions,
             save_reconstructions=save_recons,
-            save_latents=save_latents
+            save_latents=save_latents,
         )
 
         if save_recons:

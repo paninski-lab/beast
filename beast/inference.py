@@ -117,18 +117,16 @@ class ImagePredictionHandler:
         predictions: dict,
         batch_metadata: dict,
         save_reconstructions: bool = True,
-        save_latents: bool = False
+        save_latents: bool = False,
     ) -> dict[str, list]:
         """Process a batch of predictions and save them."""
-        reconstructions = predictions['reconstructions']
-        latents = predictions['latents']
 
-        batch_size = reconstructions.shape[0]
+        batch_size = len(batch_metadata['video'])
 
         saved_files = {
             'reconstructions': [],
             'latents': [],
-            'metadata': []
+            'metadata': [],
         }
 
         for i in range(batch_size):
@@ -142,11 +140,12 @@ class ImagePredictionHandler:
             metadata_entry = {
                 'original_path': str(original_path),
                 'video': video,
-                'idx': idx
+                'idx': idx,
             }
 
             # Save reconstruction if requested
             if save_reconstructions:
+                reconstructions = predictions['reconstructions']
                 recon_path = self.save_reconstruction(
                     reconstructions[i], video, idx, Path(original_path),
                 )
@@ -155,6 +154,7 @@ class ImagePredictionHandler:
 
             # Save latents if requested
             if save_latents:
+                latents = predictions['latents']
                 latents_path = self.save_latents(latents[i], video, idx, Path(original_path))
                 saved_files['latents'].append(str(latents_path))
                 metadata_entry['latents_path'] = str(latents_path)
@@ -186,7 +186,7 @@ class ImagePredictionHandler:
         all_saved_files = {
             'reconstructions': [],
             'latents': [],
-            'metadata': []
+            'metadata': [],
         }
 
         for batch_predictions in predictions:
@@ -198,7 +198,7 @@ class ImagePredictionHandler:
                 batch_predictions,
                 batch_metadata,
                 save_reconstructions=save_reconstructions,
-                save_latents=save_latents
+                save_latents=save_latents,
             )
 
             # Accumulate results
@@ -273,7 +273,7 @@ class VideoPredictionHandler:
             'fps': self.fps,
             'width': self.width,
             'height': self.height,
-            'total_frames': self.total_frames
+            'total_frames': self.total_frames,
         }
 
         # Accumulate latents and reconstructions
@@ -403,7 +403,7 @@ class VideoPredictionHandler:
             self.process_batch_predictions(
                 batch_predictions,
                 save_reconstructions=save_reconstructions,
-                save_latents=save_latents
+                save_latents=save_latents,
             )
 
         # finalize outputs
