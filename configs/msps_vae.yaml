@@ -1,0 +1,47 @@
+# model configuration
+model:
+  seed: 0
+  checkpoint: null  # load weights from checkpoint
+  model_class: msps_vae
+  model_params:
+    backbone: resnet18
+    num_latents_unsupervised: 8   # z_u; what downstream clustering (cuttle reduce/cluster) reads
+    num_latents_background: 4     # z_b; shaped by the triplet loss to organize by video identity
+    image_size: 224  # usually 224
+    num_channels: 3  # 3 for RGB
+    triplet_margin: 1.0
+    triplet_weight: 1.0
+    positive_window: 1000  # +/- frames (same video) defining a valid triplet-loss positive
+    orthogonal_matrix_seed: 42  # seeds the fixed z_u/z_b orthogonal split, not training itself
+
+# training configuration
+training:
+  seed: 0
+  imgaug: default
+  train_batch_size: 512       # per GPU; must be even (ref/pos pairs)
+  val_batch_size: 1024
+  test_batch_size: 128
+  num_epochs: 800
+  num_workers: 8              # Number of CPU workers for the DataLoader
+  num_gpus: 1
+  num_nodes: 1
+  log_every_n_steps: 10       # frequency to log training metrics
+  check_val_every_n_epoch: 5  # frequency to log validation metrics
+
+# optimizer configuration
+optimizer:
+  type: AdamW
+  accumulate_grad_batches: 1
+  lr: 5.e-4
+  wd: 0.05
+  scheduler: cosine  # {step, cosine}
+  warmup_pct: 0.15   # for cosine
+  div_factor: 10     # for cosine
+  gamma: 0.5         # for step
+  steps:             # for step
+    - 200
+    - 400
+
+# data configuration
+data:
+  data_dir: /PATH/TO/DATA

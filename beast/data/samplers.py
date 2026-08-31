@@ -1,6 +1,8 @@
 """Custom batch samplers for contrastive learning with temporally adjacent frame pairs."""
 
+import bisect
 import re
+from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -270,3 +272,225 @@ def contrastive_collate_fn(batch_of_dicts: list[dict]) -> dict[str, torch.Tensor
     all_data = torch.cat([torch.stack(refs), torch.stack(pos)], dim=0)
     all_idx = torch.cat([torch.tensor(ref_idx), torch.tensor(pos_idx)], dim=0)
     return {'image': all_data, 'idx': all_idx}
+
+
+def extract_windowed_positive_pool(
+    image_list: Sequence[str | Path],
+    window: int = 1000,
+) -> tuple[list[int], dict[int, list[int]]]:
+    """Extract anchor indices with a pool of same-video positives within a frame window.
+
+    Unlike `extract_anchor_indices` (which requires an exact +/-idx_offset neighbor), this
+    admits any other frame from the same video whose frame number falls within
+    +/- `window` of the anchor's frame number, and does not require the pool to be
+    symmetric or contiguous. Used to build temporally-local (rather than
+    frame-adjacent) positive pairs for triplet-loss sampling.
+
+    Args:
+        image_list: list of image paths
+        window: maximum frame-number distance (same video) for a valid positive
+
+    Returns:
+        tuple of (anchor_indices, pos_indices) where anchor_indices is the list of dataset
+        indices that have at least one same-video frame within the window, and pos_indices
+        maps each anchor index to the list of such candidate indices
+    """
+    frame_info = []
+    for idx, img_path in enumerate(image_list):
+        path = Path(img_path)
+        video_name = path.parent.name
+        frame_match = re.search(r'(\d+)', path.stem)
+        if frame_match:
+            frame_info.append({
+                'idx': idx,
+                'video': video_name,
+                'frame_num': int(frame_match.group(1)),
+            })
+
+    by_video: dict[str, list[dict]] = defaultdict(list)
+    for frame in frame_info:
+        by_video[frame['video']].append(frame)
+
+    anchor_indices = []
+    pos_indices = {}
+    for frames in by_video.values():
+        frames.sort(key=lambda x: x['frame_num'])
+        frame_nums = [f['frame_num'] for f in frames]
+        for i, frame in enumerate(frames):
+            lo = bisect.bisect_left(frame_nums, frame['frame_num'] - window)
+            hi = bisect.bisect_right(frame_nums, frame['frame_num'] + window)
+            candidates = [frames[j]['idx'] for j in range(lo, hi) if j != i]
+            if candidates:
+                anchor_indices.append(frame['idx'])
+                pos_indices[frame['idx']] = candidates
+
+    anchor_indices.sort()
+    return anchor_indices, pos_indices
+
+
+class TripletBatchSampler(Sampler):
+    """Custom batch sampler for triplet-loss training with temporally-local positives.
+
+    Each batch is `batch_size` (ref, pos) pairs: for each reference index i, a positive
+    i_p is drawn from any same-video frame within +/- `window` frames of i. Negatives are
+    not sampled here — they're drawn at loss-computation time from other batch members
+    belonging to a different video (see `beast.models.msps_vae`), so this sampler only
+    needs to guarantee valid positive pairing, not any particular cross-video composition.
+    Random shuffling of anchors across the full (multi-video) pool makes it overwhelmingly
+    likely that a batch of reasonable size spans multiple videos.
+
+    Distributed training notes: identical rank/world-size partitioning scheme to
+    `ContrastBatchSampler` — see that class's docstring for details.
+    """
+
+    def __init__(
+        self,
+        dataset: Any,
+        batch_size: int,
+        window: int = 1000,
+        shuffle: bool = True,
+        seed: int = 42,
+    ) -> None:
+        """Initialize sampler and pre-compute valid anchor/positive index pairs.
+
+        Parameters
+        ----------
+        dataset: training dataset subset (must expose .indices and .dataset.image_list)
+        batch_size: number of samples per batch; must be even
+        window: max frame-number distance (same video) defining a valid positive
+        shuffle: whether to shuffle anchor indices each epoch
+        seed: base random seed; combined with epoch number for per-epoch shuffling
+
+        """
+        super().__init__()
+
+        if torch.distributed.is_initialized():
+            self.num_replicas = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
+        else:
+            self.num_replicas = 1
+            self.rank = 0
+
+        if batch_size % 2 != 0:
+            raise ValueError('Batch size must be even to form (ref, pos) pairs.')
+
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.window = window
+        self.shuffle = shuffle
+        self.num_samples = len(dataset)
+
+        self.dataset_indices = sorted(dataset.indices)
+        subset_image_list = [dataset.dataset.image_list[i] for i in self.dataset_indices]
+        self.all_anchor_indices, self.pos_indices = extract_windowed_positive_pool(
+            subset_image_list, window=self.window,
+        )
+        self.anchor_indices = None  # assigned in __iter__
+
+        anchors_per_replica = len(self.all_anchor_indices) // self.num_replicas
+        self.num_batches = anchors_per_replica // 2 // self.batch_size
+
+        self.epoch = 0
+        self.seed = seed
+
+    def __iter__(self) -> Iterator[list[int]]:
+        """Yield batches of (reference, positive) index pairs for one epoch."""
+        self.epoch += 1
+
+        if self.shuffle:
+            rng = np.random.RandomState(self.seed + self.epoch)
+            anchor_indices_ = self.all_anchor_indices.copy()
+            rng.shuffle(anchor_indices_)
+        else:
+            anchor_indices_ = self.all_anchor_indices.copy()
+
+        indices_per_replica = len(anchor_indices_) // self.num_replicas
+        start_idx = self.rank * indices_per_replica
+        end_idx = start_idx + indices_per_replica
+        if self.rank == self.num_replicas - 1:
+            end_idx = len(anchor_indices_)
+
+        anchor_indices = anchor_indices_[start_idx:end_idx]
+        self.anchor_indices = anchor_indices  # for testing and debugging
+
+        used = set()
+        batches_returned = 0
+        idx_cursor = 0
+
+        while batches_returned < self.num_batches:
+            batch = []
+            while len(batch) < self.batch_size:
+                while (
+                    idx_cursor < len(anchor_indices)
+                    and anchor_indices[idx_cursor] in used
+                ):
+                    idx_cursor += 1
+
+                if idx_cursor >= len(anchor_indices):
+                    break
+
+                i = anchor_indices[idx_cursor]
+
+                valid_positives = [
+                    p for p in self.pos_indices[i]
+                    if p in self.dataset_indices and p not in used
+                ]
+
+                if not valid_positives:
+                    used.add(i)
+                    idx_cursor += 1
+                    continue
+
+                i_p = np.random.choice(valid_positives)
+
+                batch.extend([i, i_p])
+                used.add(i)
+                used.add(i_p)
+
+                idx_cursor += 1
+                if idx_cursor >= len(anchor_indices):
+                    break
+
+            if len(batch) < self.batch_size:
+                break
+
+            yield batch
+            batches_returned += 1
+
+    def __len__(self) -> int:
+        """Return the number of batches this sampler will yield per epoch."""
+        return self.num_batches
+
+
+def triplet_collate_fn(batch_of_dicts: list[dict]) -> dict[str, torch.Tensor | list[str]]:
+    """Collate a triplet-sampler batch into a single dict of stacked tensors.
+
+    Assumes even-indexed items are reference frames and odd-indexed items are their
+    temporally-local same-video positive. Carries 'video' through (unlike
+    `contrastive_collate_fn`) so downstream triplet-loss computation can pick
+    different-video negatives from within the batch.
+
+    Args:
+        batch_of_dicts: list of dicts returned by BaseDataset.__getitem__
+
+    Returns:
+        dict with keys 'image', 'idx' (stacked tensors) and 'video' (list of str),
+        all ordered as [ref_0, ..., ref_{B-1}, pos_0, ..., pos_{B-1}]
+    """
+    refs, pos = [], []
+    ref_idx, pos_idx = [], []
+    ref_video, pos_video = [], []
+    for i, sample in enumerate(batch_of_dicts):
+        if i % 2 == 0:
+            refs.append(sample['image'])
+            ref_idx.append(sample['idx'])
+            ref_video.append(sample['video'])
+        else:
+            pos.append(sample['image'])
+            pos_idx.append(sample['idx'])
+            pos_video.append(sample['video'])
+
+    all_data = torch.cat([torch.stack(refs), torch.stack(pos)], dim=0)
+    all_idx = torch.cat([torch.tensor(ref_idx), torch.tensor(pos_idx)], dim=0)
+    all_video = ref_video + pos_video
+    return {'image': all_data, 'idx': all_idx, 'video': all_video}

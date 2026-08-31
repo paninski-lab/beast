@@ -148,6 +148,21 @@ def config_vit(config_vit_path, data_dir) -> dict:
 
 
 @pytest.fixture
+def config_msps_vae_path() -> Path:
+    return ROOT.joinpath('configs/msps_vae.yaml')
+
+
+@pytest.fixture
+def config_msps_vae(config_msps_vae_path, data_dir) -> dict:
+    config = load_config(config_msps_vae_path)
+    config['data']['data_dir'] = data_dir
+    config['training']['train_batch_size'] = 8
+    config['training']['val_batch_size'] = 8
+    config['training']['test_batch_size'] = 8
+    return config
+
+
+@pytest.fixture
 def config_erayzer_path() -> Path:
     return ROOT.joinpath('configs/multiview/erayzer.yaml')
 
@@ -248,7 +263,25 @@ def base_datamodule_contrastive(base_dataset) -> BaseDataModule:
         train_probability=0.9,
         val_probability=0.05,
         test_probability=0.05,
-        use_sampler=True,  # Enable contrastive sampler
+        sampler_kind='contrastive',
+    )
+    datamodule.setup()
+    return datamodule
+
+
+@pytest.fixture
+def base_datamodule_triplet(base_dataset) -> BaseDataModule:
+    """Fixture for testing triplet-loss sampling functionality."""
+    datamodule = BaseDataModule(
+        dataset=base_dataset,
+        train_batch_size=8,  # Even batch size for (ref, pos) pairs
+        val_batch_size=8,
+        test_batch_size=8,
+        train_probability=0.9,
+        val_probability=0.05,
+        test_probability=0.05,
+        sampler_kind='triplet',
+        positive_window=1000,
     )
     datamodule.setup()
     return datamodule
