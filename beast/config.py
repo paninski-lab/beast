@@ -43,6 +43,7 @@ from beast.models.erayzer.erayzer_config import (
     ERayZerOptimizerConfig,
     ERayZerTrainingConfig,
 )
+from beast.models.msps_vae.msps_vae_config import MspsVaeModelConfig
 
 
 class BeastConfig(BaseModel):
@@ -54,7 +55,7 @@ class BeastConfig(BaseModel):
 
 
 ModelConfig = Annotated[
-    ResnetModelConfig | VitModelConfig,
+    ResnetModelConfig | VitModelConfig | MspsVaeModelConfig,
     Field(discriminator='model_class'),
 ]
 

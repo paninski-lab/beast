@@ -5,7 +5,7 @@ import logging
 import multiprocessing
 import os
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import lightning.pytorch as pl
 import numpy as np
@@ -14,7 +14,12 @@ from lightning.pytorch.utilities import rank_zero_only
 from torch.utils.data import DataLoader, Subset, random_split
 
 from beast.data.datasets import BaseDataset, MultiViewDataset
-from beast.data.samplers import ContrastBatchSampler, contrastive_collate_fn
+from beast.data.samplers import (
+    ContrastBatchSampler,
+    TripletBatchSampler,
+    contrastive_collate_fn,
+    triplet_collate_fn,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -28,7 +33,8 @@ class BaseDataModule(pl.LightningDataModule):
         train_batch_size: int = 16,
         val_batch_size: int = 16,
         test_batch_size: int = 16,
-        use_sampler: bool = False,
+        sampler_kind: Literal['none', 'contrastive', 'triplet'] = 'none',
+        positive_window: int = 1000,
         num_workers: int | None = None,
         train_probability: float = 0.8,
         val_probability: float | None = None,
@@ -43,7 +49,11 @@ class BaseDataModule(pl.LightningDataModule):
         train_batch_size: number of samples of training batches
         val_batch_size: number of samples in validation batches
         test_batch_size: number of samples in test batches
-        use_sampler: whether to use a sampler for the dataset
+        sampler_kind: 'none' for a plain shuffled DataLoader, 'contrastive' for
+            ContrastBatchSampler (frame-adjacent positives, InfoNCE-style), 'triplet' for
+            TripletBatchSampler (temporally-local same-video positives, triplet-loss-style)
+        positive_window: for sampler_kind='triplet', max frame-number distance (same video)
+            defining a valid positive; unused otherwise
         num_workers: number of threads used for prefetching data
         train_probability: fraction of full dataset used for training
         val_probability: fraction of full dataset used for validation
@@ -56,7 +66,8 @@ class BaseDataModule(pl.LightningDataModule):
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
         self.test_batch_size = test_batch_size
-        self.use_sampler = use_sampler
+        self.sampler_kind = sampler_kind
+        self.positive_window = positive_window
         if num_workers is not None:
             self.num_workers = num_workers
         else:
@@ -94,7 +105,7 @@ class BaseDataModule(pl.LightningDataModule):
         )
 
         if self.dataset.imgaug_pipeline is None:
-            if self.use_sampler:
+            if self.sampler_kind != 'none':
                 raise ValueError('Sampler cannot be used without augmentations')
             # no augmentations in the pipeline; subsets can share same underlying dataset
             self.train_dataset, self.val_dataset, self.test_dataset = random_split(
@@ -108,7 +119,7 @@ class BaseDataModule(pl.LightningDataModule):
             # because the subsets actually point to the same underlying dataset, so we create
             # separate datasets here
             generator = torch.Generator().manual_seed(self.seed)
-            if self.use_sampler:
+            if self.sampler_kind != 'none':
                 train_split, val_split, test_split = self._sequential_split(
                     range(len(self.dataset)), data_splits_list, generator=generator,
                 )
@@ -162,10 +173,19 @@ class BaseDataModule(pl.LightningDataModule):
         """Return the training data loader."""
         if self.train_dataset is None:
             raise RuntimeError('call setup() before train_dataloader()')
-        if self.use_sampler:
+        if self.sampler_kind == 'contrastive':
             return _make_contrastive_dataloader(
                 dataset=cast(BaseDataset, self.train_dataset),
                 batch_size=self.train_batch_size,
+                seed=self.seed,
+                num_workers=self.num_workers,
+                shuffle=True,
+            )
+        if self.sampler_kind == 'triplet':
+            return _make_triplet_dataloader(
+                dataset=cast(BaseDataset, self.train_dataset),
+                batch_size=self.train_batch_size,
+                window=self.positive_window,
                 seed=self.seed,
                 num_workers=self.num_workers,
                 shuffle=True,
@@ -254,6 +274,39 @@ def _make_contrastive_dataloader(
         batch_size=None,  # ContrastBatchSampler yields full batches; do NOT use batch_sampler=
         sampler=sampler,
         collate_fn=contrastive_collate_fn,
+        num_workers=num_workers,
+        persistent_workers=num_workers > 0,
+        pin_memory=True,
+        generator=torch.Generator().manual_seed(seed),
+        multiprocessing_context=multiprocessing.get_context('spawn') if num_workers > 0 else None,
+    )
+
+
+def _make_triplet_dataloader(
+    dataset: BaseDataset,
+    batch_size: int,
+    window: int,
+    seed: int,
+    num_workers: int,
+    shuffle: bool = True,
+) -> DataLoader:
+    """Create a DataLoader backed by TripletBatchSampler for triplet-loss pair sampling.
+
+    See `_make_contrastive_dataloader` for why `sampler=`/`batch_size=None` is required
+    instead of `batch_sampler=` — the same Lightning val-check-batch reasoning applies here.
+    """
+    sampler = TripletBatchSampler(
+        dataset=dataset,
+        batch_size=batch_size,
+        window=window,
+        seed=seed,
+        shuffle=shuffle,
+    )
+    return DataLoader(
+        dataset,
+        batch_size=None,
+        sampler=sampler,
+        collate_fn=triplet_collate_fn,
         num_workers=num_workers,
         persistent_workers=num_workers > 0,
         pin_memory=True,

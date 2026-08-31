@@ -5,8 +5,11 @@ import torch
 
 from beast.data.samplers import (
     ContrastBatchSampler,
+    TripletBatchSampler,
     contrastive_collate_fn,
     extract_anchor_indices,
+    extract_windowed_positive_pool,
+    triplet_collate_fn,
 )
 from beast.models.beast_vit.beast_vit_model import batch_wise_contrastive_loss, topk
 
@@ -842,3 +845,165 @@ class TestContrastBatchSamplerWithRealDataset:
         # and that we have the expected number of unique indices
         unique_indices = torch.unique(batch['idx'])
         assert len(unique_indices) <= 8  # Should have at most 8 unique indices
+
+
+class TestExtractWindowedPositivePool:
+    """Test the extract_windowed_positive_pool helper function."""
+
+    def test_basic_window(self):
+        """Positives can be any same-video frame within +/- window, not just neighbors."""
+        image_list = [
+            "video1/frame0000.png",
+            "video1/frame0500.png",
+            "video1/frame0999.png",
+            "video1/frame2000.png",
+            "video2/frame0000.png",
+        ]
+        anchor_indices, pos_indices = extract_windowed_positive_pool(image_list, window=1000)
+
+        # frame2000 is >1000 from every other video1 frame; video2 has only one frame
+        assert set(anchor_indices) == {0, 1, 2}
+        assert set(pos_indices[0]) == {1, 2}
+        assert set(pos_indices[1]) == {0, 2}
+        assert set(pos_indices[2]) == {0, 1}
+
+    def test_no_candidates_within_window(self):
+        """A frame with no same-video neighbor within the window is not an anchor."""
+        image_list = [
+            "video1/frame0000.png",
+            "video1/frame5000.png",
+        ]
+        anchor_indices, pos_indices = extract_windowed_positive_pool(image_list, window=1000)
+        assert anchor_indices == []
+        assert pos_indices == {}
+
+    def test_positives_never_cross_videos(self):
+        """Positive pools are always drawn from the same video as the anchor."""
+        image_list = (
+            [f"video1/frame{i:04d}.png" for i in range(3)]
+            + [f"video2/frame{i:04d}.png" for i in range(3)]
+        )
+        anchor_indices, pos_indices = extract_windowed_positive_pool(image_list, window=1000)
+        assert set(anchor_indices) == {0, 1, 2, 3, 4, 5}
+        for idx in range(3):
+            assert all(p < 3 for p in pos_indices[idx])
+        for idx in range(3, 6):
+            assert all(p >= 3 for p in pos_indices[idx])
+
+
+class TestTripletBatchSampler:
+    """Test the TripletBatchSampler class."""
+
+    def test_init_basic(self):
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=100)
+        subdataset = Mock()
+        subdataset.image_list = [f"video1/frame_{i:04d}.png" for i in range(100)]
+        dataset.indices = list(range(100))
+        dataset.dataset = subdataset
+
+        sampler = TripletBatchSampler(dataset, batch_size=8, window=1000)
+        assert sampler.batch_size == 8
+        assert sampler.window == 1000
+        assert sampler.num_samples == 100
+
+    def test_init_odd_batch_size_error(self):
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=100)
+        dataset.dataset = Mock()
+        dataset.dataset.image_list = [f"video1/frame_{i:04d}.png" for i in range(100)]
+        dataset.indices = list(range(100))
+
+        with pytest.raises(ValueError, match='Batch size must be even'):
+            TripletBatchSampler(dataset, batch_size=7)
+
+    def test_iter_batches_within_window(self):
+        """Every (ref, pos) pair in every batch is same-video and within the window."""
+        n_frames = 50
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=n_frames)
+        subdataset = Mock()
+        subdataset.image_list = [f"video1/frame_{i:04d}.png" for i in range(n_frames)]
+        dataset.indices = list(range(n_frames))
+        dataset.dataset = subdataset
+
+        with patch('torch.distributed.is_initialized', return_value=False):
+            sampler = TripletBatchSampler(dataset, batch_size=4, window=5, shuffle=True, seed=0)
+
+        batches = list(sampler)
+        assert len(batches) > 0
+        for batch in batches:
+            assert len(batch) == 4
+            for i in range(0, len(batch), 2):
+                ref_idx, pos_idx = batch[i], batch[i + 1]
+                assert abs(ref_idx - pos_idx) <= 5
+
+    def test_len_does_not_exceed_actual_batches(self):
+        """__len__ must be <= batches actually produced (see ContrastBatchSampler analog)."""
+        n_frames = 100
+        batch_size = 8
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=n_frames)
+        subdataset = Mock()
+        subdataset.image_list = [f"video1/frame_{i:04d}.png" for i in range(n_frames)]
+        dataset.indices = list(range(n_frames))
+        dataset.dataset = subdataset
+
+        sampler = TripletBatchSampler(dataset, batch_size=batch_size, window=10, seed=0)
+
+        declared_len = len(sampler)
+        actual_batches = len(list(sampler))
+        assert declared_len <= actual_batches
+
+    def test_multiple_videos_produce_valid_pairs(self):
+        """Sampler works across a dataset with several videos, never pairing across them."""
+        n_per_video = 30
+        image_list = []
+        for v in range(4):
+            image_list.extend(f"video{v}/frame_{i:04d}.png" for i in range(n_per_video))
+        n_frames = len(image_list)
+
+        dataset = Mock()
+        dataset.__len__ = Mock(return_value=n_frames)
+        subdataset = Mock()
+        subdataset.image_list = image_list
+        dataset.indices = list(range(n_frames))
+        dataset.dataset = subdataset
+
+        with patch('torch.distributed.is_initialized', return_value=False):
+            sampler = TripletBatchSampler(dataset, batch_size=8, window=1000, seed=0)
+
+        def video_of(idx: int) -> int:
+            return idx // n_per_video
+
+        for batch in list(sampler)[:5]:
+            for i in range(0, len(batch), 2):
+                ref_idx, pos_idx = batch[i], batch[i + 1]
+                assert video_of(ref_idx) == video_of(pos_idx)
+
+
+class TestTripletCollateFn:
+    """Test the triplet_collate_fn function."""
+
+    def test_triplet_collate_fn_basic(self):
+        batch_data = [
+            {"image": torch.randn(3, 224, 224), "idx": 0, "video": "v1"},  # ref
+            {"image": torch.randn(3, 224, 224), "idx": 1, "video": "v1"},  # pos
+            {"image": torch.randn(3, 224, 224), "idx": 2, "video": "v2"},  # ref
+            {"image": torch.randn(3, 224, 224), "idx": 3, "video": "v2"},  # pos
+        ]
+
+        result = triplet_collate_fn(batch_data)
+
+        assert isinstance(result, dict)
+        assert 'image' in result
+        assert 'idx' in result
+        assert 'video' in result
+
+        assert result['image'].shape == (4, 3, 224, 224)
+        assert result['idx'].shape == (4,)
+
+        # organized as [ref1, ref2, pos1, pos2]
+        expected_indices = torch.tensor([0, 2, 1, 3])
+        assert torch.allclose(result['idx'], expected_indices)
+        assert result['video'] == ['v1', 'v2', 'v1', 'v2']

@@ -18,6 +18,7 @@ from beast.models.beast3d.beast3d_config import Beast3DModelConfig
 from beast.models.beast_resnet.beast_resnet_config import ResnetModelParams
 from beast.models.beast_vit.beast_vit_config import VitModelParams
 from beast.models.erayzer.erayzer_config import ERayZerOptimizerConfig, ERayZerTrainingConfig
+from beast.models.msps_vae.msps_vae_config import MspsVaeModelParams
 
 _CONFIGS_DIR = Path(__file__).parent.parent / 'configs'
 _NON_BEAST_CONFIG_NAMES = {'extraction_pipeline.yaml'}
@@ -34,6 +35,16 @@ _MINIMAL_RESNET = {
 
 _MINIMAL_VIT = {
     'model': {'model_class': 'vit', 'model_params': {}},
+    'training': {'train_batch_size': 32, 'val_batch_size': 64},
+    'optimizer': {'lr': 1e-4},
+    'data': {'data_dir': '/path/to/data'},
+}
+
+_MINIMAL_MSPS_VAE = {
+    'model': {
+        'model_class': 'msps_vae',
+        'model_params': {'num_latents_unsupervised': 8, 'num_latents_background': 4},
+    },
     'training': {'train_batch_size': 32, 'val_batch_size': 64},
     'optimizer': {'lr': 1e-4},
     'data': {'data_dir': '/path/to/data'},
@@ -68,6 +79,14 @@ class TestBeastConfig:
 
     def test_valid_vit_config(self) -> None:
         BeastConfig.model_validate(_MINIMAL_VIT)
+
+    def test_valid_msps_vae_config(self) -> None:
+        BeastConfig.model_validate(_MINIMAL_MSPS_VAE)
+
+    def test_msps_vae_missing_required_latent_params_raises(self) -> None:
+        raw = {**_MINIMAL_MSPS_VAE, 'model': {'model_class': 'msps_vae', 'model_params': {}}}
+        with pytest.raises(ValidationError):
+            BeastConfig.model_validate(raw)
 
     def test_unknown_model_class_raises(self) -> None:
         raw = {**_MINIMAL_RESNET, 'model': {'model_class': 'unknown', 'model_params': {}}}
@@ -160,6 +179,22 @@ class TestVitModelParams:
         assert cfg.mask_ratio == 0.75
         assert cfg.use_infoNCE is False
         assert cfg.use_perceptual_loss is False
+
+
+class TestMspsVaeModelParams:
+    """Test the MspsVaeModelParams model."""
+
+    def test_defaults_applied(self) -> None:
+        cfg = MspsVaeModelParams(num_latents_unsupervised=8, num_latents_background=4)
+        assert cfg.backbone == 'resnet18'
+        assert cfg.triplet_margin == 1.0
+        assert cfg.triplet_weight == 1.0
+        assert cfg.positive_window == 1000
+        assert cfg.orthogonal_matrix_seed == 42
+
+    def test_missing_required_fields_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            MspsVaeModelParams()  # type: ignore[call-arg]
 
 
 class TestERayZerTrainingConfig:
@@ -269,6 +304,9 @@ class TestGetBeastConfigClass:
 
     def test_vit_falls_back_to_beast_config(self) -> None:
         assert get_beast_config_class('vit') is BeastConfig
+
+    def test_msps_vae_falls_back_to_beast_config(self) -> None:
+        assert get_beast_config_class('msps_vae') is BeastConfig
 
     def test_unknown_falls_back_to_beast_config(self) -> None:
         assert get_beast_config_class('totally_unknown_model') is BeastConfig

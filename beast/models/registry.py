@@ -38,6 +38,9 @@ def _register_all() -> None:
     from beast.models.erayzer.erayzer_config import ERayZerModelConfig
     from beast.models.erayzer.erayzer_model import ERayZer
     from beast.models.erayzer.erayzer_train import train as erayzer_train
+    from beast.models.msps_vae.msps_vae_config import MspsVaeModelConfig
+    from beast.models.msps_vae.msps_vae_model import MspsVae
+    from beast.models.msps_vae.msps_vae_train import train as msps_vae_train
 
     MODEL_REGISTRY['resnet'] = ResnetAutoencoder
     TRAIN_REGISTRY['resnet'] = resnet_train
@@ -54,6 +57,10 @@ def _register_all() -> None:
     MODEL_REGISTRY['beast3d'] = Beast3D
     TRAIN_REGISTRY['beast3d'] = beast3d_train
     CONFIG_REGISTRY['beast3d'] = Beast3DModelConfig
+
+    MODEL_REGISTRY['msps_vae'] = MspsVae
+    TRAIN_REGISTRY['msps_vae'] = msps_vae_train
+    CONFIG_REGISTRY['msps_vae'] = MspsVaeModelConfig
 
 
 def get_model_class(model_class: str) -> type:

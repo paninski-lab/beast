@@ -11,7 +11,7 @@ from beast.data.datamodules import (
     split_sizes_from_probabilities,
 )
 from beast.data.datasets import BaseDataset
-from beast.data.samplers import ContrastBatchSampler
+from beast.data.samplers import ContrastBatchSampler, TripletBatchSampler
 
 
 class TestBaseDataModule:
@@ -80,7 +80,7 @@ class TestBaseDataModule:
         # Arrange — sampler requires an augmentation pipeline; None pipeline should assert
 
         dataset = BaseDataset(data_dir=data_dir, imgaug_pipeline=None)
-        dm = BaseDataModule(dataset=dataset, train_probability=0.8, use_sampler=True)
+        dm = BaseDataModule(dataset=dataset, train_probability=0.8, sampler_kind='contrastive')
         # Act / Assert
         with pytest.raises(ValueError, match='Sampler cannot be used without augmentations'):
             dm.setup()
@@ -121,7 +121,7 @@ class TestBaseDataModuleContrastive:
     """Test BaseDataModule with contrastive (sampler-based) configuration."""
 
     def test_contrastive_datamodule_properties(self, base_datamodule_contrastive) -> None:
-        assert base_datamodule_contrastive.use_sampler is True
+        assert base_datamodule_contrastive.sampler_kind == 'contrastive'
         assert base_datamodule_contrastive.train_batch_size % 2 == 0
 
         np.random.seed(0)
@@ -156,6 +156,45 @@ class TestBaseDataModuleContrastive:
             assert torch.all(batch['idx'] >= 0)
             unique_indices = torch.unique(batch['idx'][::2])
             assert len(unique_indices) == len(batch['idx']) // 2
+            batch_count += 1
+        assert batch_count > 0
+
+
+class TestBaseDataModuleTriplet:
+    """Test BaseDataModule with triplet-loss (sampler-based) configuration."""
+
+    def test_triplet_datamodule_properties(self, base_datamodule_triplet) -> None:
+        assert base_datamodule_triplet.sampler_kind == 'triplet'
+        assert base_datamodule_triplet.train_batch_size % 2 == 0
+
+        np.random.seed(0)
+        train_dataloader = base_datamodule_triplet.train_dataloader()
+        assert isinstance(train_dataloader.sampler, TripletBatchSampler)
+
+        sampler = train_dataloader.sampler
+        assert sampler.batch_size == base_datamodule_triplet.train_batch_size
+        assert sampler.num_samples == len(base_datamodule_triplet.train_dataset)
+        assert sampler.window == base_datamodule_triplet.positive_window
+
+        batch = next(iter(train_dataloader))
+        assert isinstance(batch, dict)
+        assert 'image' in batch
+        assert 'idx' in batch
+        assert 'video' in batch
+
+        expected_batch_size = base_datamodule_triplet.train_batch_size
+        assert batch['image'].shape == (expected_batch_size, 3, 224, 224)
+        assert len(batch['video']) == expected_batch_size
+
+    def test_all_batches_have_correct_shape(self, base_datamodule_triplet) -> None:
+        np.random.seed(1)
+        expected_batch_size = base_datamodule_triplet.train_batch_size
+        train_dataloader = base_datamodule_triplet.train_dataloader()
+        batch_count = 0
+        for batch in train_dataloader:
+            assert batch['image'].shape == (expected_batch_size, 3, 224, 224)
+            assert batch['idx'].shape == (expected_batch_size,)
+            assert len(batch['video']) == expected_batch_size
             batch_count += 1
         assert batch_count > 0
 
