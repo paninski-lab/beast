@@ -381,6 +381,7 @@ class TripletBatchSampler(Sampler):
         self.num_samples = len(dataset)
 
         self.dataset_indices = sorted(dataset.indices)
+        self._dataset_indices_set = set(self.dataset_indices)
         subset_image_list = [dataset.dataset.image_list[i] for i in self.dataset_indices]
         self.all_anchor_indices, self.pos_indices = extract_windowed_positive_pool(
             subset_image_list, window=self.window,
@@ -433,7 +434,7 @@ class TripletBatchSampler(Sampler):
 
                 valid_positives = [
                     p for p in self.pos_indices[i]
-                    if p in self.dataset_indices and p not in used
+                    if p in self._dataset_indices_set and p not in used
                 ]
 
                 if not valid_positives:
