@@ -119,7 +119,13 @@ class BaseDataModule(pl.LightningDataModule):
             # because the subsets actually point to the same underlying dataset, so we create
             # separate datasets here
             generator = torch.Generator().manual_seed(self.seed)
-            if self.sampler_kind != 'none':
+            # ContrastBatchSampler relies on Subset.indices being ascending (it sorts them
+            # internally to build local positions), so it needs the sequential split.
+            # TripletBatchSampler has no such requirement — it preserves Subset.indices'
+            # own order — so it uses the same random split as the unsampled path, which
+            # also means every video is represented in both train and val instead of val
+            # being held-out videos only.
+            if self.sampler_kind == 'contrastive':
                 train_split, val_split, test_split = self._sequential_split(
                     range(len(self.dataset)), data_splits_list, generator=generator,
                 )

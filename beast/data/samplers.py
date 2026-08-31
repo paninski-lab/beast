@@ -380,16 +380,30 @@ class TripletBatchSampler(Sampler):
         self.shuffle = shuffle
         self.num_samples = len(dataset)
 
-        self.dataset_indices = sorted(dataset.indices)
-        self._dataset_indices_set = set(self.dataset_indices)
+        # NOTE: must NOT be sorted — Subset.__getitem__(j) fetches via self.indices[j] in
+        # whatever order the Subset was constructed with (e.g. random_split's shuffled
+        # permutation), so local position j here has to mean the same thing as it does to
+        # the Subset. extract_windowed_positive_pool doesn't need global sortedness; it
+        # already sorts by frame number within each video internally.
+        self.dataset_indices = list(dataset.indices)
         subset_image_list = [dataset.dataset.image_list[i] for i in self.dataset_indices]
         self.all_anchor_indices, self.pos_indices = extract_windowed_positive_pool(
             subset_image_list, window=self.window,
         )
         self.anchor_indices = None  # assigned in __iter__
 
+        # each successful pair consumes exactly 2 frames from the pool (the anchor and its
+        # chosen positive — see used.add(i)/used.add(i_p) below, no extra frames blocked),
+        # so the achievable pair count is ~anchors_per_replica // 2, and the achievable
+        # batch count is that many pairs divided by pairs-per-batch (batch_size // 2).
+        # Occasional pool depletion near video edges/short videos means the true
+        # achievable count can fall slightly short of that ideal (~0.5% shortfall measured
+        # on a real ~90k-frame/32-video split), so apply a small conservative margin —
+        # __len__ must stay <= what __iter__ actually produces, or Lightning's
+        # is_last_batch trigger (based on __len__) never fires and validation never runs.
         anchors_per_replica = len(self.all_anchor_indices) // self.num_replicas
-        self.num_batches = anchors_per_replica // 2 // self.batch_size
+        achievable_pairs = int((anchors_per_replica // 2) * 0.98)
+        self.num_batches = achievable_pairs // (self.batch_size // 2)
 
         self.epoch = 0
         self.seed = seed
@@ -432,9 +446,12 @@ class TripletBatchSampler(Sampler):
 
                 i = anchor_indices[idx_cursor]
 
+                # every candidate in pos_indices[i] is, by construction, already a valid
+                # local position (see extract_windowed_positive_pool) — only 'used' needs
+                # checking here
                 valid_positives = [
                     p for p in self.pos_indices[i]
-                    if p in self._dataset_indices_set and p not in used
+                    if p not in used
                 ]
 
                 if not valid_positives:
