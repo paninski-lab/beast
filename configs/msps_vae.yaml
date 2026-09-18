@@ -13,6 +13,8 @@ model:
     triplet_weight: 1.0
     positive_window: 1000  # +/- frames (same video) defining a valid triplet-loss positive
     orthogonal_matrix_seed: 42  # seeds the fixed z_u/z_b orthogonal split, not training itself
+    use_spatial_loss_weight: false  # down-weight reconstruction MSE near edges/corners
+    spatial_loss_weight_r0: 0.5     # normalized radius where the raised-cosine taper begins
 
 # training configuration
 training:

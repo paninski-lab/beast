@@ -21,6 +21,48 @@ from beast.models.beast_resnet.beast_resnet_model import (
     get_configs,
 )
 
+DEFAULT_SPATIAL_LOSS_WEIGHT_R0 = 0.5
+
+
+def build_raised_cosine_weight_map(side: int, r0: float) -> torch.Tensor:
+    """Build a mean-1-normalized raised-cosine radial weight map for spatial loss weighting.
+
+    Down-weights reconstruction MSE near a square crop's edges/corners, to reduce the
+    incentive to encode rectangle-inscription edge/corner background leakage (see
+    cuttle-patterns/docs/msps_vae_implementation.md, "Spatial loss weighting for
+    rectangle-inscription edge/corner leakage"). Flat at weight 1.0 out to radius `r0`
+    (normalized so `r=1` sits at each edge's midpoint and corners sit at `r=sqrt(2)`),
+    cosine-tapers to exactly 0 (value and slope) at `r=1`, and is exactly 0 beyond —
+    corners are past the taper's zero point by construction, with no corner-specific
+    logic needed.
+
+    Parameters
+    ----------
+    side: side length of the (square) input image, in pixels
+    r0: normalized radius at which the taper begins; 0 <= r0 <= 1
+
+    Returns
+    -------
+    a `(side, side)` tensor, renormalized so its mean is 1.0 — this keeps the
+    reconstruction loss's overall scale where it was before adding the map, so it
+    doesn't silently shift the balance against the triplet term's fixed weight
+
+    """
+    y, x = torch.meshgrid(
+        torch.arange(side, dtype=torch.float32),
+        torch.arange(side, dtype=torch.float32),
+        indexing='ij',
+    )
+    center = (side - 1) / 2
+    r = torch.hypot(x - center, y - center) / (side / 2)
+
+    weight_map = torch.ones_like(r)
+    taper = (r > r0) & (r <= 1)
+    weight_map[taper] = 0.5 * (1 + torch.cos(torch.pi * (r[taper] - r0) / (1 - r0)))
+    weight_map[r > 1] = 0.0
+
+    return weight_map / weight_map.mean()
+
 
 class OrthogonalSplit(nn.Module):
     """Splits a shared latent vector into two frozen, structurally orthogonal subspaces.
@@ -110,6 +152,14 @@ class MspsVae(BaseLightningModel):
             seed=params['orthogonal_matrix_seed'],
         )
 
+        self.use_spatial_loss_weight = params.get('use_spatial_loss_weight', False)
+        if self.use_spatial_loss_weight:
+            weight_map = build_raised_cosine_weight_map(
+                side=params['image_size'],
+                r0=params.get('spatial_loss_weight_r0', DEFAULT_SPATIAL_LOSS_WEIGHT_R0),
+            )
+            self.register_buffer('spatial_loss_weight_map', weight_map)
+
     def forward(
         self,
         x: Float[torch.Tensor, 'batch channels img_height img_width'],
@@ -184,6 +234,13 @@ class MspsVae(BaseLightningModel):
         `i +/- B`. Negatives are drawn per-anchor from other batch members with a
         different `video` value.
 
+        When `model_params.use_spatial_loss_weight` is set, the per-pixel squared error
+        is multiplied by a fixed, non-trainable raised-cosine radial weight map (built in
+        `__init__`, mean-normalized to 1.0) before averaging, instead of a plain
+        `mse_loss` — down-weighting reconstruction error near the crop's edges/corners.
+        See `build_raised_cosine_weight_map` and
+        cuttle-patterns/docs/msps_vae_implementation.md.
+
         Parameters
         ----------
         stage: training stage ('train', 'val', 'test', or None)
@@ -199,7 +256,11 @@ class MspsVae(BaseLightningModel):
         tuple of (loss tensor, list of logging dicts)
 
         """
-        mse_loss = nn.functional.mse_loss(images, reconstructions, reduction='mean')
+        if self.use_spatial_loss_weight:
+            squared_error = (images - reconstructions) ** 2
+            mse_loss = (squared_error * self.spatial_loss_weight_map).mean()
+        else:
+            mse_loss = nn.functional.mse_loss(images, reconstructions, reduction='mean')
         log_list = [{'name': f'{stage}_mse', 'value': mse_loss}]
         loss = mse_loss
 
