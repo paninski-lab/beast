@@ -23,6 +23,8 @@ class MspsVaeModelParams(BaseModel):
     triplet_weight: float = 1.0
     positive_window: int = 1000
     orthogonal_matrix_seed: int = 42
+    use_spatial_loss_weight: bool = False
+    spatial_loss_weight_r0: float = 0.5
 
 
 class MspsVaeModelConfig(BaseModel):

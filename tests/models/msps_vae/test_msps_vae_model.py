@@ -5,7 +5,39 @@ import copy
 import pytest
 import torch
 
-from beast.models.msps_vae.msps_vae_model import MspsVae, OrthogonalSplit
+from beast.models.msps_vae.msps_vae_model import (
+    MspsVae,
+    OrthogonalSplit,
+    build_raised_cosine_weight_map,
+)
+
+
+class TestBuildRaisedCosineWeightMap:
+    """Test the build_raised_cosine_weight_map function."""
+
+    def test_shape(self) -> None:
+        weight_map = build_raised_cosine_weight_map(side=32, r0=0.5)
+        assert weight_map.shape == (32, 32)
+
+    def test_mean_is_one(self) -> None:
+        weight_map = build_raised_cosine_weight_map(side=64, r0=0.5)
+        assert torch.isclose(weight_map.mean(), torch.tensor(1.0), atol=1e-5)
+
+    def test_center_is_max(self) -> None:
+        weight_map = build_raised_cosine_weight_map(side=33, r0=0.5)
+        center = weight_map.shape[0] // 2
+        assert weight_map[center, center] == weight_map.max()
+
+    def test_corners_are_zero(self) -> None:
+        weight_map = build_raised_cosine_weight_map(side=32, r0=0.5)
+        assert weight_map[0, 0] == 0.0
+        assert weight_map[0, -1] == 0.0
+        assert weight_map[-1, 0] == 0.0
+        assert weight_map[-1, -1] == 0.0
+
+    def test_nonnegative(self) -> None:
+        weight_map = build_raised_cosine_weight_map(side=32, r0=0.5)
+        assert (weight_map >= 0).all()
 
 
 class TestOrthogonalSplit:
@@ -149,6 +181,43 @@ class TestMspsVae:
         assert 'video' not in result
         assert result['latents'].shape == (2, 8 + 4)
         assert result['metadata']['video'] == batch_dict['video']
+
+    def test_spatial_loss_weight_off_by_default(self, config_msps_vae) -> None:
+        config = copy.deepcopy(config_msps_vae)
+        model = MspsVae(config)
+        assert model.use_spatial_loss_weight is False
+        assert not hasattr(model, 'spatial_loss_weight_map')
+
+    def test_spatial_loss_weight_on_registers_buffer(self, config_msps_vae) -> None:
+        config = copy.deepcopy(config_msps_vae)
+        config['model']['model_params']['use_spatial_loss_weight'] = True
+        model = MspsVae(config)
+        assert model.use_spatial_loss_weight is True
+        assert model.spatial_loss_weight_map.shape == (224, 224)
+
+    def test_spatial_loss_weight_changes_mse(self, config_msps_vae) -> None:
+        n = 4
+        images = torch.randn(n, 3, 224, 224)
+        reconstructions = torch.randn(n, 3, 224, 224)
+        z_u = torch.randn(n, 8)
+        z_b = torch.randn(n, 4)
+        video = ['v1', 'v2', 'v1', 'v2']
+
+        config_off = copy.deepcopy(config_msps_vae)
+        loss_off, _ = MspsVae(config_off).compute_loss(
+            stage='val', images=images, reconstructions=reconstructions,
+            z_u=z_u, z_b=z_b, video=video,
+        )
+
+        config_on = copy.deepcopy(config_msps_vae)
+        config_on['model']['model_params']['use_spatial_loss_weight'] = True
+        loss_on, _ = MspsVae(config_on).compute_loss(
+            stage='val', images=images, reconstructions=reconstructions,
+            z_u=z_u, z_b=z_b, video=video,
+        )
+
+        assert torch.isfinite(loss_on)
+        assert not torch.isclose(loss_on, loss_off)
 
     def test_predict_step_return_reconstructions_toggle(self, config_msps_vae) -> None:
         config = copy.deepcopy(config_msps_vae)
