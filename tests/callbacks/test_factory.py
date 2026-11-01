@@ -76,4 +76,5 @@ class TestGetCallbacks:
 
     def test_viz_num_frames_default_is_per_callback(self, tmp_path) -> None:
         cb = get_callbacks(viz_every_n_epochs=2, output_dir=tmp_path)[-1]
+        assert isinstance(cb, ValidationVizCallback)
         assert cb.num_frames == 108

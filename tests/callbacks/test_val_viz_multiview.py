@@ -1,8 +1,10 @@
 """Tests for the multi-view validation visualization callback."""
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock
 
+import lightning.pytorch as pl
 import numpy as np
 import pytest
 import torch
@@ -49,6 +51,11 @@ class _FakeMultiviewModel:
         }
 
 
+def _as_module(model: object) -> pl.LightningModule:
+    """Treat a lightweight fake as a LightningModule for type checking."""
+    return cast(pl.LightningModule, model)
+
+
 def _make_trainer(n_val=10, epoch=0):
     trainer = MagicMock()
     trainer.sanity_checking = False
@@ -81,14 +88,14 @@ class TestMultiviewValidationVizCallback:
 
     def test_setup_accepts_model_without_get_viz_panels(self, tmp_path) -> None:
         cb = MultiviewValidationVizCallback(tmp_path, every_n_epochs=1)
-        cb.setup(_make_trainer(), SimpleNamespace(), 'fit')
+        cb.setup(_make_trainer(), _as_module(SimpleNamespace()), 'fit')
 
     def test_writes_all_outputs(self, tmp_path, patched_glb) -> None:
         cb = MultiviewValidationVizCallback(
             tmp_path, every_n_epochs=1, num_frames=6, scenes_per_sheet=4, batch_size=3,
         )
         model = _FakeMultiviewModel()
-        cb.on_validation_epoch_end(_make_trainer(epoch=0), model)
+        cb.on_validation_epoch_end(_make_trainer(epoch=0), _as_module(model))
         out_dir = tmp_path / 'val_images'
         names = sorted(p.name for p in out_dir.glob('*.png'))
         # 6 scenes at 4 per sheet -> 2 render sheets, plus 1 camera plot
@@ -103,7 +110,7 @@ class TestMultiviewValidationVizCallback:
     def test_logs_scalar_stats(self, tmp_path, patched_glb) -> None:
         cb = MultiviewValidationVizCallback(tmp_path, every_n_epochs=1, num_frames=4)
         model = _FakeMultiviewModel()
-        cb.on_validation_epoch_end(_make_trainer(), model)
+        cb.on_validation_epoch_end(_make_trainer(), _as_module(model))
         logged = {c.args[0]: c.args[1] for c in model.log.call_args_list}
         assert set(logged) == {
             'val/focal_fx_mean', 'val/focal_fx_std', 'val/focal_fy_mean', 'val/cx_mean',
@@ -117,7 +124,7 @@ class TestMultiviewValidationVizCallback:
         cb = MultiviewValidationVizCallback(
             tmp_path, every_n_epochs=1, num_frames=2, max_sheet_width=40,
         )
-        cb.on_validation_epoch_end(_make_trainer(), _FakeMultiviewModel())
+        cb.on_validation_epoch_end(_make_trainer(), _as_module(_FakeMultiviewModel()))
         img = Image.open(tmp_path / 'val_images' / 'epoch_0000_renders_00.png')
         assert img.size[0] == 40
 
@@ -125,9 +132,9 @@ class TestMultiviewValidationVizCallback:
         cb = MultiviewValidationVizCallback(tmp_path, every_n_epochs=1, num_frames=4)
         model = _FakeMultiviewModel()
         torch.manual_seed(123)
-        cb.on_validation_epoch_end(_make_trainer(epoch=0), model)
+        cb.on_validation_epoch_end(_make_trainer(epoch=0), _as_module(model))
         torch.manual_seed(456)  # different global RNG state must not matter
-        cb.on_validation_epoch_end(_make_trainer(epoch=1), model)
+        cb.on_validation_epoch_end(_make_trainer(epoch=1), _as_module(model))
         a = np.array(Image.open(tmp_path / 'val_images' / 'epoch_0000_renders_00.png'))
         b = np.array(Image.open(tmp_path / 'val_images' / 'epoch_0001_renders_00.png'))
         assert np.array_equal(a, b)
@@ -138,13 +145,13 @@ class TestMultiviewValidationVizCallback:
         torch.manual_seed(7)
         expected = torch.rand(3)
         torch.manual_seed(7)
-        cb.on_validation_epoch_end(trainer, model)
+        cb.on_validation_epoch_end(trainer, _as_module(model))
         assert torch.equal(torch.rand(3), expected)
 
     def test_skips_when_not_due(self, tmp_path, patched_glb) -> None:
         cb = MultiviewValidationVizCallback(tmp_path, every_n_epochs=5, num_frames=2)
         model = _FakeMultiviewModel()
-        cb.on_validation_epoch_end(_make_trainer(epoch=1), model)
+        cb.on_validation_epoch_end(_make_trainer(epoch=1), _as_module(model))
         assert model.n_calls == 0
         assert not (tmp_path / 'val_images').exists()
 
@@ -155,7 +162,7 @@ class TestMultiviewValidationVizCallback:
         monkeypatch.setattr(val_viz_multiview, 'export_gaussian_glb', broken_export)
         cb = MultiviewValidationVizCallback(tmp_path, every_n_epochs=1, num_frames=2)
         model = _FakeMultiviewModel()
-        cb.on_validation_epoch_end(_make_trainer(), model)
+        cb.on_validation_epoch_end(_make_trainer(), _as_module(model))
         out_dir = tmp_path / 'val_images'
         assert (out_dir / 'epoch_0000_renders_00.png').exists()
         assert (out_dir / 'epoch_0000_cameras.png').exists()
@@ -165,4 +172,4 @@ class TestMultiviewValidationVizCallback:
         cb = MultiviewValidationVizCallback(tmp_path, every_n_epochs=1, num_frames=2)
         model = _FakeMultiviewModel()
         model.get_model_outputs = MagicMock(side_effect=RuntimeError('boom'))
-        cb.on_validation_epoch_end(_make_trainer(), model)
+        cb.on_validation_epoch_end(_make_trainer(), _as_module(model))

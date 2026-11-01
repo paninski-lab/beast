@@ -92,7 +92,7 @@ class TestVitModelParams:
 
     def test_vit_model_params_invalid_backbone(self):
         with pytest.raises(ValidationError):
-            VitModelParams(backbone='vit-xl')
+            VitModelParams(backbone='vit-xl')  # type: ignore[arg-type]
 
     def test_vit_model_params_small_without_random_init_raises(self):
         with pytest.raises(ValidationError, match='random_init'):

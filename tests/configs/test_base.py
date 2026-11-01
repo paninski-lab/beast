@@ -21,7 +21,7 @@ class TestBaseTrainingConfig:
 
     def test_base_training_config_requires_batch_sizes(self):
         with pytest.raises(ValueError):
-            BaseTrainingConfig()
+            BaseTrainingConfig()  # type: ignore[call-arg]
 
     def test_base_training_config_subclass_default_overrides(self):
         std = TrainingConfig(train_batch_size=4, val_batch_size=4)
@@ -53,4 +53,4 @@ class TestBaseOptimizerConfig:
 
     def test_base_optimizer_config_requires_lr(self):
         with pytest.raises(ValueError):
-            BaseOptimizerConfig()
+            BaseOptimizerConfig()  # type: ignore[call-arg]

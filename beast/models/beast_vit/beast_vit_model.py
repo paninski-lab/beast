@@ -225,7 +225,9 @@ class VisionTransformer(BaseLightningModel):
         """
         x = batch_dict['image']
         mae = self.vit_mae
-        n_patches = (mae.config.image_size // mae.config.patch_size) ** 2
+        image_size, patch_size = mae.config.image_size, mae.config.patch_size
+        assert isinstance(image_size, int) and isinstance(patch_size, int)
+        n_patches = (image_size // patch_size) ** 2
         generator = torch.Generator().manual_seed(0)
         noise = torch.rand(x.shape[0], n_patches, generator=generator).to(x.device)
         out = mae(pixel_values=x, noise=noise, return_recon=True)

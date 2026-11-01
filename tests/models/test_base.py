@@ -86,7 +86,10 @@ class TestGetScheduler:
         }
         model = torch.nn.Linear(2, 2)
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-        scheduler = BaseLightningModel.get_scheduler(SimpleNamespace(config=config), optimizer)
+        scheduler = BaseLightningModel.get_scheduler(
+            SimpleNamespace(config=config),  # type: ignore[arg-type]
+            optimizer,
+        )
         return scheduler
 
     def test_get_scheduler_peak_lr_scales_with_batch(self):

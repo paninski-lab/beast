@@ -3,6 +3,7 @@
 import logging
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import lightning.pytorch as pl
 import numpy as np
@@ -161,7 +162,7 @@ class ValidationVizCallback(pl.Callback):
 
     def _check_model(self, pl_module: pl.LightningModule) -> None:
         """Raise if the model does not support this callback's visualization."""
-        if type(pl_module).get_viz_panels is BaseLightningModel.get_viz_panels:
+        if getattr(type(pl_module), 'get_viz_panels', None) is BaseLightningModel.get_viz_panels:
             raise NotImplementedError(
                 f'{type(pl_module).__name__} does not implement get_viz_panels; '
                 f'set training.viz_every_n_epochs to null for this model'
@@ -169,7 +170,7 @@ class ValidationVizCallback(pl.Callback):
 
     def _build_batch(self, trainer: pl.Trainer) -> dict:
         """Load the fixed set of validation frames once and cache them on CPU."""
-        dataset = trainer.datamodule.val_dataset
+        dataset = trainer.datamodule.val_dataset  # type: ignore[attr-defined]
         idxs = select_viz_indices(len(dataset), self.num_frames)
         items = [dataset[i] for i in idxs]
         return default_collate(items)
@@ -212,13 +213,15 @@ class ValidationVizCallback(pl.Callback):
 
     def _save_sheets(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         """Run the model on the fixed frames and write the contact sheets to disk."""
+        model = cast(BaseLightningModel, pl_module)
         panel_chunks: list[list[torch.Tensor]] | None = None
         for batch in self._iter_batches(trainer, pl_module):
-            out = pl_module.get_viz_panels(batch)
+            out = model.get_viz_panels(batch)
             if panel_chunks is None:
                 panel_chunks = [[] for _ in out]
             for chunks, panel in zip(panel_chunks, out, strict=True):
                 chunks.append(panel.detach().float().cpu())
+        assert panel_chunks is not None, 'no validation batches to visualize'
         panels = [torch.cat(chunks, dim=0) for chunks in panel_chunks]
 
         sheets = make_contact_sheets(panels, panel_size=self.panel_size)

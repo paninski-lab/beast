@@ -1,6 +1,7 @@
 """Callback that saves validation visuals for multi-view models (ERayZer, BEAST3D)."""
 
 import logging
+from typing import cast
 
 import lightning.pytorch as pl
 import torch
@@ -9,6 +10,7 @@ from lightning.pytorch.utilities import rank_zero_only
 from PIL import Image
 
 from beast.callbacks.val_viz import ValidationVizCallback
+from beast.models.base import BaseLightningModel
 from beast.models.erayzer.visualize import (
     camera_intrinsic_stats,
     export_gaussian_glb,
@@ -92,7 +94,7 @@ class MultiviewValidationVizCallback(ValidationVizCallback):
         with torch.random.fork_rng(devices=devices):
             torch.manual_seed(0)
             for idx_batch, batch in enumerate(self._iter_batches(trainer, pl_module)):
-                out = pl_module.get_model_outputs(batch)
+                out = cast(BaseLightningModel, pl_module).get_model_outputs(batch)
                 n_scenes = out['target_image'].shape[0]
                 for i in range(n_scenes):
                     scene_grids.append(make_render_grid(
@@ -142,7 +144,9 @@ class MultiviewValidationVizCallback(ValidationVizCallback):
     @staticmethod
     def _batch_stats(out: dict, pl_module: pl.LightningModule) -> dict[str, float]:
         """Compute intrinsic and Gaussian scalar statistics for one batch of outputs."""
-        image_size = pl_module.config['model']['image_tokenizer']['image_size']
+        image_size = cast(BaseLightningModel, pl_module).config['model']['image_tokenizer'][
+            'image_size'
+        ]
         stats = camera_intrinsic_stats(out['fxfycxcy_target'], image_size)
         gaussians = out.get('gaussians')
         if gaussians:

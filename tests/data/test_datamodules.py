@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 import torch
-from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data import DataLoader, RandomSampler, Subset
 
 from beast.data.datamodules import (
     BaseDataModule,
@@ -178,37 +178,45 @@ class TestTrainFrames:
         dm.setup()
         return dm
 
+    @staticmethod
+    def _subset(dataset) -> Subset:
+        assert dataset is not None
+        return dataset
+
     def test_train_frames_none_uses_all(self, base_dataset) -> None:
         dm_all = self._make(base_dataset, None)
         dm_one = self._make(base_dataset, 1)
-        assert len(dm_all.train_dataset) == len(dm_one.train_dataset)
+        n_one = len(self._subset(dm_one.train_dataset))
+        assert len(self._subset(dm_all.train_dataset)) == n_one
 
     def test_train_frames_nested_and_splits_fixed(self, base_dataset) -> None:
-        n_all = len(self._make(base_dataset, None).train_dataset)
+        n_all = len(self._subset(self._make(base_dataset, None).train_dataset))
         n_small, n_large = n_all // 4, n_all // 2
         dm_small = self._make(base_dataset, n_small)
         dm_large = self._make(base_dataset, n_large)
         dm_all = self._make(base_dataset, None)
 
-        assert len(dm_small.train_dataset) == n_small
-        assert len(dm_large.train_dataset) == n_large
-        idxs_small = list(dm_small.train_dataset.indices)
-        idxs_large = list(dm_large.train_dataset.indices)
+        assert len(self._subset(dm_small.train_dataset)) == n_small
+        assert len(self._subset(dm_large.train_dataset)) == n_large
+        idxs_small = list(self._subset(dm_small.train_dataset).indices)
+        idxs_large = list(self._subset(dm_large.train_dataset).indices)
         assert idxs_large[:n_small] == idxs_small
-        assert list(dm_all.train_dataset.indices)[:n_large] == idxs_large
+        assert list(self._subset(dm_all.train_dataset).indices)[:n_large] == idxs_large
         # val/test splits do not depend on train_frames
-        assert list(dm_small.val_dataset.indices) == list(dm_all.val_dataset.indices)
-        assert list(dm_small.test_dataset.indices) == list(dm_all.test_dataset.indices)
+        idxs_val_small = list(self._subset(dm_small.val_dataset).indices)
+        assert idxs_val_small == list(self._subset(dm_all.val_dataset).indices)
+        idxs_test_small = list(self._subset(dm_small.test_dataset).indices)
+        assert idxs_test_small == list(self._subset(dm_all.test_dataset).indices)
 
     def test_train_frames_fraction(self, base_dataset) -> None:
-        n_all = len(self._make(base_dataset, None).train_dataset)
+        n_all = len(self._subset(self._make(base_dataset, None).train_dataset))
         dm = self._make(base_dataset, 0.5)
-        assert len(dm.train_dataset) == int(0.5 * n_all)
+        assert len(self._subset(dm.train_dataset)) == int(0.5 * n_all)
 
     def test_train_frames_sampler(self, base_dataset) -> None:
-        n_all = len(self._make(base_dataset, None, use_sampler=True).train_dataset)
+        n_all = len(self._subset(self._make(base_dataset, None, use_sampler=True).train_dataset))
         dm = self._make(base_dataset, n_all // 2, use_sampler=True)
-        assert len(dm.train_dataset) == n_all // 2
+        assert len(self._subset(dm.train_dataset)) == n_all // 2
 
 
 class TestComputeNumTrainFrames:
@@ -374,12 +382,15 @@ class TestMultiViewDataModule:
             dm.setup()
             return dm
 
+        def frame_ids(dm, split):
+            dataset = getattr(dm, f'{split}_dataset')
+            assert dataset is not None
+            return list(dataset.unique_frame_ids)
+
         dm_all, dm_big, dm_small = make(None), make(8), make(4)
-        ids_big = list(dm_big.train_dataset.unique_frame_ids)
-        ids_small = list(dm_small.train_dataset.unique_frame_ids)
+        ids_big = frame_ids(dm_big, 'train')
+        ids_small = frame_ids(dm_small, 'train')
         assert len(ids_big) == 8 and len(ids_small) == 4
         assert ids_big[:4] == ids_small
-        assert list(dm_all.train_dataset.unique_frame_ids)[:8] == ids_big
-        assert list(dm_small.val_dataset.unique_frame_ids) == list(
-            dm_all.val_dataset.unique_frame_ids
-        )
+        assert frame_ids(dm_all, 'train')[:8] == ids_big
+        assert frame_ids(dm_small, 'val') == frame_ids(dm_all, 'val')
