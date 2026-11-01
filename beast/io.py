@@ -22,7 +22,13 @@ def load_config(path: str | Path) -> dict:
 
     Returns
     -------
-    nested configuration dictionary
+    nested configuration dictionary with all schema defaults filled in
+
+    Notes
+    -----
+    The yaml is validated against the pydantic schema selected by ``model.model_class`` (see
+    ``beast.config.get_beast_config_class``) and then dumped back to a plain dict. Downstream
+    code can therefore index config fields directly instead of using ``.get`` with defaults.
 
     """
 

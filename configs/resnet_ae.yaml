@@ -22,6 +22,10 @@ training:
   num_nodes: 1
   log_every_n_steps: 10       # frequency to log training metrics
   check_val_every_n_epoch: 5  # frequency to log validation metrics
+  # train on only the first N frames (int) or fraction (0-1) of the train split; subsets are
+  # nested across values for a fixed seed; null uses all training frames
+  train_frames: null
+  precision: 32-true  # trainer precision, e.g. 32-true | bf16-mixed
   # also save a checkpoint every this many epochs, in addition to the best-val checkpoint;
   # null saves only the best-val checkpoint
   ckpt_every_n_epochs: null

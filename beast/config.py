@@ -22,6 +22,15 @@ get_beast_config_class(model_class) returns the correct top-level config class f
 given model_class string.  Both beast.io.load_config and beast.api.model.Model.from_config
 use this function so that YAML files and raw dicts are validated against the right schema.
 
+Load flow
+---------
+yaml -> beast.io.load_config -> model_validate (this module) -> model_dump() -> plain nested
+dict.  Defaults are filled in by validation, so consumers (train.py, models) can index fields
+directly.  Some schemas normalize their input in a ``mode='before'`` validator, e.g.
+``VitModelParams`` expands ``backbone: vit-l`` into explicit architecture fields; such
+normalization must be idempotent because dumped configs are re-validated when a saved model is
+reloaded.
+
 To add a new model with a divergent training schema:
   1. Define <Model>TrainingConfig and <Model>OptimizerConfig in the model's *_config.py
   2. Define <Model>BeastConfig here (avoids circular imports since DataConfig lives here)
@@ -71,6 +80,7 @@ class TrainingConfig(BaseModel):
     num_nodes: int = 1
     log_every_n_steps: int = 10
     check_val_every_n_epoch: int = 5
+    precision: str = '32-true'
     train_probability: float = 0.95
     val_probability: float = 0.05
     train_frames: int | float | None = None
