@@ -14,6 +14,7 @@ from transformers import (
 from beast.data.utils import denormalize_images
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
+from beast.models.beast_vit.beast_vit_config import get_pretrained_repo, resolve_vit_params
 from beast.nn.perceptual import AlexPerceptual
 
 
@@ -59,18 +60,22 @@ class VisionTransformer(BaseLightningModel):
         """
         super().__init__(config)
         # Set up ViT architecture
-        vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
+        model_params = resolve_vit_params(config['model']['model_params'])
+        vit_mae_config = ViTMAEConfig(
+            **{k: v for k, v in model_params.items() if k != 'backbone'},
+        )
 
         # Check if we should use pretrained weights or random initialization
         use_pretrained = not config['model']['model_params'].get('random_init', False)
         if use_pretrained:
+            repo = get_pretrained_repo(model_params)
             log_step(
-                "Loading pretrained model from 'facebook/vit-mae-base'"
+                f"Loading pretrained model from '{repo}'"
                 ' (this may take several minutes if downloading)...',
                 level='debug',
             )
             log_step("Note: Model will be cached locally after first download", level='debug')
-            self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
+            self.vit_mae = ViTMAE.from_pretrained(repo, config=vit_mae_config)
         else:
             log_step("Using random initialization (random_init=True)", level='debug')
             self.vit_mae = ViTMAE(vit_mae_config)
