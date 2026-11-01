@@ -91,12 +91,14 @@ class BaseLightningModel(ABC, pl.LightningModule):
         # init optimizer
         optimizer = self.config['optimizer']['type']
         learning_rate = self.config['optimizer']['lr']
+        betas = (self.config['optimizer']['beta1'], self.config['optimizer']['beta2'])
         if optimizer == 'Adam':
-            optimizer = torch.optim.Adam(params, lr=learning_rate)
+            optimizer = torch.optim.Adam(params, lr=learning_rate, betas=betas)
         elif optimizer == 'AdamW':
             optimizer = torch.optim.AdamW(
                 params,
                 lr=learning_rate,
+                betas=betas,
                 weight_decay=self.config['optimizer']['wd'],
             )
         else:

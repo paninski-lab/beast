@@ -128,6 +128,7 @@ class TestOptimizerConfig:
         assert cfg.type == 'AdamW'
         assert cfg.scheduler == 'cosine'
         assert cfg.accumulate_grad_batches == 1
+        assert (cfg.beta1, cfg.beta2) == (0.9, 0.95)
         assert cfg.warmup_pct == 0.15
         assert cfg.steps == []
 

@@ -42,6 +42,9 @@ class BaseOptimizerConfig(BaseModel):
 
     lr: float
     wd: float = 0.05
+    # adam betas; 0.95 for beta2 follows the MAE recipe (more stable than 0.999 for transformers)
+    beta1: float = 0.9
+    beta2: float = 0.95
     accumulate_grad_batches: int = 1
 
 

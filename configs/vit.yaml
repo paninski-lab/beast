@@ -53,6 +53,8 @@ optimizer:
   accumulate_grad_batches: 1
   lr: 5.e-5
   wd: 0.05
+  beta1: 0.9   # adam betas; beta2=0.95 follows the MAE recipe
+  beta2: 0.95
   warmup_pct: 0.15 # cosine/linear
   gamma: 0.95     # step
   div_factor: 10  # cosine

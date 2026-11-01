@@ -135,8 +135,6 @@ class ERayZerOptimizerConfig(BaseOptimizerConfig):
     tracks the global batch across GPUs/nodes.
     """
 
-    beta1: float = 0.9
-    beta2: float = 0.95
     warmup: int = 3000
     div_factor: float = 1.0
     final_div_factor: float = 1.0
