@@ -22,6 +22,11 @@ training:
   num_nodes: 1
   log_every_n_steps: 10       # frequency to log training metrics
   check_val_every_n_epoch: 5  # frequency to log validation metrics
+  # save contact sheets of validation images/reconstructions to <output_dir>/val_images every
+  # this many epochs (should be a multiple of check_val_every_n_epoch); null disables
+  viz_every_n_epochs: null
+  # number of (evenly spaced, fixed) validation frames to visualize; 32 frames per sheet
+  viz_num_frames: 108
 
 # optimizer configuration
 optimizer:

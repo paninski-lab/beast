@@ -11,6 +11,7 @@ from transformers import (
     ViTMAEForPreTraining,
 )
 
+from beast.data.utils import denormalize_images
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
 from beast.nn.perceptual import AlexPerceptual
@@ -200,6 +201,42 @@ class VisionTransformer(BaseLightningModel):
             loss += loss_dict['infoNCE_loss']
         return loss, log_list
 
+    @torch.no_grad()
+    def get_viz_panels(self, batch_dict: dict) -> list[torch.Tensor]:
+        """Return input, masked input, and reconstruction panels for contact sheets.
+
+        A fixed masking noise (same seed every call) is used so the same patches are masked at
+        every visualization, making sheets comparable across epochs.
+
+        Parameters
+        ----------
+        batch_dict: dict containing 'image' tensor
+
+        Returns
+        -------
+        list of three (batch, 3, height, width) tensors in [0, 1]: input, masked input,
+        reconstruction
+
+        """
+        x = batch_dict['image']
+        mae = self.vit_mae
+        n_patches = (mae.config.image_size // mae.config.patch_size) ** 2
+        generator = torch.Generator().manual_seed(0)
+        noise = torch.rand(x.shape[0], n_patches, generator=generator).to(x.device)
+        out = mae(pixel_values=x, noise=noise, return_recon=True)
+
+        recon = out['reconstructions']
+        patches_x = mae.patchify(x)
+        if mae.config.norm_pix_loss:
+            # reconstruction is in per-patch normalized space; undo using the target statistics
+            mean = patches_x.mean(dim=-1, keepdim=True)
+            var = patches_x.var(dim=-1, keepdim=True)
+            recon = mae.unpatchify(mae.patchify(recon) * (var + 1.0e-6) ** 0.5 + mean)
+
+        # masked patches (mask == 1) are zeroed in normalized space, i.e. shown as dataset mean
+        masked = mae.unpatchify(patches_x * (1.0 - out['mask']).unsqueeze(-1))
+        return [denormalize_images(t) for t in (x, masked, recon)]
+
     def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
         """Run inference on a single batch, extracting CLS token latents.
 
@@ -318,6 +355,7 @@ class ViTMAE(ViTMAEForPreTraining):
                 'loss': loss,
                 'mse_loss': loss,
                 'reconstructions': self.unpatchify(logits),
+                'mask': mask,
             }
         return {
             'latents': cls_latent,

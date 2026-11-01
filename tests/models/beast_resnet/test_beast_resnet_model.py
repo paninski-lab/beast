@@ -156,3 +156,18 @@ class TestResnetAutoencoderIntegration:
         config['model']['model_params']['backbone'] = 'resnet18'
         config['model']['model_params']['num_latents'] = 16
         run_model_test(config=config)
+
+
+class TestGetVizPanels:
+    """Test ResnetAutoencoder.get_viz_panels."""
+
+    def test_panels_shapes_and_range(self, config_ae):
+        config = copy.deepcopy(config_ae)
+        config['model']['model_params']['backbone'] = 'resnet18'
+        model = ResnetAutoencoder(config)
+        model.eval()
+        panels = model.get_viz_panels({'image': torch.randn(2, 3, 224, 224)})
+        assert len(panels) == 2
+        for p in panels:
+            assert p.shape == (2, 3, 224, 224)
+            assert p.min() >= 0 and p.max() <= 1

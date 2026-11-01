@@ -72,3 +72,59 @@ class TestVisionTransformerIntegration:
         config = copy.deepcopy(config_vit)
         config['model']['model_params']['use_perceptual_loss'] = True
         run_model_test(config=config)
+
+
+class TestGetVizPanels:
+    """Test VisionTransformer.get_viz_panels."""
+
+    def test_panels_shapes_and_range(self, config_vit):
+        model = VisionTransformer(copy.deepcopy(config_vit))
+        model.eval()
+        panels = model.get_viz_panels({'image': torch.randn(3, 3, 224, 224)})
+        assert len(panels) == 3
+        for p in panels:
+            assert p.shape == (3, 3, 224, 224)
+            assert p.min() >= 0 and p.max() <= 1
+
+    def test_masking_is_fixed_across_calls(self, config_vit):
+        model = VisionTransformer(copy.deepcopy(config_vit))
+        model.eval()
+        batch = {'image': torch.randn(2, 3, 224, 224)}
+        a = model.get_viz_panels(batch)
+        b = model.get_viz_panels(batch)
+        assert torch.equal(a[1], b[1])
+
+    def test_masked_panel_hides_patches(self, config_vit):
+        config = copy.deepcopy(config_vit)
+        config['model']['model_params']['mask_ratio'] = 0.75
+        model = VisionTransformer(config)
+        model.eval()
+        x = torch.randn(1, 3, 224, 224)
+        inp, masked, _ = model.get_viz_panels({'image': x})
+        frac_same = (inp == masked).all(dim=1).float().mean().item()
+        assert 0.15 < frac_same < 0.35  # ~25% of patches visible
+
+    def test_norm_pix_loss_branch(self, config_vit):
+        config = copy.deepcopy(config_vit)
+        config['model']['model_params']['norm_pix_loss'] = True
+        model = VisionTransformer(config)
+        model.eval()
+        panels = model.get_viz_panels({'image': torch.randn(2, 3, 224, 224)})
+        assert panels[2].shape == (2, 3, 224, 224)
+
+
+class TestValidationVizIntegration:
+    """Test that training with viz_every_n_epochs writes contact sheets."""
+
+    def test_train_saves_contact_sheets(self, config_vit, tmp_path):
+        from beast.api.model import Model
+
+        config = copy.deepcopy(config_vit)
+        config['training']['num_epochs'] = 2
+        config['training']['check_val_every_n_epoch'] = 1
+        config['training']['viz_every_n_epochs'] = 2
+        config['training']['viz_num_frames'] = 5
+        model = Model.from_config(config)
+        model.train(tmp_path)
+        sheets = sorted(tmp_path.rglob('val_images/*.png'))
+        assert [s.name for s in sheets] == ['epoch_0001_sheet_00.png']

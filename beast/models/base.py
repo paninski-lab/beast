@@ -166,6 +166,30 @@ class BaseLightningModel(ABC, pl.LightningModule):
         """Base test step, a wrapper around the `evaluate_batch` method."""
         self.evaluate_batch(batch_dict, 'test')
 
+    def get_viz_panels(self, batch_dict: dict) -> list[torch.Tensor]:
+        """Return image panels for validation contact sheets; optional for subclasses.
+
+        Models that implement this can be used with ``ValidationVizCallback``. Each returned
+        tensor is one panel type (e.g. input, masked input, reconstruction) for the whole batch.
+
+        Parameters
+        ----------
+        batch_dict: dict containing model inputs
+
+        Returns
+        -------
+        list of float tensors of shape (batch, 3, height, width) with values in [0, 1];
+        element k holds panel k of every frame, in a fixed order
+
+        Raises
+        ------
+        NotImplementedError: if the model does not support contact-sheet visualization
+
+        """
+        raise NotImplementedError(
+            f'{type(self).__name__} does not implement get_viz_panels'
+        )
+
     # Required Lightning methods to be implemented by children
     @abstractmethod
     def get_model_outputs(self, batch_dict: dict) -> dict:

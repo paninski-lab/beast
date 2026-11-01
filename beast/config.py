@@ -75,6 +75,8 @@ class TrainingConfig(BaseModel):
     val_probability: float = 0.05
     train_frames: int | float | None = None
     ckpt_every_n_epochs: int | None = None
+    viz_every_n_epochs: int | None = None
+    viz_num_frames: int = 108
 
 
 class OptimizerConfig(BaseModel):
