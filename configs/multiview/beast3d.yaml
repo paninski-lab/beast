@@ -91,6 +91,9 @@ training:
 
   log_every_n_steps: 10
   check_val_every_n_epoch: 1
+  # also save a checkpoint every this many epochs, in addition to the best-val checkpoint;
+  # null saves only the best-val checkpoint
+  ckpt_every_n_epochs: null
   # save render sheets, camera plots and point clouds of validation scenes to
   # <output_dir>/val_images every this many epochs; null disables
   viz_every_n_epochs: null

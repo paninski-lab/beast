@@ -47,6 +47,9 @@ training:
   log_every_n_steps: 10
   # frequency to log validation metrics
   check_val_every_n_epoch: 5
+  # also save a checkpoint every this many epochs, in addition to the best-val checkpoint;
+  # null saves only the best-val checkpoint
+  ckpt_every_n_epochs: null
   # save contact sheets of validation images/reconstructions to <output_dir>/val_images every
   # this many epochs (should be a multiple of check_val_every_n_epoch); null disables
   viz_every_n_epochs: null
