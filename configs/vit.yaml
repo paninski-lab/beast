@@ -4,27 +4,14 @@ model:
   checkpoint: null  # load weights from checkpoint
   model_class: vit
   model_params:
-    hidden_size: 768
-    num_hidden_layers: 12
-    num_attention_heads: 12
-    intermediate_size: 3072
-    hidden_act: "gelu"
-    hidden_dropout_prob: 0.0
-    attention_probs_dropout_prob: 0.0
-    initializer_range: 0.02
-    layer_norm_eps: 1.e-12
+    backbone: vit-b  # vit-s | vit-b | vit-l (vit-s has no pretrained weights: set random_init)
     image_size: 224 # usually 224
     patch_size: 16 # default is 16, we use large patch size
     num_channels: 3 # 3 for RGB
-    qkv_bias: True
-    decoder_num_attention_heads: 16
-    decoder_hidden_size: 512
-    decoder_num_hidden_layers: 8
-    decoder_intermediate_size: 2048
     mask_ratio: 0.75 # 0 for no masking, usually 0.75 (MAE)
     norm_pix_loss: False
 
-    embed_size: 768 # projected embedding size, used for contrastive learning
+    # embed_size: 768 # projected embedding size for contrastive learning; defaults to backbone width
     temp_scale: False # temperature scaling for contrastive loss
     random_init: False # use random initialization instead of pretrained weights
     use_infoNCE: False # use InfoNCE loss
@@ -36,9 +23,9 @@ model:
 training:
   seed: 0
   imgaug: default  # default | top-down
-  train_batch_size: 128    # per GPU
-  val_batch_size: 1024
-  test_batch_size: 128
+  train_batch_size: 256    # per GPU (256 @ bf16-mixed is about 20GB per GPU)
+  val_batch_size: 512
+  test_batch_size: 512
   num_epochs: 800
   num_workers: 8  # Number of CPU workers for the DataLoader
   num_gpus: 1
@@ -47,6 +34,18 @@ training:
   log_every_n_steps: 10
   # frequency to log validation metrics
   check_val_every_n_epoch: 5
+  # train on only the first N frames (int) or fraction (0-1) of the train split; subsets are
+  # nested across values for a fixed seed; null uses all training frames
+  train_frames: null
+  precision: bf16-mixed  # trainer precision, e.g. 32-true | bf16-mixed
+  # also save a checkpoint every this many epochs, in addition to the best-val checkpoint;
+  # null saves only the best-val checkpoint
+  ckpt_every_n_epochs: null
+  # save contact sheets of validation images/reconstructions to <output_dir>/val_images every
+  # this many epochs (should be a multiple of check_val_every_n_epoch); null disables
+  viz_every_n_epochs: null
+  # number of (evenly spaced, fixed) validation frames to visualize; 27 frames per sheet for ViT
+  viz_num_frames: 108
 
 # optimizer configuration
 optimizer:
@@ -54,9 +53,12 @@ optimizer:
   accumulate_grad_batches: 1
   lr: 5.e-5
   wd: 0.05
+  beta1: 0.9   # adam betas; beta2=0.95 follows the MAE recipe
+  beta2: 0.95
   warmup_pct: 0.15 # cosine/linear
   gamma: 0.95     # step
   div_factor: 10  # cosine
+  final_div_factor: 100  # cosine; final lr = peak lr / div_factor / final_div_factor
   scheduler: cosine # step/cosine/linear
 
 # data configuration

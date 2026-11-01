@@ -1,6 +1,7 @@
 """Tests for beast.models.erayzer.erayzer_model components."""
 
 import copy
+import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -715,6 +716,21 @@ class TestERayZerIntegration:
         config['training']['perceptual_loss_weight'] = 0.1
         run_erayzer_model_test(config=config)
 
+    def test_integration_validation_viz(
+        self, config_erayzer, run_erayzer_model_test, tmp_path,
+    ) -> None:
+        """Test that viz_every_n_epochs writes render sheets and camera plots."""
+        config = copy.deepcopy(config_erayzer)
+        config['training']['viz_every_n_epochs'] = 1
+        config['training']['viz_num_frames'] = 2
+        run_erayzer_model_test(config=config)
+        out_dir = next(tmp_path.rglob('val_images'))
+        assert list(out_dir.glob('epoch_*_renders_00.png'))
+        assert list(out_dir.glob('epoch_*_cameras.png'))
+        # the point cloud needs the optional trimesh dependency
+        if importlib.util.find_spec('trimesh') is not None:
+            assert list((out_dir / 'pointclouds').glob('epoch_*.glb'))
+
 
 # ---------------------------------------------------------------------------
 # TestFilterInitStateDict
@@ -844,35 +860,6 @@ class TestResolveViewIndices:
             assert set(in_idx[0].tolist()).isdisjoint(tgt_idx[0].tolist())
             input_sets.add(tuple(sorted(in_idx[0].tolist())))
         assert len(input_sets) >= 2  # the input/target assignment varies
-
-
-class TestValidationVisuals:
-    """Test ERayZer validation-visualization guards (no GPU/model build needed)."""
-
-    def test_no_logger_is_noop(self) -> None:
-        # logger=None -> no image-capable experiment -> returns without error
-        standin = SimpleNamespace(logger=None)
-        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
-
-    def test_logger_without_add_image_is_noop(self) -> None:
-        # an experiment lacking add_image is treated as not image-capable
-        standin = SimpleNamespace(logger=SimpleNamespace(experiment=object()))
-        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
-
-    def test_forward_failure_is_swallowed(self) -> None:
-        # a capable logger but a get_model_outputs that raises must not propagate
-        class _Exp:
-            def add_image(self, *a, **k) -> None:
-                pass
-
-        def _boom(_batch) -> dict:
-            raise RuntimeError('forward exploded')
-
-        standin = SimpleNamespace(
-            logger=SimpleNamespace(experiment=_Exp()),
-            get_model_outputs=_boom,
-        )
-        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
 
 
 class TestConfigureOptimizers:

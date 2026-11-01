@@ -33,6 +33,7 @@ class BaseDataModule(pl.LightningDataModule):
         train_probability: float = 0.8,
         val_probability: float | None = None,
         test_probability: float | None = None,
+        train_frames: int | float | None = None,
         seed: int = 42,
     ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
@@ -48,6 +49,10 @@ class BaseDataModule(pl.LightningDataModule):
         train_probability: fraction of full dataset used for training
         val_probability: fraction of full dataset used for validation
         test_probability: fraction of full dataset used for testing
+        train_frames: further subsample the training split; if >1, the number of training
+            frames to use; if <=1, the fraction of the training split to use; None uses all.
+            Subsets are nested: for a fixed seed and split probabilities, a smaller
+            ``train_frames`` always selects a prefix of the frames chosen by a larger one.
         seed: control data splits
 
         """
@@ -69,6 +74,7 @@ class BaseDataModule(pl.LightningDataModule):
         self.train_probability = train_probability
         self.val_probability = val_probability
         self.test_probability = test_probability
+        self.train_frames = train_frames
         self.train_dataset: Subset | None = None  # populated by self.setup()
         self.val_dataset: Subset | None = None  # populated by self.setup()
         self.test_dataset: Subset | None = None  # populated by self.setup()
@@ -127,6 +133,13 @@ class BaseDataModule(pl.LightningDataModule):
 
             cast(BaseDataset, self.val_dataset.dataset).imgaug_pipeline = None
             cast(BaseDataset, self.test_dataset.dataset).imgaug_pipeline = None
+
+        # further subsample training data if desired; the split above is fixed by the seed and
+        # does not depend on train_frames, so taking a prefix of the (randomly ordered) train
+        # indices yields nested subsets across different values of train_frames
+        if self.train_frames is not None:
+            n_frames = compute_num_train_frames(len(self.train_dataset), self.train_frames)
+            self.train_dataset.indices = list(self.train_dataset.indices[:n_frames])
 
         if rank_zero_only.rank == 0:
             _logger.info(
@@ -262,6 +275,45 @@ def _make_contrastive_dataloader(
     )
 
 
+def compute_num_train_frames(
+    len_train_dataset: int,
+    train_frames: int | float | None = None,
+) -> int:
+    """Compute the number of training frames to use given a ``train_frames`` setting.
+
+    Parameters
+    ----------
+    len_train_dataset: total number of frames in the training split
+    train_frames: ``None`` or ``1`` uses all frames; a value in (0, 1) is the fraction of
+        frames to use; a value >1 is the number of frames to use (capped at the split size)
+
+    Returns
+    -------
+    number of training frames
+
+    Raises
+    ------
+    ValueError: if ``train_frames`` is not positive
+
+    """
+    if train_frames is None:
+        return len_train_dataset
+    if train_frames <= 0:
+        raise ValueError(f'train_frames must be > 0, got {train_frames}')
+    if train_frames == 1:
+        # interpreted as a fraction; use everything
+        return len_train_dataset
+    if train_frames > 1:
+        if train_frames >= len_train_dataset:
+            _logger.warning(
+                f'requested {train_frames} training frames but only {len_train_dataset} '
+                f'available; using all'
+            )
+            return len_train_dataset
+        return int(train_frames)
+    return max(1, int(train_frames * len_train_dataset))
+
+
 def split_sizes_from_probabilities(
     total_number: int,
     train_probability: float,
@@ -354,6 +406,7 @@ class MultiViewDataModule(pl.LightningDataModule):
         use_mask: bool = False,
         normalize_cameras: bool = True,
         num_workers: int | None = None,
+        train_frames: int | float | None = None,
         seed: int = 42,
     ) -> None:
         """Initialize the multi-view data module.
@@ -368,6 +421,9 @@ class MultiViewDataModule(pl.LightningDataModule):
         use_mask: if True, load binary segmentation masks.
         normalize_cameras: if True, normalize camera poses per sample.
         num_workers: dataloader worker count; defaults to SLURM_CPUS_PER_TASK or cpu_count.
+        train_frames: further subsample the training frames; if >1, the number of frames to
+            use; if <=1, the fraction to use; None uses all. Frames are taken from the start of
+            the (sequential) training split, so smaller subsets are nested in larger ones.
         seed: random seed for the training dataloader shuffle.
 
         """
@@ -382,6 +438,7 @@ class MultiViewDataModule(pl.LightningDataModule):
         self.train_fraction = train_fraction
         self.use_mask = use_mask
         self.normalize_cameras = normalize_cameras
+        self.train_frames = train_frames
         self.seed = seed
 
         if num_workers is not None:
@@ -413,6 +470,9 @@ class MultiViewDataModule(pl.LightningDataModule):
         n_train = max(1, int(len(all_ids) * self.train_fraction))
         train_ids = all_ids[:n_train]
         val_ids = all_ids[n_train:] or all_ids[-1:]  # at least one val sample
+        if self.train_frames is not None:
+            # val split is untouched, so it is identical across different train_frames
+            train_ids = train_ids[:compute_num_train_frames(len(train_ids), self.train_frames)]
 
         self.train_dataset = MultiViewDataset(
             data_dir=self.data_dir,

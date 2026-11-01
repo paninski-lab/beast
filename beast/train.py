@@ -10,13 +10,17 @@ import lightning.pytorch as pl
 import numpy as np
 import torch
 import yaml
-from lightning.pytorch import callbacks as pl_callbacks
 from lightning.pytorch import loggers as pl_loggers
 from lightning.pytorch.utilities import rank_zero_only
 
 import beast
+from beast.callbacks.factory import get_callbacks
 from beast.data.augmentations import imgaug_pipeline
-from beast.data.datamodules import BaseDataModule, MultiViewDataModule
+from beast.data.datamodules import (
+    BaseDataModule,
+    MultiViewDataModule,
+    compute_num_train_frames,
+)
 from beast.data.datasets import BaseDataset
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
@@ -107,9 +111,10 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
             image_size=config['model']['image_tokenizer']['image_size'],
             train_batch_size=config['training']['train_batch_size'],
             val_batch_size=config['training']['val_batch_size'],
-            train_fraction=config['training'].get('train_fraction', 0.9),
+            train_fraction=config['training']['train_fraction'],
+            train_frames=config['training']['train_frames'],
             num_workers=config['training']['num_workers'],
-            seed=config['training'].get('seed', 0),
+            seed=config['training']['seed'],
             use_mask=(model_class == 'beast3d'),
         )
         datamodule.setup()
@@ -124,7 +129,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         # imgaug transform
         if rank_zero_only.rank == 0:
             log_step('Setting up imgaug pipeline', level='debug')
-        pipe_params = config.get('training', {}).get('imgaug', 'none')
+        pipe_params = config['training']['imgaug']
         if isinstance(pipe_params, str):
             from beast.data.augmentations import expand_imgaug_str_to_dict
             pipe_params = expand_imgaug_str_to_dict(pipe_params)  # type: ignore[arg-type]
@@ -136,7 +141,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         dataset = BaseDataset(
             data_dir=config['data']['data_dir'],
             imgaug_pipeline=imgaug_pipeline_,
-            num_channels=config['model']['model_params'].get('num_channels', 3),
+            num_channels=config['model']['model_params']['num_channels'],
         )
 
         # datamodule; breaks up dataset into train/val/test
@@ -149,8 +154,9 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
             test_batch_size=config['training']['test_batch_size'],
             use_sampler=config['model']['model_params'].get('use_infoNCE', False),
             num_workers=config['training']['num_workers'],
-            train_probability=config['training'].get('train_probability', 0.95),
-            val_probability=config['training'].get('val_probability', 0.05),
+            train_probability=config['training']['train_probability'],
+            val_probability=config['training']['val_probability'],
+            train_frames=config['training']['train_frames'],
             seed=config['training']['seed'],
         )
         if rank_zero_only.rank == 0:
@@ -161,8 +167,9 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
             log_step('Calculating training steps', level='debug')
         num_epochs = config['training']['num_epochs']
         train_size = int(
-            np.floor(config['training'].get('train_probability', 0.95) * len(dataset))
+            np.floor(config['training']['train_probability'] * len(dataset))
         )
+        train_size = compute_num_train_frames(train_size, config['training']['train_frames'])
         steps_per_epoch = int(np.ceil(
             train_size
             / config['training']['train_batch_size']
@@ -211,7 +218,11 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         log_step('Setting up callbacks', level='debug')
     callbacks = get_callbacks(
         lr_monitor=True,
-        ckpt_every_n_epochs=config['training'].get('ckpt_every_n_epochs', None),
+        ckpt_every_n_epochs=config['training']['ckpt_every_n_epochs'],
+        viz_every_n_epochs=config['training']['viz_every_n_epochs'],
+        viz_num_frames=config['training']['viz_num_frames'],
+        multiview=model_class in ('erayzer', 'beast3d'),
+        output_dir=output_dir,
     )
     if rank_zero_only.rank == 0:
         log_step(f'Callbacks created: {len(callbacks)} callbacks', level='debug')
@@ -226,12 +237,12 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         accelerator='gpu',
         devices=config['training']['num_gpus'],
         num_nodes=config['training']['num_nodes'],
-        precision=config['training'].get('precision', '32-true'),
-        check_val_every_n_epoch=config['training'].get('check_val_every_n_epoch', 1),
-        log_every_n_steps=config['training'].get('log_every_n_steps', 10),
+        precision=config['training']['precision'],
+        check_val_every_n_epoch=config['training']['check_val_every_n_epoch'],
+        log_every_n_steps=config['training']['log_every_n_steps'],
         callbacks=callbacks,
         logger=logger,
-        accumulate_grad_batches=config['optimizer'].get('accumulate_grad_batches', 1),
+        accumulate_grad_batches=config['optimizer']['accumulate_grad_batches'],
         sync_batchnorm=True,
         use_distributed_sampler=use_distributed_sampler,
         **trainer_epoch_kwargs,
@@ -257,48 +268,3 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
 
     # return trained model
     return model
-
-
-def get_callbacks(
-    checkpointing: bool = True,
-    lr_monitor: bool = True,
-    ckpt_every_n_epochs: int | None = None,
-) -> list:
-    """Build list of Lightning callbacks for training.
-
-    Parameters
-    ----------
-    checkpointing: whether to save the best checkpoint by validation loss
-    lr_monitor: whether to log learning rate each epoch
-    ckpt_every_n_epochs: if set, also save a checkpoint every n epochs
-
-    Returns
-    -------
-    list of configured Lightning callbacks
-
-    """
-    callbacks = []
-
-    if lr_monitor:
-        lr_monitor_cb = pl_callbacks.LearningRateMonitor(logging_interval='epoch')
-        callbacks.append(lr_monitor_cb)
-
-    # always save out best model
-    if checkpointing:
-        ckpt_best_callback = pl_callbacks.ModelCheckpoint(
-            monitor='val_loss',
-            mode='min',
-            filename='{epoch}-{step}-best',
-        )
-        callbacks.append(ckpt_best_callback)
-
-    if ckpt_every_n_epochs:
-        # if ckpt_every_n_epochs is not None, save separate checkpoint files
-        ckpt_callback = pl_callbacks.ModelCheckpoint(
-            monitor=None,
-            every_n_epochs=ckpt_every_n_epochs,
-            save_top_k=-1,
-        )
-        callbacks.append(ckpt_callback)
-
-    return callbacks

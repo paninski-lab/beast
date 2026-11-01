@@ -1,6 +1,6 @@
 """Validation-time visualization for ERayZer.
 
-Builds TensorBoard-ready images so training quality can be inspected live:
+Builds images so training quality can be inspected live:
 
 - ``make_render_grid``: a 2-row GT-vs-render comparison over all views, with
   colored borders marking input (reference) vs target (novel) views.
@@ -9,10 +9,9 @@ Builds TensorBoard-ready images so training quality can be inspected live:
   multi-view fig_teaser_cam_erayzer figure).
 - ``camera_intrinsic_stats``: scalar summaries of the predicted intrinsics.
 - ``export_gaussian_glb``: write the predicted Gaussians as a GLB point cloud.
-- ``viz_is_due``: cadence helper deciding when to log during validation.
 
-Image builders return ``[3, H, W]`` float tensors in ``[0, 1]`` for
-``SummaryWriter.add_image`` with the default ``CHW`` data format.
+Image builders return ``[3, H, W]`` float tensors in ``[0, 1]``; they are saved to disk by
+``MultiviewValidationVizCallback``.
 """
 
 import numpy as np
@@ -25,30 +24,6 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers the 3d project
 _INPUT_RGB = (0.20, 0.80, 0.36)   # green
 _TARGET_RGB = (0.95, 0.35, 0.20)  # orange-red
 _SH_C0 = 0.28209479177387814      # 0th-order SH coefficient (SH DC -> RGB)
-
-
-def viz_is_due(batch_idx: int, current_epoch: int, every_n_epochs: int) -> bool:
-    """Decide whether validation visuals should be logged for this batch.
-
-    Visuals are logged only for the first validation batch of an epoch, and only
-    every ``every_n_epochs`` epochs.
-
-    Parameters
-    ----------
-    batch_idx: index of the current validation batch.
-    current_epoch: current training epoch.
-    every_n_epochs: log cadence in epochs; ``<= 0`` disables logging.
-
-    Returns
-    -------
-    True if visuals should be logged now.
-
-    """
-    if every_n_epochs <= 0:
-        return False
-    if batch_idx != 0:
-        return False
-    return current_epoch % every_n_epochs == 0
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +95,7 @@ def _pad_width(row: torch.Tensor, width: int, fill: float = 1.0) -> torch.Tensor
     return torch.cat([row, pad], dim=2)
 
 
-def _stack_rows(rows: list[torch.Tensor]) -> torch.Tensor:
+def stack_rows(rows: list[torch.Tensor]) -> torch.Tensor:
     """Right-pad rows to a common width and stack them with grey separators."""
     width = max(row.shape[2] for row in rows)
     rows = [_pad_width(row, width) for row in rows]
@@ -174,7 +149,7 @@ def make_render_grid(
     else:
         gt_row = _build_row([(target_image, _TARGET_RGB)], sample_idx)
         render_row = _build_row([(render, _TARGET_RGB)], sample_idx)
-    return _stack_rows([gt_row, render_row])
+    return stack_rows([gt_row, render_row])
 
 
 # ---------------------------------------------------------------------------

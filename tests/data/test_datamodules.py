@@ -3,11 +3,12 @@
 import numpy as np
 import pytest
 import torch
-from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data import DataLoader, RandomSampler, Subset
 
 from beast.data.datamodules import (
     BaseDataModule,
     MultiViewDataModule,
+    compute_num_train_frames,
     split_sizes_from_probabilities,
 )
 from beast.data.datasets import BaseDataset
@@ -160,6 +161,89 @@ class TestBaseDataModuleContrastive:
         assert batch_count > 0
 
 
+class TestTrainFrames:
+    """Test nested training subsets via the train_frames argument."""
+
+    @staticmethod
+    def _make(base_dataset, train_frames, use_sampler=False):
+        dm = BaseDataModule(
+            dataset=base_dataset,
+            train_probability=0.8,
+            val_probability=0.1,
+            test_probability=0.1,
+            train_frames=train_frames,
+            use_sampler=use_sampler,
+            num_workers=0,
+        )
+        dm.setup()
+        return dm
+
+    @staticmethod
+    def _subset(dataset) -> Subset:
+        assert dataset is not None
+        return dataset
+
+    def test_train_frames_none_uses_all(self, base_dataset) -> None:
+        dm_all = self._make(base_dataset, None)
+        dm_one = self._make(base_dataset, 1)
+        n_one = len(self._subset(dm_one.train_dataset))
+        assert len(self._subset(dm_all.train_dataset)) == n_one
+
+    def test_train_frames_nested_and_splits_fixed(self, base_dataset) -> None:
+        n_all = len(self._subset(self._make(base_dataset, None).train_dataset))
+        n_small, n_large = n_all // 4, n_all // 2
+        dm_small = self._make(base_dataset, n_small)
+        dm_large = self._make(base_dataset, n_large)
+        dm_all = self._make(base_dataset, None)
+
+        assert len(self._subset(dm_small.train_dataset)) == n_small
+        assert len(self._subset(dm_large.train_dataset)) == n_large
+        idxs_small = list(self._subset(dm_small.train_dataset).indices)
+        idxs_large = list(self._subset(dm_large.train_dataset).indices)
+        assert idxs_large[:n_small] == idxs_small
+        assert list(self._subset(dm_all.train_dataset).indices)[:n_large] == idxs_large
+        # val/test splits do not depend on train_frames
+        idxs_val_small = list(self._subset(dm_small.val_dataset).indices)
+        assert idxs_val_small == list(self._subset(dm_all.val_dataset).indices)
+        idxs_test_small = list(self._subset(dm_small.test_dataset).indices)
+        assert idxs_test_small == list(self._subset(dm_all.test_dataset).indices)
+
+    def test_train_frames_fraction(self, base_dataset) -> None:
+        n_all = len(self._subset(self._make(base_dataset, None).train_dataset))
+        dm = self._make(base_dataset, 0.5)
+        assert len(self._subset(dm.train_dataset)) == int(0.5 * n_all)
+
+    def test_train_frames_sampler(self, base_dataset) -> None:
+        n_all = len(self._subset(self._make(base_dataset, None, use_sampler=True).train_dataset))
+        dm = self._make(base_dataset, n_all // 2, use_sampler=True)
+        assert len(self._subset(dm.train_dataset)) == n_all // 2
+
+
+class TestComputeNumTrainFrames:
+    """Test the function compute_num_train_frames."""
+
+    def test_none(self) -> None:
+        assert compute_num_train_frames(100, None) == 100
+
+    def test_count(self) -> None:
+        assert compute_num_train_frames(100, 30) == 30
+
+    def test_fraction(self) -> None:
+        assert compute_num_train_frames(100, 0.25) == 25
+
+    def test_one_means_all(self) -> None:
+        assert compute_num_train_frames(100, 1) == 100
+
+    def test_exceeds_size_caps(self) -> None:
+        assert compute_num_train_frames(100, 500) == 100
+
+    def test_nonpositive_raises(self) -> None:
+        with pytest.raises(ValueError):
+            compute_num_train_frames(100, 0)
+        with pytest.raises(ValueError):
+            compute_num_train_frames(100, -5)
+
+
 class TestSplitSizesFromProbabilities:
     """Test the split_sizes_from_probabilities function."""
 
@@ -288,3 +372,25 @@ class TestMultiViewDataModule:
         monkeypatch.setenv('SLURM_CPUS_PER_TASK', '4')
         dm = MultiViewDataModule(data_dir=multiview_data_dir, image_size=_IMAGE_SIZE)
         assert dm.num_workers == 4
+
+    def test_train_frames_nested(self, multiview_data_dir) -> None:
+        def make(train_frames):
+            dm = MultiViewDataModule(
+                data_dir=multiview_data_dir, image_size=_IMAGE_SIZE, train_fraction=0.8,
+                train_frames=train_frames, num_workers=0,
+            )
+            dm.setup()
+            return dm
+
+        def frame_ids(dm, split):
+            dataset = getattr(dm, f'{split}_dataset')
+            assert dataset is not None
+            return list(dataset.unique_frame_ids)
+
+        dm_all, dm_big, dm_small = make(None), make(8), make(4)
+        ids_big = frame_ids(dm_big, 'train')
+        ids_small = frame_ids(dm_small, 'train')
+        assert len(ids_big) == 8 and len(ids_small) == 4
+        assert ids_big[:4] == ids_small
+        assert frame_ids(dm_all, 'train')[:8] == ids_big
+        assert frame_ids(dm_small, 'val') == frame_ids(dm_all, 'val')

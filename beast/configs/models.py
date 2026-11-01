@@ -1,4 +1,7 @@
-"""Pydantic schemas for BEAST configuration validation and per-model dispatch.
+"""Top-level pydantic config classes and per-model dispatch.
+
+Shared schemas (``BaseTrainingConfig``, ``BaseOptimizerConfig``, ``DataConfig``) live in
+``beast.configs.base``; per-model section schemas live in each model's ``*_config.py``.
 
 Top-level config classes
 ------------------------
@@ -6,15 +9,11 @@ BeastConfig
     Used for models that share the standard training loop (resnet, vit).
     Contains TrainingConfig, OptimizerConfig, and DataConfig.
 
-ERayZerBeastConfig
-    Used for ERayZer and its subclasses (e.g. BEAST3D if they share ERayZer's
-    training schema).  Contains ERayZerTrainingConfig and ERayZerOptimizerConfig.
+ERayZerBeastConfig, Beast3DBeastConfig
+    Used for ERayZer and BEAST3D.  Contain ERayZerTrainingConfig and ERayZerOptimizerConfig.
 
-Shared schemas (reusable for new models)
------------------------------------------
-TrainingConfig     — standard epoch-based training fields (batch sizes, epochs, imgaug, …)
-OptimizerConfig    — AdamW/Adam + cosine/step scheduler fields
-DataConfig         — data_dir only; extend or replace for richer data configs
+TrainingConfig / OptimizerConfig here are the standard epoch-based-loop schemas; they extend the
+base schemas in ``beast.configs.base``.
 
 Per-model dispatch
 ------------------
@@ -22,19 +21,29 @@ get_beast_config_class(model_class) returns the correct top-level config class f
 given model_class string.  Both beast.io.load_config and beast.api.model.Model.from_config
 use this function so that YAML files and raw dicts are validated against the right schema.
 
+Load flow
+---------
+yaml -> beast.io.load_config -> model_validate (this module) -> model_dump() -> plain nested
+dict.  Defaults are filled in by validation, so consumers (train.py, models) can index fields
+directly.  Some schemas normalize their input in a ``mode='before'`` validator, e.g.
+``VitModelParams`` expands ``backbone: vit-l`` into explicit architecture fields; such
+normalization must be idempotent because dumped configs are re-validated when a saved model is
+reloaded.
+
 To add a new model with a divergent training schema:
-  1. Define <Model>TrainingConfig and <Model>OptimizerConfig in the model's *_config.py
-  2. Define <Model>BeastConfig here (avoids circular imports since DataConfig lives here)
+  1. Define <Model>TrainingConfig (subclass BaseTrainingConfig) and <Model>OptimizerConfig
+     (subclass BaseOptimizerConfig) in the model's *_config.py
+  2. Define <Model>BeastConfig here
   3. Add 'model_class': <Model>BeastConfig to _MODEL_CONFIG_CLASSES
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from beast.configs.base import BaseOptimizerConfig, BaseTrainingConfig, DataConfig
 from beast.models.beast3d.beast3d_config import Beast3DModelConfig
 from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
 from beast.models.beast_vit.beast_vit_config import VitModelConfig
@@ -59,40 +68,26 @@ ModelConfig = Annotated[
 ]
 
 
-class TrainingConfig(BaseModel):
-    train_batch_size: int
-    val_batch_size: int
-    test_batch_size: int = 128
-    num_epochs: int = 800
-    seed: int = 0
+class TrainingConfig(BaseTrainingConfig):
+    """Training config for models using the standard epoch-based loop (resnet, vit)."""
+
     imgaug: Literal['none', 'default', 'top-down'] = 'default'
-    num_workers: int = 8
-    num_gpus: int = 1
-    num_nodes: int = 1
-    log_every_n_steps: int = 10
-    check_val_every_n_epoch: int = 5
     train_probability: float = 0.95
     val_probability: float = 0.05
-    ckpt_every_n_epochs: int | None = None
 
 
-class OptimizerConfig(BaseModel):
-    lr: float
+class OptimizerConfig(BaseOptimizerConfig):
+    """Optimizer config for models using the standard epoch-based loop (resnet, vit)."""
+
     type: Literal['Adam', 'AdamW'] = 'AdamW'
-    wd: float = 0.05
     scheduler: Literal['step', 'cosine'] = 'cosine'
-    accumulate_grad_batches: int = 1
     # for cosine
     warmup_pct: float = 0.15
     div_factor: float = 10.0
-    final_div_factor: float = 1.0
+    final_div_factor: float = 100.0
     # for step
     gamma: float = 0.5
     steps: list[int] = []
-
-
-class DataConfig(BaseModel):
-    data_dir: str | Path
 
 
 class ERayZerBeastConfig(BaseModel):

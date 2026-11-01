@@ -10,7 +10,6 @@ from beast.models.erayzer.visualize import (
     export_gaussian_glb,
     make_camera_pose_image,
     make_render_grid,
-    viz_is_due,
 )
 
 try:
@@ -152,30 +151,6 @@ class TestMakeCameraPoseImage:
         c2w_tg = self._identity_cameras(2)[0]
         img = make_camera_pose_image(c2w_in, c2w_tg)
         assert img.shape[0] == 3
-
-
-# ---------------------------------------------------------------------------
-# TestVizIsDue
-# ---------------------------------------------------------------------------
-
-
-class TestVizIsDue:
-    """Test the viz_is_due cadence helper."""
-
-    def test_first_batch_on_due_epoch(self) -> None:
-        assert viz_is_due(batch_idx=0, current_epoch=0, every_n_epochs=1) is True
-
-    def test_non_first_batch_is_skipped(self) -> None:
-        assert viz_is_due(batch_idx=2, current_epoch=0, every_n_epochs=1) is False
-
-    def test_off_epoch_is_skipped(self) -> None:
-        assert viz_is_due(batch_idx=0, current_epoch=1, every_n_epochs=2) is False
-
-    def test_on_epoch_cadence(self) -> None:
-        assert viz_is_due(batch_idx=0, current_epoch=4, every_n_epochs=2) is True
-
-    def test_disabled_when_zero(self) -> None:
-        assert viz_is_due(batch_idx=0, current_epoch=0, every_n_epochs=0) is False
 
 
 # ---------------------------------------------------------------------------

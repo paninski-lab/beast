@@ -57,10 +57,12 @@ class BaseLightningModel(ABC, pl.LightningModule):
             )
         elif scheduler == 'cosine':
             # compute max learning rate
+            # base lr is per 256 images of effective batch (linear scaling rule)
             global_batch_size = (
                 self.config['training']['train_batch_size']
                 * self.config['training']['num_gpus']
                 * self.config['training']['num_nodes']
+                * self.config['optimizer']['accumulate_grad_batches']
             )
             max_lr = self.config['optimizer']['lr'] * global_batch_size / 256
             scheduler = OneCycleLR(
@@ -71,7 +73,7 @@ class BaseLightningModel(ABC, pl.LightningModule):
                 pct_start=self.config['optimizer']['warmup_pct'],
                 anneal_strategy='cos',
                 div_factor=self.config['optimizer']['div_factor'],
-                final_div_factor=self.config['optimizer'].get('final_div_factor', 1),
+                final_div_factor=self.config['optimizer']['final_div_factor'],
             )
         else:
             raise NotImplementedError(f'{scheduler} scheduler is not yet implemented')
@@ -91,12 +93,14 @@ class BaseLightningModel(ABC, pl.LightningModule):
         # init optimizer
         optimizer = self.config['optimizer']['type']
         learning_rate = self.config['optimizer']['lr']
+        betas = (self.config['optimizer']['beta1'], self.config['optimizer']['beta2'])
         if optimizer == 'Adam':
-            optimizer = torch.optim.Adam(params, lr=learning_rate)
+            optimizer = torch.optim.Adam(params, lr=learning_rate, betas=betas)
         elif optimizer == 'AdamW':
             optimizer = torch.optim.AdamW(
                 params,
                 lr=learning_rate,
+                betas=betas,
                 weight_decay=self.config['optimizer']['wd'],
             )
         else:
@@ -165,6 +169,30 @@ class BaseLightningModel(ABC, pl.LightningModule):
     def test_step(self, batch_dict: dict, batch_idx: int) -> None:
         """Base test step, a wrapper around the `evaluate_batch` method."""
         self.evaluate_batch(batch_dict, 'test')
+
+    def get_viz_panels(self, batch_dict: dict) -> list[torch.Tensor]:
+        """Return image panels for validation contact sheets; optional for subclasses.
+
+        Models that implement this can be used with ``ValidationVizCallback``. Each returned
+        tensor is one panel type (e.g. input, masked input, reconstruction) for the whole batch.
+
+        Parameters
+        ----------
+        batch_dict: dict containing model inputs
+
+        Returns
+        -------
+        list of float tensors of shape (batch, 3, height, width) with values in [0, 1];
+        element k holds panel k of every frame, in a fixed order
+
+        Raises
+        ------
+        NotImplementedError: if the model does not support contact-sheet visualization
+
+        """
+        raise NotImplementedError(
+            f'{type(self).__name__} does not implement get_viz_panels'
+        )
 
     # Required Lightning methods to be implemented by children
     @abstractmethod

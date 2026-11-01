@@ -3,7 +3,7 @@
 BEAST3D is an ERayZer subclass, so its model config inherits every ERayZer model
 field and adds only the BEAST3D-specific knobs (DINOv3 tokenizer, frustum
 constraint, mask/alpha supervision, random-background compositing). Training and
-optimizer schemas are shared with ERayZer; see ``beast.config.Beast3DBeastConfig``.
+optimizer schemas are shared with ERayZer; see ``beast.configs.models.Beast3DBeastConfig``.
 """
 
 from typing import Literal

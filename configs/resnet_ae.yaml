@@ -22,6 +22,18 @@ training:
   num_nodes: 1
   log_every_n_steps: 10       # frequency to log training metrics
   check_val_every_n_epoch: 5  # frequency to log validation metrics
+  # train on only the first N frames (int) or fraction (0-1) of the train split; subsets are
+  # nested across values for a fixed seed; null uses all training frames
+  train_frames: null
+  precision: 32-true  # trainer precision, e.g. 32-true | bf16-mixed
+  # also save a checkpoint every this many epochs, in addition to the best-val checkpoint;
+  # null saves only the best-val checkpoint
+  ckpt_every_n_epochs: null
+  # save contact sheets of validation images/reconstructions to <output_dir>/val_images every
+  # this many epochs (should be a multiple of check_val_every_n_epoch); null disables
+  viz_every_n_epochs: null
+  # number of (evenly spaced, fixed) validation frames to visualize; 32 frames per sheet
+  viz_num_frames: 108
 
 # optimizer configuration
 optimizer:
@@ -29,9 +41,12 @@ optimizer:
   accumulate_grad_batches: 1
   lr: 5.e-4
   wd: 0.05
+  beta1: 0.9   # adam betas; beta2=0.95 follows the MAE recipe
+  beta2: 0.95
   scheduler: cosine  # {step, cosine}
   warmup_pct: 0.15   # for cosine
   div_factor: 10     # for cosine
+  final_div_factor: 100  # for cosine; final lr = lr * batch/256 / div_factor / final_div_factor
   gamma: 0.5         # for step
   steps:             # for step
     - 200

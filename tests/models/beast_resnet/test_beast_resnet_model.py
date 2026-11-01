@@ -156,3 +156,47 @@ class TestResnetAutoencoderIntegration:
         config['model']['model_params']['backbone'] = 'resnet18'
         config['model']['model_params']['num_latents'] = 16
         run_model_test(config=config)
+
+
+class TestGetVizPanels:
+    """Test ResnetAutoencoder.get_viz_panels."""
+
+    def test_panels_shapes_and_range(self, config_ae):
+        config = copy.deepcopy(config_ae)
+        config['model']['model_params']['backbone'] = 'resnet18'
+        model = ResnetAutoencoder(config)
+        model.eval()
+        panels = model.get_viz_panels({'image': torch.randn(2, 3, 224, 224)})
+        assert len(panels) == 2
+        for p in panels:
+            assert p.shape == (2, 3, 224, 224)
+            assert p.min() >= 0 and p.max() <= 1
+
+
+class TestPeriodicCheckpointIntegration:
+    """Test that ckpt_every_n_epochs saves periodic checkpoints alongside the best one."""
+
+    def test_train_saves_periodic_and_best_checkpoints(self, config_ae, tmp_path):
+        from beast.api.model import Model
+
+        config = copy.deepcopy(config_ae)
+        config['training']['num_epochs'] = 4
+        config['training']['check_val_every_n_epoch'] = 1
+        config['training']['ckpt_every_n_epochs'] = 2
+        model = Model.from_config(config)
+        model.train(tmp_path)
+        names = [p.name for p in tmp_path.rglob('*.ckpt')]
+        assert any(n.endswith('-best.ckpt') for n in names)
+        periodic = [n for n in names if not n.endswith('-best.ckpt')]
+        assert sorted(n.split('-')[0] for n in periodic) == ['epoch=1', 'epoch=3']
+
+    def test_train_default_saves_only_best(self, config_ae, tmp_path):
+        from beast.api.model import Model
+
+        config = copy.deepcopy(config_ae)
+        config['training']['num_epochs'] = 2
+        config['training']['check_val_every_n_epoch'] = 1
+        model = Model.from_config(config)
+        model.train(tmp_path)
+        names = [p.name for p in tmp_path.rglob('*.ckpt')]
+        assert names and all(n.endswith('-best.ckpt') for n in names)

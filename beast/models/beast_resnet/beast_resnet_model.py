@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from jaxtyping import Float
 
+from beast.data.utils import denormalize_images
 from beast.models.base import BaseLightningModel
 
 _RESNET_CONFIGS: dict[str, tuple[list[int], bool]] = {
@@ -136,6 +137,22 @@ class ResnetAutoencoder(BaseLightningModel):
             {'name': f'{stage}_mse', 'value': mse_loss}
         ]
         return mse_loss, log_list
+
+    @torch.no_grad()
+    def get_viz_panels(self, batch_dict: dict) -> list[torch.Tensor]:
+        """Return input and reconstruction panels for contact sheets.
+
+        Parameters
+        ----------
+        batch_dict: dict containing 'image' tensor
+
+        Returns
+        -------
+        list of two (batch, 3, height, width) tensors in [0, 1]: input, reconstruction
+
+        """
+        out = self.get_model_outputs(batch_dict)
+        return [denormalize_images(out['images']), denormalize_images(out['reconstructions'])]
 
     def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
         """Run inference on a single batch and return latents with metadata.

@@ -11,8 +11,10 @@ from transformers import (
     ViTMAEForPreTraining,
 )
 
+from beast.data.utils import denormalize_images
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
+from beast.models.beast_vit.beast_vit_config import get_pretrained_repo, resolve_vit_params
 from beast.nn.perceptual import AlexPerceptual
 
 
@@ -58,18 +60,22 @@ class VisionTransformer(BaseLightningModel):
         """
         super().__init__(config)
         # Set up ViT architecture
-        vit_mae_config = ViTMAEConfig(**config['model']['model_params'])
+        model_params = resolve_vit_params(config['model']['model_params'])
+        vit_mae_config = ViTMAEConfig(
+            **{k: v for k, v in model_params.items() if k != 'backbone'},
+        )
 
         # Check if we should use pretrained weights or random initialization
         use_pretrained = not config['model']['model_params'].get('random_init', False)
         if use_pretrained:
+            repo = get_pretrained_repo(model_params)
             log_step(
-                "Loading pretrained model from 'facebook/vit-mae-base'"
+                f"Loading pretrained model from '{repo}'"
                 ' (this may take several minutes if downloading)...',
                 level='debug',
             )
             log_step("Note: Model will be cached locally after first download", level='debug')
-            self.vit_mae = ViTMAE.from_pretrained("facebook/vit-mae-base", config=vit_mae_config)
+            self.vit_mae = ViTMAE.from_pretrained(repo, config=vit_mae_config)
         else:
             log_step("Using random initialization (random_init=True)", level='debug')
             self.vit_mae = ViTMAE(vit_mae_config)
@@ -200,6 +206,44 @@ class VisionTransformer(BaseLightningModel):
             loss += loss_dict['infoNCE_loss']
         return loss, log_list
 
+    @torch.no_grad()
+    def get_viz_panels(self, batch_dict: dict) -> list[torch.Tensor]:
+        """Return input, masked input, and reconstruction panels for contact sheets.
+
+        A fixed masking noise (same seed every call) is used so the same patches are masked at
+        every visualization, making sheets comparable across epochs.
+
+        Parameters
+        ----------
+        batch_dict: dict containing 'image' tensor
+
+        Returns
+        -------
+        list of three (batch, 3, height, width) tensors in [0, 1]: input, masked input,
+        reconstruction
+
+        """
+        x = batch_dict['image']
+        mae = self.vit_mae
+        image_size, patch_size = mae.config.image_size, mae.config.patch_size
+        assert isinstance(image_size, int) and isinstance(patch_size, int)
+        n_patches = (image_size // patch_size) ** 2
+        generator = torch.Generator().manual_seed(0)
+        noise = torch.rand(x.shape[0], n_patches, generator=generator).to(x.device)
+        out = mae(pixel_values=x, noise=noise, return_recon=True)
+
+        recon = out['reconstructions']
+        patches_x = mae.patchify(x)
+        if mae.config.norm_pix_loss:
+            # reconstruction is in per-patch normalized space; undo using the target statistics
+            mean = patches_x.mean(dim=-1, keepdim=True)
+            var = patches_x.var(dim=-1, keepdim=True)
+            recon = mae.unpatchify(mae.patchify(recon) * (var + 1.0e-6) ** 0.5 + mean)
+
+        # masked patches (mask == 1) are zeroed in normalized space, i.e. shown as dataset mean
+        masked = mae.unpatchify(patches_x * (1.0 - out['mask']).unsqueeze(-1))
+        return [denormalize_images(t) for t in (x, masked, recon)]
+
     def predict_step(self, batch_dict: dict, batch_idx: int) -> dict:
         """Run inference on a single batch, extracting CLS token latents.
 
@@ -318,6 +362,7 @@ class ViTMAE(ViTMAEForPreTraining):
                 'loss': loss,
                 'mse_loss': loss,
                 'reconstructions': self.unpatchify(logits),
+                'mask': mask,
             }
         return {
             'latents': cls_latent,
