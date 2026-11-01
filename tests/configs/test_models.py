@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from beast.config import (
+from beast.configs.models import (
     Beast3DBeastConfig,
     BeastConfig,
     ERayZerBeastConfig,
@@ -19,7 +19,7 @@ from beast.models.beast_resnet.beast_resnet_config import ResnetModelParams
 from beast.models.beast_vit.beast_vit_config import VitModelParams
 from beast.models.erayzer.erayzer_config import ERayZerOptimizerConfig, ERayZerTrainingConfig
 
-_CONFIGS_DIR = Path(__file__).parent.parent / 'configs'
+_CONFIGS_DIR = Path(__file__).parent.parent.parent / 'configs'
 _NON_BEAST_CONFIG_NAMES = {'extraction_pipeline.yaml'}
 _CONFIG_FILES = sorted(
     p for p in _CONFIGS_DIR.rglob('*.yaml') if p.name not in _NON_BEAST_CONFIG_NAMES

@@ -60,12 +60,13 @@ foo(
 
 ## Configuration
 
-- Configs flow yaml -> `beast.io.load_config` -> pydantic validation (`beast/config.py`, per-model
+- Configs flow yaml -> `beast.io.load_config` -> pydantic validation (shared schemas in
+  `beast/configs/base.py`, top-level configs and dispatch in `beast/configs/models.py`, per-model
   `*_config.py`) -> `model_dump()` -> plain nested dict. Models and `train.py` read that dict, so
   every field with a default is already filled in: index required/defaulted fields directly
   (`config['training']['seed']`) instead of `.get(key, default)`, which duplicates defaults.
-- Adding a config field means: add it to the pydantic schema (both `TrainingConfig` and
-  `ERayZerTrainingConfig` if it applies to both), add it with a comment to every shipped yaml in
+- Adding a config field means: add it to the pydantic schema (`BaseTrainingConfig` in
+  `beast/configs/base.py` if it applies to every model), add it with a comment to every shipped yaml in
   `configs/`, and add a test.
 - `ckpt_every_n_epochs`, `viz_every_n_epochs`, `train_frames`, etc. live under `training`;
   `model_params.backbone` selects vit-s/b/l (see `beast/models/beast_vit/beast_vit_config.py`).
