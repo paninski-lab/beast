@@ -16,7 +16,11 @@ from lightning.pytorch.utilities import rank_zero_only
 
 import beast
 from beast.data.augmentations import imgaug_pipeline
-from beast.data.datamodules import BaseDataModule, MultiViewDataModule
+from beast.data.datamodules import (
+    BaseDataModule,
+    MultiViewDataModule,
+    compute_num_train_frames,
+)
 from beast.data.datasets import BaseDataset
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
@@ -108,6 +112,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
             train_batch_size=config['training']['train_batch_size'],
             val_batch_size=config['training']['val_batch_size'],
             train_fraction=config['training'].get('train_fraction', 0.9),
+            train_frames=config['training'].get('train_frames'),
             num_workers=config['training']['num_workers'],
             seed=config['training'].get('seed', 0),
             use_mask=(model_class == 'beast3d'),
@@ -151,6 +156,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
             num_workers=config['training']['num_workers'],
             train_probability=config['training'].get('train_probability', 0.95),
             val_probability=config['training'].get('val_probability', 0.05),
+            train_frames=config['training'].get('train_frames'),
             seed=config['training']['seed'],
         )
         if rank_zero_only.rank == 0:
@@ -163,6 +169,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         train_size = int(
             np.floor(config['training'].get('train_probability', 0.95) * len(dataset))
         )
+        train_size = compute_num_train_frames(train_size, config['training'].get('train_frames'))
         steps_per_epoch = int(np.ceil(
             train_size
             / config['training']['train_batch_size']

@@ -73,6 +73,7 @@ class TrainingConfig(BaseModel):
     check_val_every_n_epoch: int = 5
     train_probability: float = 0.95
     val_probability: float = 0.05
+    train_frames: int | float | None = None
     ckpt_every_n_epochs: int | None = None
 
 
