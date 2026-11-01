@@ -23,9 +23,9 @@ model:
 training:
   seed: 0
   imgaug: default  # default | top-down
-  train_batch_size: 128    # per GPU
-  val_batch_size: 1024
-  test_batch_size: 128
+  train_batch_size: 256    # per GPU (256 @ bf16-mixed is about 20GB per GPU)
+  val_batch_size: 512
+  test_batch_size: 512
   num_epochs: 800
   num_workers: 8  # Number of CPU workers for the DataLoader
   num_gpus: 1
@@ -37,7 +37,7 @@ training:
   # train on only the first N frames (int) or fraction (0-1) of the train split; subsets are
   # nested across values for a fixed seed; null uses all training frames
   train_frames: null
-  precision: 32-true  # trainer precision, e.g. 32-true | bf16-mixed
+  precision: bf16-mixed  # trainer precision, e.g. 32-true | bf16-mixed
   # also save a checkpoint every this many epochs, in addition to the best-val checkpoint;
   # null saves only the best-val checkpoint
   ckpt_every_n_epochs: null
