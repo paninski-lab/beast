@@ -46,6 +46,7 @@ optimizer:
   scheduler: cosine  # {step, cosine}
   warmup_pct: 0.15   # for cosine
   div_factor: 10     # for cosine
+  final_div_factor: 1000  # for cosine; final lr = lr * batch/256 / div_factor / final_div_factor
   gamma: 0.5         # for step
   steps:             # for step
     - 200

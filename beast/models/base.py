@@ -57,10 +57,12 @@ class BaseLightningModel(ABC, pl.LightningModule):
             )
         elif scheduler == 'cosine':
             # compute max learning rate
+            # base lr is per 256 images of effective batch (linear scaling rule)
             global_batch_size = (
                 self.config['training']['train_batch_size']
                 * self.config['training']['num_gpus']
                 * self.config['training']['num_nodes']
+                * self.config['optimizer']['accumulate_grad_batches']
             )
             max_lr = self.config['optimizer']['lr'] * global_batch_size / 256
             scheduler = OneCycleLR(
@@ -71,7 +73,7 @@ class BaseLightningModel(ABC, pl.LightningModule):
                 pct_start=self.config['optimizer']['warmup_pct'],
                 anneal_strategy='cos',
                 div_factor=self.config['optimizer']['div_factor'],
-                final_div_factor=self.config['optimizer'].get('final_div_factor', 1),
+                final_div_factor=self.config['optimizer']['final_div_factor'],
             )
         else:
             raise NotImplementedError(f'{scheduler} scheduler is not yet implemented')
