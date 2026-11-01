@@ -91,6 +91,10 @@ training:
 
   log_every_n_steps: 10
   check_val_every_n_epoch: 1
+  # save render sheets, camera plots and point clouds of validation scenes to
+  # <output_dir>/val_images every this many epochs; null disables
+  viz_every_n_epochs: null
+  viz_num_frames: 8  # number of (evenly spaced, fixed) validation scenes to visualize
 
   train_fraction: 0.9
 

@@ -216,13 +216,12 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
     # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
     if rank_zero_only.rank == 0:
         log_step('Setting up callbacks', level='debug')
-    # ERayZer/BEAST3D use `viz_every_n_epochs` for their own in-model TensorBoard visuals
-    is_multiview = model_class in ('erayzer', 'beast3d')
     callbacks = get_callbacks(
         lr_monitor=True,
         ckpt_every_n_epochs=config['training'].get('ckpt_every_n_epochs', None),
-        viz_every_n_epochs=None if is_multiview else config['training'].get('viz_every_n_epochs'),
-        viz_num_frames=config['training'].get('viz_num_frames', 108),
+        viz_every_n_epochs=config['training'].get('viz_every_n_epochs'),
+        viz_num_frames=config['training'].get('viz_num_frames'),
+        multiview=model_class in ('erayzer', 'beast3d'),
         output_dir=output_dir,
     )
     if rank_zero_only.rank == 0:

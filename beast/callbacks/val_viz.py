@@ -1,6 +1,7 @@
 """Callback that saves contact sheets of validation images and model outputs during training."""
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 import lightning.pytorch as pl
@@ -150,16 +151,20 @@ class ValidationVizCallback(pl.Callback):
         """Validate that the model supports visualization and the cadence is compatible."""
         if stage != 'fit':
             return
-        if type(pl_module).get_viz_panels is BaseLightningModel.get_viz_panels:
-            raise NotImplementedError(
-                f'{type(pl_module).__name__} does not implement get_viz_panels; '
-                f'set training.viz_every_n_epochs to null for this model'
-            )
+        self._check_model(pl_module)
         check_val = trainer.check_val_every_n_epoch or 1
         if self.every_n_epochs % check_val != 0:
             _logger.warning(
                 f'viz_every_n_epochs={self.every_n_epochs} is not a multiple of '
                 f'check_val_every_n_epoch={check_val}; some scheduled sheets will be skipped'
+            )
+
+    def _check_model(self, pl_module: pl.LightningModule) -> None:
+        """Raise if the model does not support this callback's visualization."""
+        if type(pl_module).get_viz_panels is BaseLightningModel.get_viz_panels:
+            raise NotImplementedError(
+                f'{type(pl_module).__name__} does not implement get_viz_panels; '
+                f'set training.viz_every_n_epochs to null for this model'
             )
 
     def _build_batch(self, trainer: pl.Trainer) -> dict:
@@ -185,21 +190,30 @@ class ValidationVizCallback(pl.Callback):
         except Exception as exc:  # noqa: BLE001 - visualization must never break training
             _logger.warning(f'validation visualization failed: {exc}')
 
-    def _save_sheets(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        """Run the model on the fixed frames and write the contact sheets to disk."""
+    def _iter_batches(
+        self,
+        trainer: pl.Trainer,
+        pl_module: pl.LightningModule,
+    ) -> Iterator[dict]:
+        """Yield the fixed visualization frames in chunks of ``batch_size`` on the model device.
+
+        Forward passes on these happen on rank 0 only; this is safe with SyncBatchNorm because
+        the module is in eval mode here (running stats are used, no cross-rank collectives).
+        """
         if self._batch is None:
             self._batch = self._build_batch(trainer)
-        n_frames = len(self._batch['image'])
-
-        # forward passes happen on rank 0 only; this is safe with SyncBatchNorm because the
-        # module is in eval mode here (running stats are used, no cross-rank collectives)
-        panel_chunks: list[list[torch.Tensor]] | None = None
+        n_frames = len(next(v for v in self._batch.values() if isinstance(v, torch.Tensor)))
         for start in range(0, n_frames, self.batch_size):
-            batch = {
+            yield {
                 k: (v[start:start + self.batch_size].to(pl_module.device)
                     if isinstance(v, torch.Tensor) else v)
                 for k, v in self._batch.items()
             }
+
+    def _save_sheets(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        """Run the model on the fixed frames and write the contact sheets to disk."""
+        panel_chunks: list[list[torch.Tensor]] | None = None
+        for batch in self._iter_batches(trainer, pl_module):
             out = pl_module.get_viz_panels(batch)
             if panel_chunks is None:
                 panel_chunks = [[] for _ in out]

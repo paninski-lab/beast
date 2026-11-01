@@ -6,6 +6,7 @@ from lightning.pytorch import Callback
 from lightning.pytorch import callbacks as pl_callbacks
 
 from beast.callbacks.val_viz import ValidationVizCallback
+from beast.callbacks.val_viz_multiview import MultiviewValidationVizCallback
 
 
 def get_callbacks(
@@ -13,7 +14,8 @@ def get_callbacks(
     lr_monitor: bool = True,
     ckpt_every_n_epochs: int | None = None,
     viz_every_n_epochs: int | None = None,
-    viz_num_frames: int = 108,
+    viz_num_frames: int | None = None,
+    multiview: bool = False,
     output_dir: str | Path | None = None,
 ) -> list[Callback]:
     """Build list of Lightning callbacks for training.
@@ -25,7 +27,10 @@ def get_callbacks(
     ckpt_every_n_epochs: if set, also save a checkpoint every n epochs
     viz_every_n_epochs: if set, save contact sheets of validation images and model outputs
         every n epochs; requires the model to implement ``get_viz_panels``
-    viz_num_frames: number of validation frames to include in the contact sheets
+    viz_num_frames: number of validation frames to visualize; defaults to 108 frames for
+        single-view models and 8 scenes for multi-view models
+    multiview: if True, use the multi-view visualization callback (render grids, camera plots,
+        point clouds) instead of the single-view contact sheets
     output_dir: run directory where contact sheets are saved; required if
         ``viz_every_n_epochs`` is set
 
@@ -65,10 +70,12 @@ def get_callbacks(
     if viz_every_n_epochs:
         if output_dir is None:
             raise ValueError('output_dir is required when viz_every_n_epochs is set')
-        callbacks.append(ValidationVizCallback(
+        viz_cls = MultiviewValidationVizCallback if multiview else ValidationVizCallback
+        kwargs = {} if viz_num_frames is None else {'num_frames': viz_num_frames}
+        callbacks.append(viz_cls(
             output_dir=output_dir,
             every_n_epochs=viz_every_n_epochs,
-            num_frames=viz_num_frames,
+            **kwargs,
         ))
 
     return callbacks

@@ -110,7 +110,8 @@ class ERayZerTrainingConfig(BaseModel):
     log_every_n_steps: int = 10
     check_val_every_n_epoch: int = 1
     ckpt_every_n_epochs: int | None = None
-    viz_every_n_epochs: int = 1
+    viz_every_n_epochs: int | None = None
+    viz_num_frames: int = 8
     precision: str = '32-true'
     num_views: int
     num_input_views: int
