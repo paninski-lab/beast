@@ -58,7 +58,7 @@ optimizer:
   warmup_pct: 0.15 # cosine/linear
   gamma: 0.95     # step
   div_factor: 10  # cosine
-  final_div_factor: 1000  # cosine; final lr = peak lr / div_factor / final_div_factor
+  final_div_factor: 100  # cosine; final lr = peak lr / div_factor / final_div_factor
   scheduler: cosine # step/cosine/linear
 
 # data configuration

@@ -67,7 +67,7 @@ class TestGetScheduler:
     """Test BaseLightningModel.get_scheduler."""
 
     @staticmethod
-    def _make_scheduler(accumulate: int, final_div_factor: float = 1000.0):
+    def _make_scheduler(accumulate: int, final_div_factor: float = 100.0):
         config = {
             'training': {
                 'train_batch_size': 128,
@@ -102,4 +102,4 @@ class TestGetScheduler:
 
     def test_get_scheduler_final_lr_uses_final_div_factor(self):
         scheduler = self._make_scheduler(accumulate=1)
-        assert scheduler.optimizer.param_groups[0]['min_lr'] == pytest.approx(1e-4 / 10 / 1000)
+        assert scheduler.optimizer.param_groups[0]['min_lr'] == pytest.approx(1e-4 / 10 / 100)

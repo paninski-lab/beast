@@ -84,7 +84,7 @@ class OptimizerConfig(BaseOptimizerConfig):
     # for cosine
     warmup_pct: float = 0.15
     div_factor: float = 10.0
-    final_div_factor: float = 1000.0
+    final_div_factor: float = 100.0
     # for step
     gamma: float = 0.5
     steps: list[int] = []
