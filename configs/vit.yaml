@@ -51,7 +51,7 @@ training:
 optimizer:
   type: AdamW
   accumulate_grad_batches: 1
-  lr: 5.e-5
+  lr: 1.e-4
   wd: 0.05
   beta1: 0.9   # adam betas; beta2=0.95 follows the MAE recipe
   beta2: 0.95
