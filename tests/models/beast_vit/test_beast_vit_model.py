@@ -4,9 +4,14 @@ import copy
 
 import pytest
 import torch
+from transformers import ViTMAEConfig
 
 from beast.models.beast_vit.beast_vit_config import VIT_BACKBONES
-from beast.models.beast_vit.beast_vit_model import VisionTransformer
+from beast.models.beast_vit.beast_vit_model import (
+    VisionTransformer,
+    ViTMAE,
+    init_mae_weights,
+)
 
 
 class TestVisionTransformer:
@@ -130,6 +135,46 @@ class TestValidationVizIntegration:
         model.train(tmp_path)
         sheets = sorted(tmp_path.rglob('val_images/*.png'))
         assert [s.name for s in sheets] == ['epoch_0001_sheet_00.png']
+
+
+class TestInitMaeWeights:
+    """Test the function init_mae_weights."""
+
+    @staticmethod
+    def _make_model() -> ViTMAE:
+        config = ViTMAEConfig(
+            hidden_size=32, num_hidden_layers=2, num_attention_heads=2, intermediate_size=64,
+            decoder_hidden_size=16, decoder_num_hidden_layers=1, decoder_num_attention_heads=2,
+            decoder_intermediate_size=32, image_size=32, patch_size=16,
+        )
+        model = ViTMAE(config)
+        init_mae_weights(model)
+        return model
+
+    def test_init_mae_weights_sets_sincos_position_embeddings(self) -> None:
+        model = self._make_model()
+        pos = model.vit.embeddings.position_embeddings
+        assert not pos.requires_grad
+        assert pos.abs().sum() > 0
+        # the class-token slot is zero; patch positions are all distinct
+        assert torch.equal(pos[0, 0], torch.zeros_like(pos[0, 0]))
+        assert torch.unique(pos[0, 1:], dim=0).shape[0] == pos.shape[1] - 1
+        assert model.decoder.decoder_pos_embed.abs().sum() > 0
+
+    def test_init_mae_weights_sets_tokens(self) -> None:
+        model = self._make_model()
+        assert model.vit.embeddings.cls_token.std() > 0
+        assert model.decoder.mask_token.std() > 0
+
+    def test_init_mae_weights_deterministic_position_embeddings(self) -> None:
+        pos_a = self._make_model().vit.embeddings.position_embeddings
+        pos_b = self._make_model().vit.embeddings.position_embeddings
+        assert torch.equal(pos_a, pos_b)
+
+    def test_random_init_model_has_position_embeddings(self, config_vit) -> None:
+        config_vit['model']['model_params']['random_init'] = True
+        model = VisionTransformer(config_vit)
+        assert model.vit_mae.vit.embeddings.position_embeddings.abs().sum() > 0
 
 
 class TestBackbones:
