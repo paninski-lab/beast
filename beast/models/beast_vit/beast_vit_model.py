@@ -10,12 +10,43 @@ from transformers import (
     ViTMAEConfig,
     ViTMAEForPreTraining,
 )
+from transformers.models.vit_mae.modeling_vit_mae import get_2d_sincos_pos_embed
 
 from beast.data.utils import denormalize_images
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
 from beast.models.beast_vit.beast_vit_config import get_pretrained_repo, resolve_vit_params
 from beast.nn.perceptual import AlexPerceptual
+
+
+def init_mae_weights(model: ViTMAEForPreTraining) -> None:
+    """Apply the original MAE initialization to a randomly initialized ViT-MAE.
+
+    Some ``transformers`` versions leave the frozen position embeddings, the class token and the
+    mask token at zero when a model is built from a config. This sets them as in the MAE paper:
+    fixed 2D sin-cos position embeddings (encoder and decoder), ``N(0, initializer_range)`` for
+    the class and mask tokens, and Xavier-uniform for the patch projection (treated as a linear
+    layer).
+
+    Parameters
+    ----------
+    model: randomly initialized ViT-MAE, modified in place
+
+    """
+    config = model.config
+    embeddings = model.vit.embeddings
+    grid_size = int(embeddings.patch_embeddings.num_patches ** 0.5)
+    with torch.no_grad():
+        pos_embed = get_2d_sincos_pos_embed(config.hidden_size, grid_size, add_cls_token=True)
+        embeddings.position_embeddings.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+        pos_embed_dec = get_2d_sincos_pos_embed(
+            config.decoder_hidden_size, grid_size, add_cls_token=True,
+        )
+        model.decoder.decoder_pos_embed.copy_(torch.from_numpy(pos_embed_dec).float().unsqueeze(0))
+        weight = embeddings.patch_embeddings.projection.weight
+        nn.init.xavier_uniform_(weight.view(weight.shape[0], -1))
+        nn.init.normal_(embeddings.cls_token, std=config.initializer_range)
+        nn.init.normal_(model.decoder.mask_token, std=config.initializer_range)
 
 
 class BatchNormProjector(nn.Module):
@@ -79,6 +110,7 @@ class VisionTransformer(BaseLightningModel):
         else:
             log_step("Using random initialization (random_init=True)", level='debug')
             self.vit_mae = ViTMAE(vit_mae_config)
+            init_mae_weights(self.vit_mae)
             log_step("Randomly initialized model created", level='debug')
 
         self.mask_ratio = config['model']['model_params']['mask_ratio']
