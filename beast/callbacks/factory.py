@@ -6,7 +6,6 @@ from lightning.pytorch import Callback
 from lightning.pytorch import callbacks as pl_callbacks
 
 from beast.callbacks.val_viz import ValidationVizCallback
-from beast.callbacks.val_viz_multiview import MultiviewValidationVizCallback
 
 
 def get_callbacks(
@@ -70,7 +69,14 @@ def get_callbacks(
     if viz_every_n_epochs:
         if output_dir is None:
             raise ValueError('output_dir is required when viz_every_n_epochs is set')
-        viz_cls = MultiviewValidationVizCallback if multiview else ValidationVizCallback
+        viz_cls: type[ValidationVizCallback]
+        if multiview:
+            # imported here: the multi-view module imports beast.models.erayzer, which imports
+            # beast.train, which imports this module
+            from beast.callbacks.val_viz_multiview import MultiviewValidationVizCallback
+            viz_cls = MultiviewValidationVizCallback
+        else:
+            viz_cls = ValidationVizCallback
         kwargs = {} if viz_num_frames is None else {'num_frames': viz_num_frames}
         callbacks.append(viz_cls(
             output_dir=output_dir,
