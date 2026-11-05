@@ -191,6 +191,17 @@ class TestBackbones:
         assert model.vit_mae.config.num_attention_heads == 6
         assert model.vit_mae.config.embed_size == 384
 
+    def test_tiny_backbone_random_init(self, config_vit):
+        config = copy.deepcopy(config_vit)
+        mp = config['model']['model_params']
+        for key in VIT_BACKBONES['vit-b']:  # drop fields already resolved from vit-b
+            mp.pop(key, None)
+        mp.update({'backbone': 'vit-t', 'random_init': True, 'embed_size': 192})
+        model = VisionTransformer(config)
+        assert model.vit_mae.config.hidden_size == 192
+        assert model.vit_mae.config.num_attention_heads == 3
+        assert model.vit_mae.config.embed_size == 192
+
     def test_legacy_config_without_backbone(self, config_vit):
         config = copy.deepcopy(config_vit)
         mp = config['model']['model_params']
