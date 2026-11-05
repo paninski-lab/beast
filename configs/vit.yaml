@@ -4,7 +4,7 @@ model:
   checkpoint: null  # load weights from checkpoint
   model_class: vit
   model_params:
-    backbone: vit-b  # vit-s | vit-b | vit-l (vit-s has no pretrained weights: set random_init)
+    backbone: vit-b  # vit-t | vit-s | vit-b | vit-l (vit-t/vit-s have no pretrained weights: set random_init)
     image_size: 224 # usually 224
     patch_size: 16 # default is 16, we use large patch size
     num_channels: 3 # 3 for RGB

@@ -14,6 +14,14 @@ _DECODER: dict[str, int] = {
 
 # ``pretrained`` is the huggingface repo with MAE weights, or None if none exist
 VIT_BACKBONES: dict[str, dict[str, Any]] = {
+    'vit-t': {
+        'hidden_size': 192,
+        'num_hidden_layers': 12,
+        'num_attention_heads': 3,
+        'intermediate_size': 768,
+        **_DECODER,
+        'pretrained': None,
+    },
     'vit-s': {
         'hidden_size': 384,
         'num_hidden_layers': 12,
@@ -105,7 +113,7 @@ class VitModelParams(BaseModel):
     automatically. Without ``backbone`` they are read as given (defaults match vit-b).
     """
 
-    backbone: Literal['vit-s', 'vit-b', 'vit-l'] | None = None
+    backbone: Literal['vit-t', 'vit-s', 'vit-b', 'vit-l'] | None = None
     hidden_size: int = 768
     num_hidden_layers: int = 12
     num_attention_heads: int = 12

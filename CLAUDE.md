@@ -69,7 +69,7 @@ foo(
   `beast/configs/base.py` if it applies to every model), add it with a comment to every shipped yaml in
   `configs/`, and add a test.
 - `ckpt_every_n_epochs`, `viz_every_n_epochs`, `train_frames`, etc. live under `training`;
-  `model_params.backbone` selects vit-s/b/l (see `beast/models/beast_vit/beast_vit_config.py`).
+  `model_params.backbone` selects vit-t/s/b/l (see `beast/models/beast_vit/beast_vit_config.py`).
 
 ## Testing
 

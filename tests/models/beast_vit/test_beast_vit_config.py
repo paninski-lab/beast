@@ -17,7 +17,12 @@ class TestResolveVitParams:
 
     @pytest.mark.parametrize(
         'backbone,hidden_size,layers,heads',
-        [('vit-s', 384, 12, 6), ('vit-b', 768, 12, 12), ('vit-l', 1024, 24, 16)],
+        [
+            ('vit-t', 192, 12, 3),
+            ('vit-s', 384, 12, 6),
+            ('vit-b', 768, 12, 12),
+            ('vit-l', 1024, 24, 16)
+        ],
     )
     def test_resolve_vit_params_presets(self, backbone, hidden_size, layers, heads):
         out = resolve_vit_params({'backbone': backbone, 'random_init': True})
@@ -53,9 +58,10 @@ class TestResolveVitParams:
         with pytest.raises(ValueError, match='invalid entry'):
             resolve_vit_params({'backbone': 'vit-xl'})
 
-    def test_resolve_vit_params_small_requires_random_init(self):
+    @pytest.mark.parametrize('backbone', ['vit-t', 'vit-s'])
+    def test_resolve_vit_params_small_requires_random_init(self, backbone):
         with pytest.raises(ValueError, match='random_init'):
-            resolve_vit_params({'backbone': 'vit-s'})
+            resolve_vit_params({'backbone': backbone})
 
 
 class TestGetPretrainedRepo:
@@ -65,6 +71,7 @@ class TestGetPretrainedRepo:
         assert get_pretrained_repo({'backbone': 'vit-b'}) == 'facebook/vit-mae-base'
         assert get_pretrained_repo({'backbone': 'vit-l'}) == 'facebook/vit-mae-large'
         assert get_pretrained_repo({'backbone': 'vit-s'}) is None
+        assert get_pretrained_repo({'backbone': 'vit-t'}) is None
 
     def test_get_pretrained_repo_legacy(self):
         assert get_pretrained_repo({}) == LEGACY_PRETRAINED
