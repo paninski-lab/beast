@@ -113,6 +113,7 @@ training:
 # Optimizer  (AdamW + OneCycleLR)
 # ---------------------------------------------------------------------------
 optimizer:
+  type: AdamW                  # AdamW | Adam
   lr: 4.0e-4
   beta1: 0.9
   beta2: 0.95

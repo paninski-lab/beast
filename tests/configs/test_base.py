@@ -47,7 +47,7 @@ class TestBaseOptimizerConfig:
 
     def test_base_optimizer_config_shared_fields_present_everywhere(self):
         shared = set(BaseOptimizerConfig.model_fields)
-        assert shared == {'lr', 'wd', 'beta1', 'beta2', 'accumulate_grad_batches'}
+        assert shared == {'type', 'lr', 'wd', 'beta1', 'beta2', 'accumulate_grad_batches'}
         assert shared <= set(OptimizerConfig.model_fields)
         assert shared <= set(ERayZerOptimizerConfig.model_fields)
 

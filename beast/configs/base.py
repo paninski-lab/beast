@@ -6,6 +6,7 @@ these schemas without circular imports. Top-level config assembly and per-model 
 """
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -40,6 +41,7 @@ class BaseTrainingConfig(BaseModel):
 class BaseOptimizerConfig(BaseModel):
     """Optimizer fields common to every model."""
 
+    type: Literal['Adam', 'AdamW'] = 'AdamW'
     lr: float
     wd: float = 0.05
     # adam betas; 0.95 for beta2 follows the MAE recipe (more stable than 0.999 for transformers)

@@ -16,6 +16,9 @@ _logger = logging.getLogger(__name__)
 class BaseLightningModel(ABC, pl.LightningModule):
     """Base Lightning Module that specific model architectures will inherit from."""
 
+    # how often Lightning steps the lr scheduler; subclasses with step-based schedules use 'step'
+    lr_scheduler_interval: Literal['epoch', 'step'] = 'epoch'
+
     def __init__(self, config: dict) -> None:
         """Initialize with config."""
 
@@ -111,7 +114,7 @@ class BaseLightningModel(ABC, pl.LightningModule):
 
         return {
             'optimizer': optimizer,
-            'lr_scheduler': scheduler,
+            'lr_scheduler': {'scheduler': scheduler, 'interval': self.lr_scheduler_interval},
             'monitor': 'val_loss',
         }
 

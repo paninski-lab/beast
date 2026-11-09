@@ -79,7 +79,6 @@ class TrainingConfig(BaseTrainingConfig):
 class OptimizerConfig(BaseOptimizerConfig):
     """Optimizer config for models using the standard epoch-based loop (resnet, vit)."""
 
-    type: Literal['Adam', 'AdamW'] = 'AdamW'
     scheduler: Literal['step', 'cosine'] = 'cosine'
     # for cosine
     warmup_pct: float = 0.15
