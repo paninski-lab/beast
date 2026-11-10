@@ -70,7 +70,7 @@ class TestGetScheduler:
     def _make_scheduler(
         accumulate: int,
         final_div_factor: float = 100.0,
-        scheduler: str = 'cosine',
+        scheduler_name: str = 'cosine',
         scale_lr_by_batch: bool = True,
         train_batch_size: int = 128,
     ):
@@ -82,7 +82,7 @@ class TestGetScheduler:
                 'num_epochs': 10,
             },
             'optimizer': {
-                'scheduler': scheduler,
+                'scheduler': scheduler_name,
                 'scale_lr_by_batch': scale_lr_by_batch,
                 'lr': 1e-4,
                 'accumulate_grad_batches': accumulate,
@@ -123,7 +123,9 @@ class TestGetScheduler:
     def test_get_scheduler_constant_keeps_lr(self):
         from torch.optim.lr_scheduler import LambdaLR
         # scale_lr_by_batch and accumulation must not affect the constant schedule
-        scheduler = self._make_scheduler(accumulate=4, scheduler='constant', train_batch_size=8)
+        scheduler = self._make_scheduler(
+            accumulate=4, scheduler_name='constant', train_batch_size=8,
+        )
         assert isinstance(scheduler, LambdaLR)
         optimizer = scheduler.optimizer
         for _ in range(5):
@@ -133,4 +135,4 @@ class TestGetScheduler:
 
     def test_get_scheduler_unknown_raises(self):
         with pytest.raises(NotImplementedError, match='bogus'):
-            self._make_scheduler(accumulate=1, scheduler='bogus')
+            self._make_scheduler(accumulate=1, scheduler_name='bogus')

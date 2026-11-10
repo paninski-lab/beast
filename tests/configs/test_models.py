@@ -9,7 +9,6 @@ from beast.configs.models import (
     Beast3DBeastConfig,
     BeastConfig,
     ERayZerBeastConfig,
-    OptimizerConfig,
     TrainingConfig,
     get_beast_config_class,
 )
@@ -117,31 +116,6 @@ class TestTrainingConfig:
     def test_missing_val_batch_size_raises(self) -> None:
         with pytest.raises(ValidationError):
             TrainingConfig(train_batch_size=32)  # type: ignore[call-arg]
-
-
-class TestOptimizerConfig:
-    """Test the OptimizerConfig model."""
-
-    def test_defaults_applied(self) -> None:
-        cfg = OptimizerConfig(lr=1e-4)
-        assert cfg.type == 'AdamW'
-        assert cfg.scheduler == 'cosine'
-        assert cfg.accumulate_grad_batches == 1
-        assert (cfg.beta1, cfg.beta2) == (0.9, 0.95)
-        assert cfg.warmup_pct == 0.15
-        assert cfg.steps == []
-        assert cfg.scale_lr_by_batch is True
-
-    def test_constant_scheduler_accepted(self) -> None:
-        assert OptimizerConfig(lr=1e-4, scheduler='constant').scheduler == 'constant'
-
-    def test_unknown_scheduler_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            OptimizerConfig(lr=1e-4, scheduler='bogus')  # type: ignore[arg-type]
-
-    def test_missing_lr_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            OptimizerConfig()  # type: ignore[call-arg]
 
 
 class TestResnetModelParams:

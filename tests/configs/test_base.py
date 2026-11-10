@@ -3,7 +3,7 @@
 import pytest
 
 from beast.configs.base import BaseOptimizerConfig, BaseTrainingConfig
-from beast.configs.models import OptimizerConfig, TrainingConfig
+from beast.configs.models import TrainingConfig
 from beast.models.erayzer.erayzer_config import ERayZerTrainingConfig
 
 
@@ -38,15 +38,24 @@ class TestBaseTrainingConfig:
 
 
 class TestBaseOptimizerConfig:
-    """Test the shared optimizer schema and its subclasses."""
+    """Test the shared optimizer schema."""
 
-    def test_base_optimizer_config_subclasses(self):
-        assert issubclass(OptimizerConfig, BaseOptimizerConfig)
+    def test_defaults_applied(self):
+        cfg = BaseOptimizerConfig(lr=1e-4)
+        assert cfg.type == 'AdamW'
+        assert cfg.scheduler == 'cosine'
+        assert cfg.accumulate_grad_batches == 1
+        assert (cfg.beta1, cfg.beta2) == (0.9, 0.95)
+        assert cfg.warmup_pct == 0.15
+        assert cfg.steps == []
+        assert cfg.scale_lr_by_batch is True
 
-    def test_base_optimizer_config_shared_fields_present_everywhere(self):
-        shared = set(BaseOptimizerConfig.model_fields)
-        assert shared == {'type', 'lr', 'wd', 'beta1', 'beta2', 'accumulate_grad_batches'}
-        assert shared <= set(OptimizerConfig.model_fields)
+    def test_constant_scheduler_accepted(self):
+        assert BaseOptimizerConfig(lr=1e-4, scheduler='constant').scheduler == 'constant'
+
+    def test_unknown_scheduler_raises(self):
+        with pytest.raises(ValueError):
+            BaseOptimizerConfig(lr=1e-4, scheduler='bogus')  # type: ignore[arg-type]
 
     def test_base_optimizer_config_requires_lr(self):
         with pytest.raises(ValueError):

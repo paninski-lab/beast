@@ -47,15 +47,16 @@ class BaseLightningModel(ABC, pl.LightningModule):
         configured learning rate scheduler
 
         """
-        scheduler = self.config['optimizer']['scheduler']
-        if scheduler == 'step':
+        name = self.config['optimizer']['scheduler']
+        scheduler: torch.optim.lr_scheduler.LRScheduler
+        if name == 'step':
             # define a scheduler that reduces the base learning rate at predefined steps
             scheduler = MultiStepLR(
                 optimizer=optimizer,
                 milestones=self.config['optimizer']['steps'],
                 gamma=self.config['optimizer']['gamma'],
             )
-        elif scheduler == 'cosine':
+        elif name == 'cosine':
             # base learning rate is per 256 images of effective batch (linear scaling rule)
             max_lr = self.config['optimizer']['lr']
             if self.config['optimizer']['scale_lr_by_batch']:
@@ -76,11 +77,11 @@ class BaseLightningModel(ABC, pl.LightningModule):
                 div_factor=self.config['optimizer']['div_factor'],
                 final_div_factor=self.config['optimizer']['final_div_factor'],
             )
-        elif scheduler == 'constant':
+        elif name == 'constant':
             # fixed learning rate for the whole run; never scaled by batch size
             scheduler = LambdaLR(optimizer=optimizer, lr_lambda=lambda _epoch: 1.0)
         else:
-            raise NotImplementedError(f'{scheduler} scheduler is not yet implemented')
+            raise NotImplementedError(f'{name} scheduler is not yet implemented')
         return scheduler
 
     def get_parameters(self) -> Iterator:
