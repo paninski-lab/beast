@@ -1,6 +1,7 @@
 """ERayZer multi-view 3DGS model package."""
 
 from beast.models.erayzer.erayzer_config import (
+    ERayZerBeastConfig,
     ERayZerGaussiansConfig,
     ERayZerImageTokenizerConfig,
     ERayZerModelConfig,
@@ -24,6 +25,7 @@ from beast.models.erayzer.erayzer_train import train
 
 __all__ = [
     'ERayZer',
+    'ERayZerBeastConfig',
     'ERayZerGaussiansConfig',
     'ERayZerImageTokenizerConfig',
     'ERayZerModelConfig',

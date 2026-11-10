@@ -10,12 +10,11 @@ from typing import Any
 
 import torch
 
-from beast.configs.models import get_beast_config_class
 from beast.inference import predict_images, predict_video
 from beast.io import load_config
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
-from beast.models.registry import MODEL_REGISTRY, TRAIN_REGISTRY
+from beast.models.registry import MODEL_REGISTRY, TRAIN_REGISTRY, get_config_class
 
 _logger = logging.getLogger(__name__)
 
@@ -109,7 +108,7 @@ class Model:
             config = load_config(config_path)
         else:
             model_class = (config_path.get('model') or {}).get('model_class', '')
-            config = get_beast_config_class(model_class).model_validate(config_path).model_dump()
+            config = get_config_class(model_class).model_validate(config_path).model_dump()
 
         model_type = config['model'].get('model_class', '').lower()
         if model_type not in MODEL_REGISTRY:

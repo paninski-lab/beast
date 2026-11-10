@@ -61,12 +61,13 @@ foo(
 ## Configuration
 
 - Configs flow yaml -> `beast.io.load_config` -> pydantic validation (shared schemas in
-  `beast/configs/base.py`, top-level configs and dispatch in `beast/configs/models.py`, per-model
-  `*_config.py`) -> `model_dump()` -> plain nested dict. Models and `train.py` read that dict, so
-  every field with a default is already filled in: index required/defaulted fields directly
+  `beast/config.py`, per-model sections and top-level `<Model>BeastConfig` classes in each
+  `beast/models/<model>/<model>_config.py`, dispatch via `get_config_class` and
+  `CONFIG_REGISTRY` in `beast/models/registry.py`) -> `model_dump()` -> plain nested dict.
+  Models and `train.py` read that dict, so every field with a default is already filled in: index required/defaulted fields directly
   (`config['training']['seed']`) instead of `.get(key, default)`, which duplicates defaults.
 - Adding a config field means: add it to the pydantic schema (`BaseTrainingConfig` in
-  `beast/configs/base.py` if it applies to every model), add it with a comment to every shipped yaml in
+  `beast/config.py` if it applies to every model), add it with a comment to every shipped yaml in
   `configs/`, and add a test.
 - `ckpt_every_n_epochs`, `viz_every_n_epochs`, `train_frames`, etc. live under `training`;
   `model_params.backbone` selects vit-t/s/b/l (see `beast/models/beast_vit/beast_vit_config.py`).

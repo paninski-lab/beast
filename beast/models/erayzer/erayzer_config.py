@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from beast.configs.base import BaseTrainingConfig
+from beast.config import BaseBeastConfig, BaseTrainingConfig
 
 
 class ERayZerImageTokenizerConfig(BaseModel):
@@ -104,6 +104,7 @@ class ERayZerTrainingConfig(BaseTrainingConfig):
     # overrides of the shared defaults
     check_val_every_n_epoch: int = 1
     viz_num_frames: int = 8
+    train_probability: float = 0.9
 
     num_views: int
     num_input_views: int
@@ -114,7 +115,6 @@ class ERayZerTrainingConfig(BaseTrainingConfig):
     target_view_range: list[int] | None = None
     freeze_focal_steps: int = 0
     grad_checkpoint_every: int = 1
-    train_fraction: float = 0.9
     random_split: bool = False
     random_inputs: bool = False
     render_interpolate: bool = False
@@ -122,3 +122,10 @@ class ERayZerTrainingConfig(BaseTrainingConfig):
     gs_reg_loss_weight: float = 0.0
     perceptual_loss_weight: float = 0.0
     pose_consistency_reg_weight: float = 0.0
+
+
+class ERayZerBeastConfig(BaseBeastConfig):
+    """Complete top-level config for ERayZer training runs."""
+
+    model: ERayZerModelConfig
+    training: ERayZerTrainingConfig

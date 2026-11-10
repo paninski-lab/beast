@@ -111,7 +111,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
             image_size=config['model']['image_tokenizer']['image_size'],
             train_batch_size=config['training']['train_batch_size'],
             val_batch_size=config['training']['val_batch_size'],
-            train_fraction=config['training']['train_fraction'],
+            train_fraction=config['training']['train_probability'],
             train_frames=config['training']['train_frames'],
             num_workers=config['training']['num_workers'],
             seed=config['training']['seed'],

@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from beast.config import BaseBeastConfig, BaseTrainingConfig
+
 
 class ResnetModelParams(BaseModel):
     """Parameters for the ResNet backbone and bottleneck."""
@@ -27,3 +29,10 @@ class ResnetModelConfig(BaseModel):
     model_params: ResnetModelParams
     seed: int = 0
     checkpoint: str | None = None
+
+
+class ResnetBeastConfig(BaseBeastConfig):
+    """Complete top-level config for ResNet autoencoder training runs."""
+
+    model: ResnetModelConfig
+    training: BaseTrainingConfig
