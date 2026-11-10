@@ -35,9 +35,9 @@ def run_erayzer_model_test(tmp_path, multiview_data_dir):
     Mirrors run_model_test from tests/conftest.py but uses MultiViewDataModule
     for both training and inference, since ERayZer requires multi-view input.
 
-    The fixture sets up a minimal step count so that at least one full training
-    epoch (and therefore one validation run + best-checkpoint save) completes
-    within the multiview test fixtures (20 frames, batch_size=2 → 9 steps/epoch).
+    The fixture trains for 2 epochs so that validation and best-checkpoint saving
+    run at least twice within the multiview test fixtures (20 frames, batch_size=2
+    → 9 steps/epoch).
     """
     def _run(config: dict) -> None:
         config = copy.deepcopy(config)

@@ -101,8 +101,8 @@ Each model owns its complete Pydantic schemas in its `<model>_config.py` file:
 Shared schemas live in `beast/configs/base.py` (`BaseTrainingConfig`, `BaseOptimizerConfig`,
 `DataConfig`); it imports no model package, so model `*_config.py` files can subclass them.
 All models use `BaseOptimizerConfig` as their optimizer section, and models that share the
-standard training loop (resnet, vit) reuse `TrainingConfig` from `beast/configs/models.py`. Models with divergent training behaviour
-(ERayZer, BEAST3D) subclass the base training schema in their own `*_config.py`.
+standard training loop (resnet, vit) reuse `TrainingConfig` from `beast/configs/models.py`.
+Models with divergent training behaviour (ERayZer, BEAST3D) subclass the base training schema in their own `*_config.py`.
 
 Top-level full-config classes live in `beast/configs/models.py` where they assemble model + training +
 optimizer + data schemas:
