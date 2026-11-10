@@ -11,7 +11,6 @@ import pytest
 import torch
 import torch.nn as nn
 
-from beast.models.base import BaseLightningModel
 from beast.models.erayzer.erayzer_model import (
     ERayZer,
     GaussiansUpsampler,
@@ -861,93 +860,6 @@ class TestResolveViewIndices:
             assert set(in_idx[0].tolist()).isdisjoint(tgt_idx[0].tolist())
             input_sets.add(tuple(sorted(in_idx[0].tolist())))
         assert len(input_sets) >= 2  # the input/target assignment varies
-
-
-class TestConfigureOptimizers:
-    """Test ERayZer LR scaling + schedule selection."""
-
-    def _standin(self, opt_cfg: dict, train_cfg: dict) -> ERayZer:
-        # a duck-typed stand-in exercises configure_optimizers without a full build;
-        # cast so the unbound-method calls type-check against the real signature
-        param = nn.Parameter(torch.zeros(2))
-        # fill in the schema defaults that pydantic would supply in a real run
-        opt_cfg = {
-            'type': 'AdamW', 'scale_lr_by_batch': False, 'schedule': 'onecycle', 'warmup': 100,
-            'div_factor': 1.0, 'final_div_factor': 1.0, **opt_cfg,
-        }
-        m = SimpleNamespace(
-            config={'optimizer': opt_cfg, 'training': train_cfg},
-            parameters=lambda: iter([param]),
-            lr_scheduler_interval=ERayZer.lr_scheduler_interval,
-        )
-        m.get_parameters = lambda: BaseLightningModel.get_parameters(m)
-        m.get_scheduler = lambda optimizer: ERayZer.get_scheduler(m, optimizer)
-        return cast(ERayZer, m)
-
-    def _train_cfg(self, **kw) -> dict:
-        cfg = {'train_batch_size': 8, 'num_gpus': 1, 'num_nodes': 1, 'max_fwdbwd_passes': 1000}
-        cfg.update(kw)
-        return cfg
-
-    def test_constant_schedule_is_lambdalr(self) -> None:
-        from torch.optim.lr_scheduler import LambdaLR
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05, 'schedule': 'constant'},
-            self._train_cfg(),
-        )
-        out = BaseLightningModel.configure_optimizers(m)
-        assert isinstance(out['lr_scheduler']['scheduler'], LambdaLR)
-
-    def test_onecycle_schedule(self) -> None:
-        from torch.optim.lr_scheduler import OneCycleLR
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'warmup': 100,
-             'schedule': 'onecycle', 'div_factor': 10.0, 'final_div_factor': 100.0},
-            self._train_cfg(),
-        )
-        out = BaseLightningModel.configure_optimizers(m)
-        assert isinstance(out['lr_scheduler']['scheduler'], OneCycleLR)
-
-    def test_unknown_schedule_raises(self) -> None:
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'schedule': 'bogus'},
-            self._train_cfg(),
-        )
-        with pytest.raises(ValueError, match='unknown optimizer.schedule'):
-            BaseLightningModel.configure_optimizers(m)
-
-    def test_scheduler_steps_per_batch(self) -> None:
-        m = self._standin({'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05}, self._train_cfg())
-        out = BaseLightningModel.configure_optimizers(m)
-        assert out['lr_scheduler']['interval'] == 'step'
-
-    def test_no_scaling_by_default(self) -> None:
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'schedule': 'constant'},
-            self._train_cfg(train_batch_size=8),
-        )
-        out = BaseLightningModel.configure_optimizers(m)
-        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4)
-
-    def test_lr_batch_scaling_at_256_is_identity(self) -> None:
-        # global_batch_size = 32 * 8 * 1 = 256 -> scaled lr == base lr
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05,
-             'schedule': 'constant', 'scale_lr_by_batch': True},
-            self._train_cfg(train_batch_size=32, num_gpus=8),
-        )
-        out = BaseLightningModel.configure_optimizers(m)
-        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4)
-
-    def test_lr_batch_scaling_small_batch(self) -> None:
-        # global_batch_size = 8 -> lr scaled down by 8/256
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05,
-             'schedule': 'constant', 'scale_lr_by_batch': True},
-            self._train_cfg(train_batch_size=8),
-        )
-        out = BaseLightningModel.configure_optimizers(m)
-        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4 * 8 / 256)
 
 
 class TestParseHfCheckpointUrl:

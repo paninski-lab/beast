@@ -10,7 +10,7 @@ BeastConfig
     Contains TrainingConfig, OptimizerConfig, and DataConfig.
 
 ERayZerBeastConfig, Beast3DBeastConfig
-    Used for ERayZer and BEAST3D.  Contain ERayZerTrainingConfig and ERayZerOptimizerConfig.
+    Used for ERayZer and BEAST3D.  Contain ERayZerTrainingConfig.
 
 TrainingConfig / OptimizerConfig here are the standard epoch-based-loop schemas; they extend the
 base schemas in ``beast.configs.base``.
@@ -47,11 +47,7 @@ from beast.configs.base import BaseOptimizerConfig, BaseTrainingConfig, DataConf
 from beast.models.beast3d.beast3d_config import Beast3DModelConfig
 from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
 from beast.models.beast_vit.beast_vit_config import VitModelConfig
-from beast.models.erayzer.erayzer_config import (
-    ERayZerModelConfig,
-    ERayZerOptimizerConfig,
-    ERayZerTrainingConfig,
-)
+from beast.models.erayzer.erayzer_config import ERayZerModelConfig, ERayZerTrainingConfig
 
 
 class BeastConfig(BaseModel):
@@ -79,7 +75,9 @@ class TrainingConfig(BaseTrainingConfig):
 class OptimizerConfig(BaseOptimizerConfig):
     """Optimizer config for models using the standard epoch-based loop (resnet, vit)."""
 
-    scheduler: Literal['step', 'cosine'] = 'cosine'
+    scheduler: Literal['step', 'cosine', 'constant'] = 'cosine'
+    # for cosine: scale the peak lr by global batch size / 256 (including grad accumulation)
+    scale_lr_by_batch: bool = True
     # for cosine
     warmup_pct: float = 0.15
     div_factor: float = 10.0
@@ -94,7 +92,7 @@ class ERayZerBeastConfig(BaseModel):
 
     model: ERayZerModelConfig
     training: ERayZerTrainingConfig
-    optimizer: ERayZerOptimizerConfig
+    optimizer: OptimizerConfig
     data: DataConfig
     inference: bool = False
 
@@ -108,7 +106,7 @@ class Beast3DBeastConfig(BaseModel):
 
     model: Beast3DModelConfig
     training: ERayZerTrainingConfig
-    optimizer: ERayZerOptimizerConfig
+    optimizer: OptimizerConfig
     data: DataConfig
     inference: bool = False
 

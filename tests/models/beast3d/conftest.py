@@ -52,8 +52,7 @@ def run_beast3d_model_test(tmp_path, multiview_data_dir):
         config['training']['num_workers'] = 0
         config['training']['log_every_n_steps'] = 1
         config['training']['check_val_every_n_epoch'] = 1
-        config['training']['max_fwdbwd_passes'] = 20
-        config['optimizer']['warmup'] = 5
+        config['training']['num_epochs'] = 2
 
         model = Model.from_config(config)
         try:

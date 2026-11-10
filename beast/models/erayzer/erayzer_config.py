@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from beast.configs.base import BaseOptimizerConfig, BaseTrainingConfig
+from beast.configs.base import BaseTrainingConfig
 
 
 class ERayZerImageTokenizerConfig(BaseModel):
@@ -102,7 +102,6 @@ class ERayZerTrainingConfig(BaseTrainingConfig):
     """Training configuration for ERayZer."""
 
     # overrides of the shared defaults
-    num_epochs: int = 200
     check_val_every_n_epoch: int = 1
     viz_num_frames: int = 8
 
@@ -114,7 +113,6 @@ class ERayZerTrainingConfig(BaseTrainingConfig):
     max_input_views: int = 5
     target_view_range: list[int] | None = None
     freeze_focal_steps: int = 0
-    max_fwdbwd_passes: int
     grad_checkpoint_every: int = 1
     train_fraction: float = 0.9
     random_split: bool = False
@@ -124,19 +122,3 @@ class ERayZerTrainingConfig(BaseTrainingConfig):
     gs_reg_loss_weight: float = 0.0
     perceptual_loss_weight: float = 0.0
     pose_consistency_reg_weight: float = 0.0
-
-
-class ERayZerOptimizerConfig(BaseOptimizerConfig):
-    """Optimizer configuration for ERayZer (AdamW + LR schedule).
-
-    ``schedule`` selects the LR schedule: ``onecycle`` (cosine warmup+decay) or
-    ``constant`` (fixed LR, matching the multi-view recipe). ``scale_lr_by_batch``
-    applies the linear rule ``lr * global_batch_size / 256`` so the effective LR
-    tracks the global batch across GPUs/nodes.
-    """
-
-    warmup: int = 3000
-    div_factor: float = 1.0
-    final_div_factor: float = 1.0
-    schedule: Literal['onecycle', 'constant'] = 'onecycle'
-    scale_lr_by_batch: bool = False

@@ -47,10 +47,8 @@ def run_erayzer_model_test(tmp_path, multiview_data_dir):
         config['training']['num_workers'] = 0
         config['training']['log_every_n_steps'] = 1
         config['training']['check_val_every_n_epoch'] = 1
-        # 20 steps covers 2 full epochs (9 steps each) so val + checkpoint run twice
-        config['training']['max_fwdbwd_passes'] = 20
-        # warmup must be strictly < max_fwdbwd_passes
-        config['optimizer']['warmup'] = 5
+        # 2 epochs so val + checkpoint run twice
+        config['training']['num_epochs'] = 2
 
         model = Model.from_config(config)
         try:

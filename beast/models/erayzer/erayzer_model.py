@@ -737,7 +737,6 @@ class ERayZer(BaseLightningModel):
     """
 
     _NUM_REGISTER_TOKENS = 4
-    lr_scheduler_interval = 'step'
 
     def __init__(self, config: dict) -> None:
         """Initialize ERayZer model architecture.
@@ -1128,57 +1127,6 @@ class ERayZer(BaseLightningModel):
 
         """
         return self.get_model_outputs(batch_dict)
-
-    def get_scheduler(
-        self,
-        optimizer: torch.optim.Optimizer,
-    ) -> torch.optim.lr_scheduler.LRScheduler:
-        """Build the step-based LR schedule (and optionally scale the LR by batch size).
-
-        Optionally scales the LR by the global batch size (linear rule,
-        ``lr * global_batch_size / 256``) and selects either a constant schedule
-        (matching the multi-view recipe) or OneCycleLR (cosine warmup+decay).
-
-        Parameters
-        ----------
-        optimizer: the optimizer to schedule
-
-        Returns
-        -------
-        configured learning rate scheduler
-
-        Raises
-        ------
-        ValueError: if ``optimizer.schedule`` is not 'constant' or 'onecycle'
-
-        """
-        cfg = self.config['optimizer']
-        lr = cfg['lr']
-        if cfg['scale_lr_by_batch']:
-            tcfg = self.config['training']
-            global_batch_size = (
-                tcfg['train_batch_size'] * tcfg['num_gpus'] * tcfg['num_nodes']
-            )
-            lr = lr * global_batch_size / 256
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
-
-        schedule = cfg['schedule']
-        if schedule == 'constant':
-            # fixed LR for the whole run (multi-view recipe)
-            return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda _step: 1.0)
-        if schedule == 'onecycle':
-            total_steps = self.config['training']['max_fwdbwd_passes']
-            return torch.optim.lr_scheduler.OneCycleLR(
-                optimizer,
-                max_lr=lr,
-                total_steps=total_steps,
-                pct_start=cfg['warmup'] / total_steps,
-                anneal_strategy='cos',
-                div_factor=cfg['div_factor'],
-                final_div_factor=cfg['final_div_factor'],
-            )
-        raise ValueError(f'unknown optimizer.schedule: {schedule!r}')
 
     # ------------------------------------------------------------------
     # Forward pass

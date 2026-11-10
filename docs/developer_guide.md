@@ -97,13 +97,12 @@ Each model owns its complete Pydantic schemas in its `<model>_config.py` file:
 | `VitModelConfig` | `beast_vit/beast_vit_config.py` | model section |
 | `ERayZerModelConfig` | `erayzer/erayzer_config.py` | model section |
 | `ERayZerTrainingConfig` | `erayzer/erayzer_config.py` | training section |
-| `ERayZerOptimizerConfig` | `erayzer/erayzer_config.py` | optimizer section |
 
 Shared schemas live in `beast/configs/base.py` (`BaseTrainingConfig`, `BaseOptimizerConfig`,
 `DataConfig`); it imports no model package, so model `*_config.py` files can subclass them.
-Models that share the standard training loop (resnet, vit) reuse `TrainingConfig` and
-`OptimizerConfig` from `beast/configs/models.py`. Models with divergent training behaviour
-(ERayZer, BEAST3D) subclass the base schemas in their own `*_config.py`.
+All models reuse `OptimizerConfig` from `beast/configs/models.py`, and models that share the
+standard training loop (resnet, vit) also reuse `TrainingConfig`. Models with divergent training behaviour
+(ERayZer, BEAST3D) subclass the base training schema in their own `*_config.py`.
 
 Top-level full-config classes live in `beast/configs/models.py` where they assemble model + training +
 optimizer + data schemas:
@@ -182,7 +181,7 @@ Camera tensors use the following conventions throughout:
 ### Model base class
 
 `BaseLightningModel` (`beast/models/base.py`) handles:
-- `configure_optimizers` — AdamW or Adam + `MultiStepLR` or `OneCycleLR`
+- `configure_optimizers` — AdamW or Adam + `MultiStepLR`, `OneCycleLR` (cosine) or a constant LR
 - `training_step`, `validation_step`, `test_step` — delegate to `evaluate_batch`
 - `evaluate_batch` — calls `get_model_outputs` then `compute_loss`; handles logging
 

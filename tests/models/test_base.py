@@ -67,16 +67,23 @@ class TestGetScheduler:
     """Test BaseLightningModel.get_scheduler."""
 
     @staticmethod
-    def _make_scheduler(accumulate: int, final_div_factor: float = 100.0):
+    def _make_scheduler(
+        accumulate: int,
+        final_div_factor: float = 100.0,
+        scheduler: str = 'cosine',
+        scale_lr_by_batch: bool = True,
+        train_batch_size: int = 128,
+    ):
         config = {
             'training': {
-                'train_batch_size': 128,
+                'train_batch_size': train_batch_size,
                 'num_gpus': 2,
                 'num_nodes': 1,
                 'num_epochs': 10,
             },
             'optimizer': {
-                'scheduler': 'cosine',
+                'scheduler': scheduler,
+                'scale_lr_by_batch': scale_lr_by_batch,
                 'lr': 1e-4,
                 'accumulate_grad_batches': accumulate,
                 'warmup_pct': 0.15,
@@ -106,3 +113,24 @@ class TestGetScheduler:
     def test_get_scheduler_final_lr_uses_final_div_factor(self):
         scheduler = self._make_scheduler(accumulate=1)
         assert scheduler.optimizer.param_groups[0]['min_lr'] == pytest.approx(1e-4 / 10 / 100)
+
+    def test_get_scheduler_cosine_no_scaling(self):
+        scheduler = self._make_scheduler(
+            accumulate=4, scale_lr_by_batch=False, train_batch_size=8,
+        )
+        assert scheduler.optimizer.param_groups[0]['max_lr'] == pytest.approx(1e-4)
+
+    def test_get_scheduler_constant_keeps_lr(self):
+        from torch.optim.lr_scheduler import LambdaLR
+        # scale_lr_by_batch and accumulation must not affect the constant schedule
+        scheduler = self._make_scheduler(accumulate=4, scheduler='constant', train_batch_size=8)
+        assert isinstance(scheduler, LambdaLR)
+        optimizer = scheduler.optimizer
+        for _ in range(5):
+            optimizer.step()
+            scheduler.step()
+        assert optimizer.param_groups[0]['lr'] == pytest.approx(1e-4)
+
+    def test_get_scheduler_unknown_raises(self):
+        with pytest.raises(NotImplementedError, match='bogus'):
+            self._make_scheduler(accumulate=1, scheduler='bogus')
