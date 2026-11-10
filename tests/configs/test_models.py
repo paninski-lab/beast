@@ -9,7 +9,6 @@ from beast.configs.models import (
     Beast3DBeastConfig,
     BeastConfig,
     ERayZerBeastConfig,
-    OptimizerConfig,
     TrainingConfig,
     get_beast_config_class,
 )
@@ -17,7 +16,7 @@ from beast.io import load_config
 from beast.models.beast3d.beast3d_config import Beast3DModelConfig
 from beast.models.beast_resnet.beast_resnet_config import ResnetModelParams
 from beast.models.beast_vit.beast_vit_config import VitModelParams
-from beast.models.erayzer.erayzer_config import ERayZerOptimizerConfig, ERayZerTrainingConfig
+from beast.models.erayzer.erayzer_config import ERayZerTrainingConfig
 
 _CONFIGS_DIR = Path(__file__).parent.parent.parent / 'configs'
 _NON_BEAST_CONFIG_NAMES = {'extraction_pipeline.yaml'}
@@ -50,7 +49,6 @@ _MINIMAL_ERAYZER = {
         'num_views': 3,
         'num_input_views': 2,
         'num_target_views': 1,
-        'max_fwdbwd_passes': 50000,
     },
     'optimizer': {'lr': 4e-4},
     'data': {'data_dir': '/path/to/data'},
@@ -120,23 +118,6 @@ class TestTrainingConfig:
             TrainingConfig(train_batch_size=32)  # type: ignore[call-arg]
 
 
-class TestOptimizerConfig:
-    """Test the OptimizerConfig model."""
-
-    def test_defaults_applied(self) -> None:
-        cfg = OptimizerConfig(lr=1e-4)
-        assert cfg.type == 'AdamW'
-        assert cfg.scheduler == 'cosine'
-        assert cfg.accumulate_grad_batches == 1
-        assert (cfg.beta1, cfg.beta2) == (0.9, 0.95)
-        assert cfg.warmup_pct == 0.15
-        assert cfg.steps == []
-
-    def test_missing_lr_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            OptimizerConfig()  # type: ignore[call-arg]
-
-
 class TestResnetModelParams:
     """Test the ResnetModelParams model."""
 
@@ -173,9 +154,8 @@ class TestERayZerTrainingConfig:
             num_views=3,
             num_input_views=2,
             num_target_views=1,
-            max_fwdbwd_passes=50000,
         )
-        assert cfg.num_epochs == 200
+        assert cfg.num_epochs == 800
         assert cfg.seed == 0
         assert cfg.train_fraction == 0.9
         assert cfg.l2_loss_weight == 1.0
@@ -185,23 +165,6 @@ class TestERayZerTrainingConfig:
     def test_missing_required_fields_raises(self) -> None:
         with pytest.raises(ValidationError):
             ERayZerTrainingConfig(train_batch_size=4, val_batch_size=2)  # type: ignore[call-arg]
-
-
-class TestERayZerOptimizerConfig:
-    """Test the ERayZerOptimizerConfig model."""
-
-    def test_defaults_applied(self) -> None:
-        cfg = ERayZerOptimizerConfig(lr=4e-4)
-        assert cfg.beta1 == 0.9
-        assert cfg.beta2 == 0.95
-        assert cfg.wd == 0.05
-        assert cfg.warmup == 3000
-        assert cfg.div_factor == 1.0
-        assert cfg.accumulate_grad_batches == 1
-
-    def test_missing_lr_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            ERayZerOptimizerConfig()  # type: ignore[call-arg]
 
 
 class TestERayZerBeastConfig:
@@ -219,8 +182,9 @@ class TestERayZerBeastConfig:
         config = ERayZerBeastConfig.model_validate(_MINIMAL_ERAYZER)
         dumped = config.model_dump()
         assert dumped['training']['num_views'] == 3
-        assert dumped['training']['max_fwdbwd_passes'] == 50000
         assert 'beta1' in dumped['optimizer']
+        assert 'warmup' not in dumped['optimizer']
+        assert 'max_fwdbwd_passes' not in dumped['training']
 
 
 class TestBeast3DModelConfig:

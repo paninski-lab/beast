@@ -6,6 +6,7 @@ these schemas without circular imports. Top-level config assembly and per-model 
 """
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -38,14 +39,25 @@ class BaseTrainingConfig(BaseModel):
 
 
 class BaseOptimizerConfig(BaseModel):
-    """Optimizer fields common to every model."""
+    """Optimizer and learning rate schedule fields, shared by every model."""
 
+    type: Literal['Adam', 'AdamW'] = 'AdamW'
     lr: float
     wd: float = 0.05
     # adam betas; 0.95 for beta2 follows the MAE recipe (more stable than 0.999 for transformers)
     beta1: float = 0.9
     beta2: float = 0.95
     accumulate_grad_batches: int = 1
+    scheduler: Literal['step', 'cosine', 'constant'] = 'cosine'
+    # for cosine: scale the peak lr by global batch size / 256 (including grad accumulation)
+    scale_lr_by_batch: bool = True
+    # for cosine
+    warmup_pct: float = 0.15
+    div_factor: float = 10.0
+    final_div_factor: float = 100.0
+    # for step
+    gamma: float = 0.5
+    steps: list[int] = []
 
 
 class DataConfig(BaseModel):

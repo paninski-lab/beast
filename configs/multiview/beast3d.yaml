@@ -81,12 +81,11 @@ training:
 
   train_batch_size: 8         # per GPU
   val_batch_size: 4
-  num_epochs: 1000
+  num_epochs: 800
   num_workers: 8
   num_gpus: 1
   num_nodes: 1
 
-  max_fwdbwd_passes: 152000   # total gradient steps (controls OneCycleLR span)
   grad_checkpoint_every: 1
 
   log_every_n_steps: 10
@@ -110,16 +109,19 @@ training:
   perceptual_loss_weight: 0.2
 
 # ---------------------------------------------------------------------------
-# Optimizer  (AdamW + OneCycleLR)
+# Optimizer  (AdamW + cosine schedule)
 # ---------------------------------------------------------------------------
 optimizer:
+  type: AdamW                  # AdamW | Adam
   lr: 4.0e-4
   beta1: 0.9
   beta2: 0.95
   wd: 0.05
-  warmup: 3000
-  div_factor: 1.0
-  final_div_factor: 1.0
+  scheduler: cosine           # step | cosine | constant
+  scale_lr_by_batch: false    # cosine only: scale lr by global batch size / 256
+  warmup_pct: 0.15            # cosine: fraction of training spent warming up
+  div_factor: 1.0             # cosine: initial_lr = lr / div_factor
+  final_div_factor: 1.0       # cosine: min_lr = initial_lr / final_div_factor
 
 # ---------------------------------------------------------------------------
 # Data

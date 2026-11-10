@@ -15,7 +15,7 @@ beast/
   cli/
     commands/          # One file per CLI subcommand (train, predict, extract, extract_3d)
     main.py            # Entry point; dispatches to COMMANDS registry
-  config.py            # Shared Pydantic schemas (TrainingConfig, OptimizerConfig, DataConfig,
+  config.py            # Shared Pydantic schemas (TrainingConfig, BaseOptimizerConfig, DataConfig,
                        #   BeastConfig) + per-model dispatch via get_beast_config_class()
   data/
     datasets.py        # BaseDataset, MultiViewDataset
@@ -97,13 +97,12 @@ Each model owns its complete Pydantic schemas in its `<model>_config.py` file:
 | `VitModelConfig` | `beast_vit/beast_vit_config.py` | model section |
 | `ERayZerModelConfig` | `erayzer/erayzer_config.py` | model section |
 | `ERayZerTrainingConfig` | `erayzer/erayzer_config.py` | training section |
-| `ERayZerOptimizerConfig` | `erayzer/erayzer_config.py` | optimizer section |
 
 Shared schemas live in `beast/configs/base.py` (`BaseTrainingConfig`, `BaseOptimizerConfig`,
 `DataConfig`); it imports no model package, so model `*_config.py` files can subclass them.
-Models that share the standard training loop (resnet, vit) reuse `TrainingConfig` and
-`OptimizerConfig` from `beast/configs/models.py`. Models with divergent training behaviour
-(ERayZer, BEAST3D) subclass the base schemas in their own `*_config.py`.
+All models use `BaseOptimizerConfig` as their optimizer section, and models that share the
+standard training loop (resnet, vit) reuse `TrainingConfig` from `beast/configs/models.py`.
+Models with divergent training behaviour (ERayZer, BEAST3D) subclass the base training schema in their own `*_config.py`.
 
 Top-level full-config classes live in `beast/configs/models.py` where they assemble model + training +
 optimizer + data schemas:
@@ -117,8 +116,8 @@ optimizer + data schemas:
 and `Model.from_config` use it.
 
 **Adding a model with a distinct training schema** requires:
-1. Define `<Model>TrainingConfig` (subclass `BaseTrainingConfig`) and `<Model>OptimizerConfig`
-   (subclass `BaseOptimizerConfig`) in `<model>_config.py`
+1. Define `<Model>TrainingConfig` (subclass `BaseTrainingConfig`) in `<model>_config.py`, and
+   subclass `BaseOptimizerConfig` only if the model needs extra optimizer fields
 2. Define `<Model>BeastConfig` in `beast/configs/models.py`
 3. Add `'<model_class>': <Model>BeastConfig` to `_MODEL_CONFIG_CLASSES` in `beast/configs/models.py`
 
@@ -182,7 +181,7 @@ Camera tensors use the following conventions throughout:
 ### Model base class
 
 `BaseLightningModel` (`beast/models/base.py`) handles:
-- `configure_optimizers` — AdamW or Adam + `MultiStepLR` or `OneCycleLR`
+- `configure_optimizers` — AdamW or Adam + `MultiStepLR`, `OneCycleLR` (cosine) or a constant LR
 - `training_step`, `validation_step`, `test_step` — delegate to `evaluate_batch`
 - `evaluate_batch` — calls `get_model_outputs` then `compute_loss`; handles logging
 
@@ -228,9 +227,9 @@ beast/models/beast3d/
 ### 2. Write `beast3d_config.py`
 
 Define all Pydantic schemas the model needs. If the model shares the standard training loop
-(BaseDataModule + epoch-based training), import and reuse `TrainingConfig` and `OptimizerConfig`
-from `beast.configs.models`. If it needs different training fields, define `Beast3DTrainingConfig` and
-`Beast3DOptimizerConfig` here.
+(BaseDataModule + epoch-based training), import and reuse `TrainingConfig` from
+`beast.configs.models`. If it needs different training fields, define `Beast3DTrainingConfig`
+here. The optimizer section is always `BaseOptimizerConfig` unless the model needs extra fields.
 
 ```python
 from typing import Literal
@@ -307,7 +306,7 @@ CONFIG_REGISTRY['beast3d'] = Beast3DModelConfig
 
 ### 7. Update `beast/configs/models.py`
 
-**If the model uses `BeastConfig`** (shared `TrainingConfig` + `OptimizerConfig`): add
+**If the model uses `BeastConfig`** (shared `TrainingConfig` + `BaseOptimizerConfig`): add
 `Beast3DModelConfig` to the `ModelConfig` union so `BeastConfig` can validate it:
 
 ```python
@@ -317,7 +316,7 @@ ModelConfig = Annotated[
 ]
 ```
 
-**If the model needs its own training/optimizer schemas**: import them and assemble a new
+**If the model needs its own training schema**: import them and assemble a new
 full-config class, then add it to `_MODEL_CONFIG_CLASSES`:
 
 ```python
@@ -326,7 +325,7 @@ from beast.models.beast3d.beast3d_config import Beast3DModelConfig  # (already i
 class Beast3DBeastConfig(BaseModel):
     model: Beast3DModelConfig
     training: Beast3DTrainingConfig
-    optimizer: Beast3DOptimizerConfig
+    optimizer: BaseOptimizerConfig
     data: DataConfig
     inference: bool = False
 

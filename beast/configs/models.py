@@ -7,13 +7,13 @@ Top-level config classes
 ------------------------
 BeastConfig
     Used for models that share the standard training loop (resnet, vit).
-    Contains TrainingConfig, OptimizerConfig, and DataConfig.
+    Contains TrainingConfig, BaseOptimizerConfig, and DataConfig.
 
 ERayZerBeastConfig, Beast3DBeastConfig
-    Used for ERayZer and BEAST3D.  Contain ERayZerTrainingConfig and ERayZerOptimizerConfig.
+    Used for ERayZer and BEAST3D.  Contain ERayZerTrainingConfig.
 
-TrainingConfig / OptimizerConfig here are the standard epoch-based-loop schemas; they extend the
-base schemas in ``beast.configs.base``.
+TrainingConfig here is the standard epoch-based-loop schema; it extends the base schema in
+``beast.configs.base``. Every model uses ``BaseOptimizerConfig`` unchanged.
 
 Per-model dispatch
 ------------------
@@ -31,8 +31,8 @@ normalization must be idempotent because dumped configs are re-validated when a 
 reloaded.
 
 To add a new model with a divergent training schema:
-  1. Define <Model>TrainingConfig (subclass BaseTrainingConfig) and <Model>OptimizerConfig
-     (subclass BaseOptimizerConfig) in the model's *_config.py
+  1. Define <Model>TrainingConfig (subclass BaseTrainingConfig) in the model's *_config.py
+     (and subclass BaseOptimizerConfig only if the model needs extra optimizer fields)
   2. Define <Model>BeastConfig here
   3. Add 'model_class': <Model>BeastConfig to _MODEL_CONFIG_CLASSES
 """
@@ -47,17 +47,13 @@ from beast.configs.base import BaseOptimizerConfig, BaseTrainingConfig, DataConf
 from beast.models.beast3d.beast3d_config import Beast3DModelConfig
 from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
 from beast.models.beast_vit.beast_vit_config import VitModelConfig
-from beast.models.erayzer.erayzer_config import (
-    ERayZerModelConfig,
-    ERayZerOptimizerConfig,
-    ERayZerTrainingConfig,
-)
+from beast.models.erayzer.erayzer_config import ERayZerModelConfig, ERayZerTrainingConfig
 
 
 class BeastConfig(BaseModel):
     model: ModelConfig
     training: TrainingConfig
-    optimizer: OptimizerConfig
+    optimizer: BaseOptimizerConfig
     data: DataConfig
     inference: bool = False
 
@@ -76,26 +72,12 @@ class TrainingConfig(BaseTrainingConfig):
     val_probability: float = 0.05
 
 
-class OptimizerConfig(BaseOptimizerConfig):
-    """Optimizer config for models using the standard epoch-based loop (resnet, vit)."""
-
-    type: Literal['Adam', 'AdamW'] = 'AdamW'
-    scheduler: Literal['step', 'cosine'] = 'cosine'
-    # for cosine
-    warmup_pct: float = 0.15
-    div_factor: float = 10.0
-    final_div_factor: float = 100.0
-    # for step
-    gamma: float = 0.5
-    steps: list[int] = []
-
-
 class ERayZerBeastConfig(BaseModel):
     """Complete top-level config for ERayZer training runs."""
 
     model: ERayZerModelConfig
     training: ERayZerTrainingConfig
-    optimizer: ERayZerOptimizerConfig
+    optimizer: BaseOptimizerConfig
     data: DataConfig
     inference: bool = False
 
@@ -109,7 +91,7 @@ class Beast3DBeastConfig(BaseModel):
 
     model: Beast3DModelConfig
     training: ERayZerTrainingConfig
-    optimizer: ERayZerOptimizerConfig
+    optimizer: BaseOptimizerConfig
     data: DataConfig
     inference: bool = False
 

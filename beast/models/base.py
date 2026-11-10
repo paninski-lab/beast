@@ -8,7 +8,7 @@ from typing import Literal
 import lightning.pytorch as pl
 import torch
 from lightning.pytorch.utilities import rank_zero_only
-from torch.optim.lr_scheduler import MultiStepLR, OneCycleLR
+from torch.optim.lr_scheduler import LambdaLR, MultiStepLR, OneCycleLR
 
 _logger = logging.getLogger(__name__)
 
@@ -47,24 +47,26 @@ class BaseLightningModel(ABC, pl.LightningModule):
         configured learning rate scheduler
 
         """
-        scheduler = self.config['optimizer']['scheduler']
-        if scheduler == 'step':
+        name = self.config['optimizer']['scheduler']
+        scheduler: torch.optim.lr_scheduler.LRScheduler
+        if name == 'step':
             # define a scheduler that reduces the base learning rate at predefined steps
             scheduler = MultiStepLR(
                 optimizer=optimizer,
                 milestones=self.config['optimizer']['steps'],
                 gamma=self.config['optimizer']['gamma'],
             )
-        elif scheduler == 'cosine':
-            # compute max learning rate
-            # base lr is per 256 images of effective batch (linear scaling rule)
-            global_batch_size = (
-                self.config['training']['train_batch_size']
-                * self.config['training']['num_gpus']
-                * self.config['training']['num_nodes']
-                * self.config['optimizer']['accumulate_grad_batches']
-            )
-            max_lr = self.config['optimizer']['lr'] * global_batch_size / 256
+        elif name == 'cosine':
+            # base learning rate is per 256 images of effective batch (linear scaling rule)
+            max_lr = self.config['optimizer']['lr']
+            if self.config['optimizer']['scale_lr_by_batch']:
+                global_batch_size = (
+                    self.config['training']['train_batch_size']
+                    * self.config['training']['num_gpus']
+                    * self.config['training']['num_nodes']
+                    * self.config['optimizer']['accumulate_grad_batches']
+                )
+                max_lr = max_lr * global_batch_size / 256
             scheduler = OneCycleLR(
                 optimizer=optimizer,
                 max_lr=max_lr,
@@ -75,8 +77,11 @@ class BaseLightningModel(ABC, pl.LightningModule):
                 div_factor=self.config['optimizer']['div_factor'],
                 final_div_factor=self.config['optimizer']['final_div_factor'],
             )
+        elif name == 'constant':
+            # fixed learning rate for the whole run; never scaled by batch size
+            scheduler = LambdaLR(optimizer=optimizer, lr_lambda=lambda _epoch: 1.0)
         else:
-            raise NotImplementedError(f'{scheduler} scheduler is not yet implemented')
+            raise NotImplementedError(f'{name} scheduler is not yet implemented')
         return scheduler
 
     def get_parameters(self) -> Iterator:

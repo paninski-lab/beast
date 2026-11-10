@@ -34,7 +34,6 @@ def _make_valid_erayzer_config() -> dict:
             'num_views': 3,
             'num_input_views': 2,
             'num_target_views': 1,
-            'max_fwdbwd_passes': 100000,
         },
         'optimizer': {'lr': 1e-4},
         'data': {'data_dir': '/path/to/data'},

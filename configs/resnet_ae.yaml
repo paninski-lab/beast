@@ -39,11 +39,12 @@ training:
 optimizer:
   type: AdamW
   accumulate_grad_batches: 1
+  scale_lr_by_batch: true  # cosine only: scale lr by global batch size (incl. accumulation) / 256
   lr: 5.e-4
   wd: 0.05
   beta1: 0.9   # adam betas; beta2=0.95 follows the MAE recipe
   beta2: 0.95
-  scheduler: cosine  # {step, cosine}
+  scheduler: cosine  # {step, cosine, constant}
   warmup_pct: 0.15   # for cosine
   div_factor: 10     # for cosine
   final_div_factor: 100  # for cosine; final lr = lr * batch/256 / div_factor / final_div_factor

@@ -120,10 +120,8 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         datamodule.setup()
         if rank_zero_only.rank == 0:
             log_step('MultiViewDataModule created', level='debug')
-        # ERayZer schedules by steps; max_fwdbwd_passes drives OneCycleLR directly
-        trainer_epoch_kwargs: dict = {
-            'max_steps': config['training']['max_fwdbwd_passes'],
-        }
+        num_epochs = config['training']['num_epochs']
+        trainer_epoch_kwargs: dict = {'max_epochs': num_epochs, 'min_epochs': num_epochs}
         use_distributed_sampler = True
     else:
         # imgaug transform
