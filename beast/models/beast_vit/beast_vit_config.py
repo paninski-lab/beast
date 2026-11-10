@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, model_validator
 
+from beast.config import BaseBeastConfig, BaseTrainingConfig
+
 # encoder/decoder shapes for each named backbone; the MAE paper uses the same decoder for all
 _DECODER: dict[str, int] = {
     'decoder_hidden_size': 512,
@@ -155,3 +157,10 @@ class VitModelConfig(BaseModel):
     model_params: VitModelParams
     seed: int = 0
     checkpoint: str | None = None
+
+
+class VitBeastConfig(BaseBeastConfig):
+    """Complete top-level config for ViT autoencoder training runs."""
+
+    model: VitModelConfig
+    training: BaseTrainingConfig

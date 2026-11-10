@@ -92,7 +92,7 @@ training:
   viz_every_n_epochs: null
   viz_num_frames: 8  # number of (evenly spaced, fixed) validation scenes to visualize
 
-  train_fraction: 0.9         # fraction of samples used for training (rest = validation)
+  train_probability: 0.9      # fraction of samples used for training (rest = validation)
   random_split: false         # randomize input/target partition order per batch
   random_inputs: false        # randomize which views are used as input
   render_interpolate: false   # render an interpolated video trajectory at eval time

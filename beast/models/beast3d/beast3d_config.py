@@ -3,12 +3,13 @@
 BEAST3D is an ERayZer subclass, so its model config inherits every ERayZer model
 field and adds only the BEAST3D-specific knobs (DINOv3 tokenizer, frustum
 constraint, mask/alpha supervision, random-background compositing). Training and
-optimizer schemas are shared with ERayZer; see ``beast.configs.models.Beast3DBeastConfig``.
+optimizer schemas are shared with ERayZer; see ``Beast3DBeastConfig`` below.
 """
 
 from typing import Literal
 
-from beast.models.erayzer.erayzer_config import ERayZerModelConfig
+from beast.config import BaseBeastConfig
+from beast.models.erayzer.erayzer_config import ERayZerModelConfig, ERayZerTrainingConfig
 
 
 class Beast3DModelConfig(ERayZerModelConfig):
@@ -35,3 +36,13 @@ class Beast3DModelConfig(ERayZerModelConfig):
     # supervise the rendered alpha against the foreground mask
     random_background: bool = True
     mask_loss_weight: float = 0.1
+
+
+class Beast3DBeastConfig(BaseBeastConfig):
+    """Complete top-level config for BEAST3D training runs.
+
+    BEAST3D reuses ERayZer's training schema; only the model section differs.
+    """
+
+    model: Beast3DModelConfig
+    training: ERayZerTrainingConfig

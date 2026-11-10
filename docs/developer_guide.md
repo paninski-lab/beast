@@ -15,8 +15,8 @@ beast/
   cli/
     commands/          # One file per CLI subcommand (train, predict, extract, extract_3d)
     main.py            # Entry point; dispatches to COMMANDS registry
-  config.py            # Shared Pydantic schemas (TrainingConfig, BaseOptimizerConfig, DataConfig,
-                       #   BeastConfig) + per-model dispatch via get_beast_config_class()
+  config.py            # Shared Pydantic schemas (BaseTrainingConfig, BaseOptimizerConfig,
+                       #   DataConfig, BaseBeastConfig)
   data/
     datasets.py        # BaseDataset, MultiViewDataset
     datamodules.py     # BaseDataModule, MultiViewDataModule
@@ -33,7 +33,7 @@ beast/
   logging.py           # log_step() helper
   models/
     base.py            # BaseLightningModel (abstract; all models inherit from this)
-    registry.py        # MODEL_REGISTRY, TRAIN_REGISTRY, CONFIG_REGISTRY + _register_all()
+    registry.py        # MODEL/TRAIN/CONFIG_REGISTRY, get_*() lookups + _register_all()
     beast_resnet/      # Per-model package — see "Model package layout" below
     beast_vit/
     erayzer/
@@ -62,7 +62,7 @@ CLI / user script
      ▼
 beast.io.load_config(path)
      │  reads YAML → peeks at model.model_class
-     │  → get_beast_config_class(model_class) → appropriate Pydantic config class
+     │  → get_config_class(model_class) → CONFIG_REGISTRY[model_class] (<Model>BeastConfig)
      │  → model_validate(raw) → model_dump() → plain dict
      ▼
 beast.api.model.Model.from_config(config)
@@ -93,33 +93,32 @@ Each model owns its complete Pydantic schemas in its `<model>_config.py` file:
 
 | Schema | Location | Purpose |
 |---|---|---|
-| `ResnetModelConfig` | `beast_resnet/beast_resnet_config.py` | model section |
-| `VitModelConfig` | `beast_vit/beast_vit_config.py` | model section |
-| `ERayZerModelConfig` | `erayzer/erayzer_config.py` | model section |
+| `ResnetModelConfig` / `ResnetBeastConfig` | `beast_resnet/beast_resnet_config.py` | model section / top-level config |
+| `VitModelConfig` / `VitBeastConfig` | `beast_vit/beast_vit_config.py` | model section / top-level config |
+| `ERayZerModelConfig` / `ERayZerBeastConfig` | `erayzer/erayzer_config.py` | model section / top-level config |
 | `ERayZerTrainingConfig` | `erayzer/erayzer_config.py` | training section |
+| `Beast3DModelConfig` / `Beast3DBeastConfig` | `beast3d/beast3d_config.py` | model section / top-level config |
 
-Shared schemas live in `beast/configs/base.py` (`BaseTrainingConfig`, `BaseOptimizerConfig`,
-`DataConfig`); it imports no model package, so model `*_config.py` files can subclass them.
-All models use `BaseOptimizerConfig` as their optimizer section, and models that share the
-standard training loop (resnet, vit) reuse `TrainingConfig` from `beast/configs/models.py`.
-Models with divergent training behaviour (ERayZer, BEAST3D) subclass the base training schema in their own `*_config.py`.
+Shared schemas live in `beast/config.py`: `BaseTrainingConfig`, `BaseOptimizerConfig`,
+`DataConfig`, and `BaseBeastConfig` (the optimizer, data and inference fields every top-level
+config has). It imports no model package, so model `*_config.py` files can subclass them.
+Each `<Model>BeastConfig` subclasses `BaseBeastConfig` and adds its `model` and `training`
+sections. Most models use `BaseTrainingConfig` and `BaseOptimizerConfig` unchanged; models with
+extra training fields (ERayZer, BEAST3D) subclass `BaseTrainingConfig`.
 
-Top-level full-config classes live in `beast/configs/models.py` where they assemble model + training +
-optimizer + data schemas:
+`imgaug` and `val_probability` in `BaseTrainingConfig` only apply to models trained with
+`BaseDataModule`; the multi-view models (ERayZer, BEAST3D) ignore them and use `train_probability`
+as the train fraction (the rest is validation).
 
-- `BeastConfig` — used for `resnet` and `vit`
-- `ERayZerBeastConfig` — used for `erayzer` (and subclasses like BEAST3D if they share the
-  same training schema)
-
-`get_beast_config_class(model_class)` in `beast/configs/models.py` is the single dispatch point. It returns
-`ERayZerBeastConfig` for `'erayzer'` and `BeastConfig` for everything else. Both `load_config`
-and `Model.from_config` use it.
+`get_config_class(model_class)` in `beast/models/registry.py` is the single dispatch point:
+it looks up `CONFIG_REGISTRY` and raises `ValueError` if
+`model.model_class` is missing or unregistered. Both `load_config` and `Model.from_config` use it.
 
 **Adding a model with a distinct training schema** requires:
-1. Define `<Model>TrainingConfig` (subclass `BaseTrainingConfig`) in `<model>_config.py`, and
-   subclass `BaseOptimizerConfig` only if the model needs extra optimizer fields
-2. Define `<Model>BeastConfig` in `beast/configs/models.py`
-3. Add `'<model_class>': <Model>BeastConfig` to `_MODEL_CONFIG_CLASSES` in `beast/configs/models.py`
+1. Define `<Model>TrainingConfig` (subclass `BaseTrainingConfig`) and `<Model>BeastConfig`
+   (subclass `BaseBeastConfig`) in `<model>_config.py`; subclass `BaseOptimizerConfig` only if the
+   model needs extra optimizer fields
+2. Register `CONFIG_REGISTRY['<model_class>'] = <Model>BeastConfig` in `beast/models/registry.py`
 
 ---
 
@@ -150,7 +149,7 @@ names).
 ```python
 MODEL_REGISTRY: dict[str, type]           # model_class → LightningModule subclass
 TRAIN_REGISTRY: dict[str, Callable]       # model_class → train function
-CONFIG_REGISTRY: dict[str, type[BaseModel]] # model_class → model-section config class
+CONFIG_REGISTRY: dict[str, type[BaseModel]] # model_class → top-level <Model>BeastConfig
 ```
 
 `_register_all()` runs at import time (bottom of `registry.py`). To add a new model, add
@@ -226,20 +225,26 @@ beast/models/beast3d/
 
 ### 2. Write `beast3d_config.py`
 
-Define all Pydantic schemas the model needs. If the model shares the standard training loop
-(BaseDataModule + epoch-based training), import and reuse `TrainingConfig` from
-`beast.configs.models`. If it needs different training fields, define `Beast3DTrainingConfig`
-here. The optimizer section is always `BaseOptimizerConfig` unless the model needs extra fields.
+Define all Pydantic schemas the model needs: the model section and the top-level
+`<Model>BeastConfig`. If the model needs extra training fields, also define a
+`Beast3DTrainingConfig` (subclass of `BaseTrainingConfig`); otherwise use `BaseTrainingConfig`.
+The optimizer section is `BaseOptimizerConfig` unless the model needs extra fields.
 
 ```python
 from typing import Literal
 from pydantic import BaseModel
+
+from beast.config import BaseBeastConfig, BaseTrainingConfig
 
 class Beast3DModelConfig(BaseModel):
     model_class: Literal['beast3d']
     seed: int = 0
     checkpoint: str | None = None
     # ... model-specific fields ...
+
+class Beast3DBeastConfig(BaseBeastConfig):
+    model: Beast3DModelConfig
+    training: BaseTrainingConfig  # or Beast3DTrainingConfig
 ```
 
 Follow the ERayZer configs as a reference for a fully typed example.
@@ -283,11 +288,11 @@ has the same signature.
 Re-export the public API of the package:
 
 ```python
-from beast.models.beast3d.beast3d_config import Beast3DModelConfig
+from beast.models.beast3d.beast3d_config import Beast3DBeastConfig, Beast3DModelConfig
 from beast.models.beast3d.beast3d_model import Beast3D
 from beast.models.beast3d.beast3d_train import train
 
-__all__ = ['Beast3D', 'Beast3DModelConfig', 'train']
+__all__ = ['Beast3D', 'Beast3DBeastConfig', 'Beast3DModelConfig', 'train']
 ```
 
 ### 6. Register the model in `beast/models/registry.py`
@@ -295,56 +300,29 @@ __all__ = ['Beast3D', 'Beast3DModelConfig', 'train']
 Add three imports and three dict assignments inside `_register_all()`:
 
 ```python
-from beast.models.beast3d.beast3d_config import Beast3DModelConfig
+from beast.models.beast3d.beast3d_config import Beast3DBeastConfig
 from beast.models.beast3d.beast3d_model import Beast3D
 from beast.models.beast3d.beast3d_train import train as beast3d_train
 
 MODEL_REGISTRY['beast3d'] = Beast3D
 TRAIN_REGISTRY['beast3d'] = beast3d_train
-CONFIG_REGISTRY['beast3d'] = Beast3DModelConfig
+CONFIG_REGISTRY['beast3d'] = Beast3DBeastConfig
 ```
 
-### 7. Update `beast/configs/models.py`
-
-**If the model uses `BeastConfig`** (shared `TrainingConfig` + `BaseOptimizerConfig`): add
-`Beast3DModelConfig` to the `ModelConfig` union so `BeastConfig` can validate it:
-
-```python
-ModelConfig = Annotated[
-    ResnetModelConfig | VitModelConfig | Beast3DModelConfig,
-    Field(discriminator='model_class'),
-]
-```
-
-**If the model needs its own training schema**: import them and assemble a new
-full-config class, then add it to `_MODEL_CONFIG_CLASSES`:
-
-```python
-from beast.models.beast3d.beast3d_config import Beast3DModelConfig  # (already imported above)
-
-class Beast3DBeastConfig(BaseModel):
-    model: Beast3DModelConfig
-    training: Beast3DTrainingConfig
-    optimizer: BaseOptimizerConfig
-    data: DataConfig
-    inference: bool = False
-
-_MODEL_CONFIG_CLASSES['beast3d'] = Beast3DBeastConfig
-```
-
-### 8. Add a YAML config file
+### 7. Add a YAML config file
 
 Create `configs/multiview/beast3d.yaml` (or `configs/beast3d.yaml` for non-multiview models).
 Keep it alongside its `model_class: beast3d` sibling configs. It will be automatically picked
 up by `TestConfigFiles` in `tests/test_config.py`.
 
-### 9. Write tests
+### 8. Write tests
 
 Mirror the source tree under `tests/`:
 
 ```
 tests/models/beast3d/
   __init__.py
+  test_beast3d_config.py
   test_beast3d_model.py
 ```
 
@@ -383,6 +361,6 @@ To add a CLI subcommand for a new model operation, add a new module there.
 - Test class names: `Test<FunctionOrClassName>`
 - Fixture shared across a directory: `conftest.py` in that directory
 - External test data is downloaded by `tests/conftest.py` at import time via `fetch_test_data_if_needed`
-- All YAML files in `configs/` are validated automatically by `TestConfigFiles` in `tests/test_config.py`
-  (files listed in `_NON_BEAST_CONFIG_NAMES` are excluded, e.g. `extraction_pipeline.yaml`
-  which uses `Beast3DConfig` rather than `BeastConfig`)
+- All YAML files in `configs/` are validated automatically by `TestConfigFiles` in
+  `tests/test_config.py` (files listed in `_NON_BEAST_CONFIG_NAMES` are excluded, e.g.
+  `extraction_pipeline.yaml` which uses `Beast3DConfig` rather than a `<Model>BeastConfig`)

@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
-from pydantic import ValidationError
 
 from beast.api.model import Model, chdir
 
@@ -110,7 +109,7 @@ class TestModelFromConfig:
 
     def test_unknown_model_type_raises(self) -> None:
         config = _make_valid_config('unknown_arch')
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValueError, match='unknown_arch'):
             Model.from_config(config)
 
     def test_dict_config_erayzer(self) -> None:
@@ -176,10 +175,9 @@ class TestModelFromDir:
         mock_instance.load_state_dict.assert_called_once_with({'layer': 'weights'})
 
     def test_unknown_model_type_raises(self, tmp_path: Path) -> None:
-        # load_config rejects unknown model_class at the Pydantic discriminated-union level
-        # before the MODEL_REGISTRY check is reached
+        # load_config rejects an unregistered model_class before the MODEL_REGISTRY check
         self._write_config(tmp_path, 'unknown_arch')
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValueError, match='unknown_arch'):
             Model.from_dir(tmp_path)
 
     def test_accepts_string_path(self, tmp_path: Path) -> None:

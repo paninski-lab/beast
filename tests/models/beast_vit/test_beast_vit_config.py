@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from beast.models.beast_vit.beast_vit_config import (
     LEGACY_PRETRAINED,
     VIT_BACKBONES,
+    VitBeastConfig,
     VitModelParams,
     get_pretrained_repo,
     resolve_vit_params,
@@ -104,3 +105,32 @@ class TestVitModelParams:
     def test_vit_model_params_small_without_random_init_raises(self):
         with pytest.raises(ValidationError, match='random_init'):
             VitModelParams(backbone='vit-s')
+
+
+class TestVitBeastConfig:
+    """Test the VitBeastConfig model."""
+
+    _RAW = {
+        'model': {'model_class': 'vit', 'model_params': {}},
+        'training': {'train_batch_size': 32, 'val_batch_size': 64},
+        'optimizer': {'lr': 1e-4},
+        'data': {'data_dir': '/path/to/data'},
+    }
+
+    def test_valid_config(self) -> None:
+        VitBeastConfig.model_validate(self._RAW)
+
+    def test_wrong_model_class_raises(self) -> None:
+        raw = {**self._RAW, 'model': {'model_class': 'resnet', 'model_params': {}}}
+        with pytest.raises(ValidationError):
+            VitBeastConfig.model_validate(raw)
+
+    def test_missing_data_raises(self) -> None:
+        raw = {k: v for k, v in self._RAW.items() if k != 'data'}
+        with pytest.raises(ValidationError):
+            VitBeastConfig.model_validate(raw)
+
+    def test_model_dump_fills_defaults(self) -> None:
+        dumped = VitBeastConfig.model_validate(self._RAW).model_dump()
+        assert dumped['optimizer']['scheduler'] == 'cosine'
+        assert dumped['training']['val_probability'] == 0.05

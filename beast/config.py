@@ -1,8 +1,17 @@
 """Shared pydantic schemas reused by every model's config.
 
 This module must not import any model package, so that model ``*_config.py`` files can subclass
-these schemas without circular imports. Top-level config assembly and per-model dispatch live in
-``beast.configs.models``.
+these schemas without circular imports. Top-level configs (``<Model>BeastConfig``) live in each
+model's ``*_config.py``, and ``beast.models.registry.get_config_class`` maps a ``model_class``
+string to the right one.
+
+Load flow
+---------
+yaml -> beast.io.load_config -> model_validate -> model_dump() -> plain nested dict. Defaults
+are filled in by validation, so consumers (train.py, models) can index fields directly. Some
+schemas normalize their input in a ``mode='before'`` validator, e.g. ``VitModelParams`` expands
+``backbone: vit-l`` into explicit architecture fields; such normalization must be idempotent
+because dumped configs are re-validated when a saved model is reloaded.
 """
 
 from pathlib import Path
@@ -36,6 +45,13 @@ class BaseTrainingConfig(BaseModel):
     # save validation visualizations every n epochs
     viz_every_n_epochs: int | None = None
     viz_num_frames: int = 108
+    # fraction of samples used for training; the remainder is held out for validation (and test
+    # for models trained with BaseDataModule)
+    train_probability: float = 0.95
+    # BaseDataModule models only: fraction used for validation; multi-view models ignore this
+    val_probability: float = 0.05
+    # BaseDataModule models only: augmentation pipeline; multi-view models ignore this
+    imgaug: Literal['none', 'default', 'top-down'] = 'default'
 
 
 class BaseOptimizerConfig(BaseModel):
@@ -64,3 +80,15 @@ class DataConfig(BaseModel):
     """Data section; extend or replace for richer data configs."""
 
     data_dir: str | Path
+
+
+class BaseBeastConfig(BaseModel):
+    """Top-level config fields common to every model.
+
+    Each model's ``*_config.py`` subclasses this and adds its own ``model`` and ``training``
+    sections (the optimizer section is shared unless the model needs extra fields).
+    """
+
+    optimizer: BaseOptimizerConfig
+    data: DataConfig
+    inference: bool = False
