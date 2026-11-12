@@ -238,3 +238,23 @@ class TestMspsVae:
         model.return_reconstructions = False
         result = model.predict_step(batch_dict, 0)
         assert 'reconstructions' not in result
+
+
+class TestGetVizPanels:
+    """Test MspsVae.get_viz_panels."""
+
+    def test_panels_shapes_and_range(self, config_msps_vae) -> None:
+        config = copy.deepcopy(config_msps_vae)
+        model = MspsVae(config)
+        model.eval()
+        panels = model.get_viz_panels({'image': torch.randn(2, 3, 224, 224)})
+        assert len(panels) == 2
+        for panel in panels:
+            assert panel.shape == (2, 3, 224, 224)
+            assert panel.min() >= 0 and panel.max() <= 1
+
+    def test_panels_without_video_key(self, config_msps_vae) -> None:
+        # validation batches may not carry the triplet-sampler 'video' key
+        model = MspsVae(copy.deepcopy(config_msps_vae))
+        model.eval()
+        assert len(model.get_viz_panels({'image': torch.randn(1, 3, 224, 224)})) == 2
