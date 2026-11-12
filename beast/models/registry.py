@@ -38,7 +38,7 @@ def _register_all() -> None:
     from beast.models.erayzer.erayzer_config import ERayZerBeastConfig
     from beast.models.erayzer.erayzer_model import ERayZer
     from beast.models.erayzer.erayzer_train import train as erayzer_train
-    from beast.models.msps_vae.msps_vae_config import MspsVaeModelConfig
+    from beast.models.msps_vae.msps_vae_config import MspsVaeBeastConfig
     from beast.models.msps_vae.msps_vae_model import MspsVae
     from beast.models.msps_vae.msps_vae_train import train as msps_vae_train
 
@@ -60,7 +60,7 @@ def _register_all() -> None:
 
     MODEL_REGISTRY['msps_vae'] = MspsVae
     TRAIN_REGISTRY['msps_vae'] = msps_vae_train
-    CONFIG_REGISTRY['msps_vae'] = MspsVaeModelConfig
+    CONFIG_REGISTRY['msps_vae'] = MspsVaeBeastConfig
 
 
 def get_model_class(model_class: str) -> type:

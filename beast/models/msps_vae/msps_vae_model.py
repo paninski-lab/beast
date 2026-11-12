@@ -21,8 +21,6 @@ from beast.models.beast_resnet.beast_resnet_model import (
     get_configs,
 )
 
-DEFAULT_SPATIAL_LOSS_WEIGHT_R0 = 0.5
-
 
 def build_raised_cosine_weight_map(side: int, r0: float) -> torch.Tensor:
     """Build a mean-1-normalized raised-cosine radial weight map for spatial loss weighting.
@@ -152,11 +150,11 @@ class MspsVae(BaseLightningModel):
             seed=params['orthogonal_matrix_seed'],
         )
 
-        self.use_spatial_loss_weight = params.get('use_spatial_loss_weight', False)
+        self.use_spatial_loss_weight = params['use_spatial_loss_weight']
         if self.use_spatial_loss_weight:
             weight_map = build_raised_cosine_weight_map(
                 side=params['image_size'],
-                r0=params.get('spatial_loss_weight_r0', DEFAULT_SPATIAL_LOSS_WEIGHT_R0),
+                r0=params['spatial_loss_weight_r0'],
             )
             self.register_buffer('spatial_loss_weight_map', weight_map)
 

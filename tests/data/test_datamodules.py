@@ -205,13 +205,14 @@ class TestTrainFrames:
 
     @staticmethod
     def _make(base_dataset, train_frames, use_sampler=False):
+        sampler_kind = 'contrastive' if use_sampler else 'none'
         dm = BaseDataModule(
             dataset=base_dataset,
             train_probability=0.8,
             val_probability=0.1,
             test_probability=0.1,
             train_frames=train_frames,
-            use_sampler=use_sampler,
+            sampler_kind=sampler_kind,
             num_workers=0,
         )
         dm.setup()

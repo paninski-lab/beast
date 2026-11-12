@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from beast.config import BaseBeastConfig, BaseTrainingConfig
+
 
 class MspsVaeModelParams(BaseModel):
     """Parameters for the MSPS-VAE backbone and latent partitioning."""
@@ -34,3 +36,10 @@ class MspsVaeModelConfig(BaseModel):
     model_params: MspsVaeModelParams
     seed: int = 0
     checkpoint: str | None = None
+
+
+class MspsVaeBeastConfig(BaseBeastConfig):
+    """Complete top-level config for MSPS-VAE training runs."""
+
+    model: MspsVaeModelConfig
+    training: BaseTrainingConfig

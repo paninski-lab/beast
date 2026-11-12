@@ -145,8 +145,10 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         # datamodule; breaks up dataset into train/val/test
         if rank_zero_only.rank == 0:
             log_step('Creating BaseDataModule', level='debug')
+        positive_window = 1000  # only used by the triplet sampler
         if model_class == 'msps_vae':
             sampler_kind = 'triplet'
+            positive_window = config['model']['model_params']['positive_window']
         elif config['model']['model_params'].get('use_infoNCE', False):
             sampler_kind = 'contrastive'
         else:
@@ -157,7 +159,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
             val_batch_size=config['training']['val_batch_size'],
             test_batch_size=config['training']['test_batch_size'],
             sampler_kind=sampler_kind,
-            positive_window=config['model']['model_params'].get('positive_window', 1000),
+            positive_window=positive_window,
             num_workers=config['training']['num_workers'],
             train_probability=config['training']['train_probability'],
             val_probability=config['training']['val_probability'],
