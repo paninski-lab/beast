@@ -119,6 +119,9 @@ class OrthogonalSplit(nn.Module):
 class MspsVae(BaseLightningModel):
     """MSPS-VAE model: ResNet autoencoder with an orthogonally-partitioned bottleneck."""
 
+    # registered via register_buffer only when use_spatial_loss_weight is True
+    spatial_loss_weight_map: torch.Tensor
+
     def __init__(self, config: dict) -> None:
         """Initialize encoder, decoder, and orthogonally-split latent bottleneck.
 

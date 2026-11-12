@@ -1000,10 +1000,14 @@ class TestTripletCollateFn:
         assert 'idx' in result
         assert 'video' in result
 
-        assert result['image'].shape == (4, 3, 224, 224)
-        assert result['idx'].shape == (4,)
+        images = result['image']
+        idxs = result['idx']
+        assert isinstance(images, torch.Tensor)
+        assert isinstance(idxs, torch.Tensor)
+        assert images.shape == (4, 3, 224, 224)
+        assert idxs.shape == (4,)
 
         # organized as [ref1, ref2, pos1, pos2]
         expected_indices = torch.tensor([0, 2, 1, 3])
-        assert torch.allclose(result['idx'], expected_indices)
+        assert torch.allclose(idxs, expected_indices)
         assert result['video'] == ['v1', 'v2', 'v1', 'v2']

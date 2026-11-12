@@ -1,11 +1,16 @@
 """Tests for beast.models.msps_vae.msps_vae_config."""
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
 from beast.models.msps_vae.msps_vae_config import MspsVaeBeastConfig, MspsVaeModelParams
 
-_MINIMAL_MODEL_PARAMS = {'num_latents_unsupervised': 8, 'num_latents_background': 4}
+_MINIMAL_MODEL_PARAMS: dict[str, Any] = {
+    'num_latents_unsupervised': 8,
+    'num_latents_background': 4,
+}
 
 _MINIMAL_MSPS_VAE = {
     'model': {'model_class': 'msps_vae', 'model_params': _MINIMAL_MODEL_PARAMS},
