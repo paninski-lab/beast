@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "beast-backbones"
-version = "2.0.0"  # Update the version according to your source
+version = "2.0.3"  # Update the version according to your source
 description = "Behavioral analysis via self-supervised pretraining of transformers"
 license = "MIT"
 readme = "README.md"
@@ -45,7 +45,8 @@ dependencies = [
     "toml",
     "torchvision",
     "tqdm",
-    "transformers",
+    # upper bound: newer releases restructure ViTMAE (see docs/roadmap.md)
+    "transformers<5.9",
     "typing_extensions",
 ]
 

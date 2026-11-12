@@ -1,24 +1,12 @@
-"""Tests for Pydantic configuration models."""
+"""Tests for beast.config."""
 
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
-from beast.config import (
-    Beast3DBeastConfig,
-    BeastConfig,
-    ERayZerBeastConfig,
-    OptimizerConfig,
-    TrainingConfig,
-    get_beast_config_class,
-)
+from beast.config import BaseBeastConfig, BaseOptimizerConfig, BaseTrainingConfig
 from beast.io import load_config
-from beast.models.beast3d.beast3d_config import Beast3DModelConfig
-from beast.models.beast_resnet.beast_resnet_config import ResnetModelParams
-from beast.models.beast_vit.beast_vit_config import VitModelParams
-from beast.models.erayzer.erayzer_config import ERayZerOptimizerConfig, ERayZerTrainingConfig
-from beast.models.msps_vae.msps_vae_config import MspsVaeModelParams
+from beast.models.erayzer.erayzer_config import ERayZerTrainingConfig
 
 _CONFIGS_DIR = Path(__file__).parent.parent / 'configs'
 _NON_BEAST_CONFIG_NAMES = {'extraction_pipeline.yaml'}
@@ -26,293 +14,82 @@ _CONFIG_FILES = sorted(
     p for p in _CONFIGS_DIR.rglob('*.yaml') if p.name not in _NON_BEAST_CONFIG_NAMES
 )
 
-_MINIMAL_RESNET = {
-    'model': {'model_class': 'resnet', 'model_params': {}},
-    'training': {'train_batch_size': 32, 'val_batch_size': 64},
-    'optimizer': {'lr': 1e-4},
-    'data': {'data_dir': '/path/to/data'},
-}
 
-_MINIMAL_VIT = {
-    'model': {'model_class': 'vit', 'model_params': {}},
-    'training': {'train_batch_size': 32, 'val_batch_size': 64},
-    'optimizer': {'lr': 1e-4},
-    'data': {'data_dir': '/path/to/data'},
-}
+class TestBaseTrainingConfig:
+    """Test the shared training schema and its subclasses."""
 
-_MINIMAL_MSPS_VAE = {
-    'model': {
-        'model_class': 'msps_vae',
-        'model_params': {'num_latents_unsupervised': 8, 'num_latents_background': 4},
-    },
-    'training': {'train_batch_size': 32, 'val_batch_size': 64},
-    'optimizer': {'lr': 1e-4},
-    'data': {'data_dir': '/path/to/data'},
-}
+    def test_base_training_config_subclasses(self):
+        assert issubclass(ERayZerTrainingConfig, BaseTrainingConfig)
 
-_MINIMAL_ERAYZER = {
-    'model': {
-        'model_class': 'erayzer',
-        'transformer': {'d': 256, 'd_head': 64, 'encoder_geom_n_layer': 4},
-    },
-    'training': {
-        'train_batch_size': 4,
-        'val_batch_size': 2,
-        'num_views': 3,
-        'num_input_views': 2,
-        'num_target_views': 1,
-        'max_fwdbwd_passes': 50000,
-    },
-    'optimizer': {'lr': 4e-4},
-    'data': {'data_dir': '/path/to/data'},
-}
+    def test_base_training_config_shared_fields_present_everywhere(self):
+        shared = set(BaseTrainingConfig.model_fields)
+        assert shared <= set(ERayZerTrainingConfig.model_fields)
 
-_MIN_TRANSFORMER = {'d': 768, 'd_head': 64, 'encoder_geom_n_layer': 16}
+    def test_base_training_config_requires_batch_sizes(self):
+        with pytest.raises(ValueError):
+            BaseTrainingConfig()  # type: ignore[call-arg]
+
+    def test_base_training_config_subclass_default_overrides(self):
+        std = BaseTrainingConfig(train_batch_size=4, val_batch_size=4)
+        ray = ERayZerTrainingConfig(
+            train_batch_size=4,
+            val_batch_size=4,
+            num_views=4,
+            num_input_views=2,
+            num_target_views=2,
+        )
+        assert (std.num_epochs, std.check_val_every_n_epoch, std.viz_num_frames) == (800, 5, 108)
+        assert (ray.num_epochs, ray.check_val_every_n_epoch, ray.viz_num_frames) == (800, 1, 8)
+        assert ray.train_frames is None and ray.precision == '32-true'
+        assert (std.train_probability, ray.train_probability) == (0.95, 0.9)
+
+    def test_base_training_config_split_and_augmentation_defaults(self):
+        cfg = BaseTrainingConfig(train_batch_size=4, val_batch_size=4)
+        assert (cfg.train_probability, cfg.val_probability, cfg.imgaug) == (0.95, 0.05, 'default')
+        with pytest.raises(ValueError):
+            BaseTrainingConfig(
+                train_batch_size=4, val_batch_size=4, imgaug='bogus',  # type: ignore[arg-type]
+            )
 
 
-class TestBeastConfig:
-    """Test the BeastConfig model."""
+class TestBaseOptimizerConfig:
+    """Test the shared optimizer schema."""
 
-    def test_valid_resnet_config(self) -> None:
-        # Arrange / Act / Assert
-        BeastConfig.model_validate(_MINIMAL_RESNET)
-
-    def test_valid_vit_config(self) -> None:
-        BeastConfig.model_validate(_MINIMAL_VIT)
-
-    def test_valid_msps_vae_config(self) -> None:
-        BeastConfig.model_validate(_MINIMAL_MSPS_VAE)
-
-    def test_msps_vae_missing_required_latent_params_raises(self) -> None:
-        raw = {**_MINIMAL_MSPS_VAE, 'model': {'model_class': 'msps_vae', 'model_params': {}}}
-        with pytest.raises(ValidationError):
-            BeastConfig.model_validate(raw)
-
-    def test_unknown_model_class_raises(self) -> None:
-        raw = {**_MINIMAL_RESNET, 'model': {'model_class': 'unknown', 'model_params': {}}}
-        with pytest.raises(ValidationError):
-            BeastConfig.model_validate(raw)
-
-    def test_missing_train_batch_size_raises(self) -> None:
-        raw = {**_MINIMAL_VIT, 'training': {'val_batch_size': 64}}
-        with pytest.raises(ValidationError):
-            BeastConfig.model_validate(raw)
-
-    def test_missing_optimizer_raises(self) -> None:
-        raw = {k: v for k, v in _MINIMAL_VIT.items() if k != 'optimizer'}
-        with pytest.raises(ValidationError):
-            BeastConfig.model_validate(raw)
-
-    def test_missing_data_raises(self) -> None:
-        raw = {k: v for k, v in _MINIMAL_VIT.items() if k != 'data'}
-        with pytest.raises(ValidationError):
-            BeastConfig.model_validate(raw)
-
-    def test_model_dump_returns_plain_dicts(self) -> None:
-        config = BeastConfig.model_validate(_MINIMAL_VIT)
-        dumped = config.model_dump()
-        assert isinstance(dumped, dict)
-        assert isinstance(dumped['model'], dict)
-        assert isinstance(dumped['model']['model_params'], dict)
-        assert isinstance(dumped['training'], dict)
-        assert isinstance(dumped['optimizer'], dict)
-
-
-class TestTrainingConfig:
-    """Test the TrainingConfig model."""
-
-    def test_defaults_applied(self) -> None:
-        cfg = TrainingConfig(train_batch_size=32, val_batch_size=64)
-        assert cfg.seed == 0
-        assert cfg.num_gpus == 1
-        assert cfg.num_nodes == 1
-        assert cfg.num_workers == 8
-        assert cfg.train_probability == 0.95
-        assert cfg.ckpt_every_n_epochs is None
-
-    def test_missing_train_batch_size_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            TrainingConfig(val_batch_size=64)  # type: ignore[call-arg]
-
-    def test_missing_val_batch_size_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            TrainingConfig(train_batch_size=32)  # type: ignore[call-arg]
-
-
-class TestOptimizerConfig:
-    """Test the OptimizerConfig model."""
-
-    def test_defaults_applied(self) -> None:
-        cfg = OptimizerConfig(lr=1e-4)
+    def test_defaults_applied(self):
+        cfg = BaseOptimizerConfig(lr=1e-4)
         assert cfg.type == 'AdamW'
         assert cfg.scheduler == 'cosine'
         assert cfg.accumulate_grad_batches == 1
+        assert (cfg.beta1, cfg.beta2) == (0.9, 0.95)
         assert cfg.warmup_pct == 0.15
         assert cfg.steps == []
+        assert cfg.scale_lr_by_batch is True
 
-    def test_missing_lr_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            OptimizerConfig()  # type: ignore[call-arg]
+    def test_constant_scheduler_accepted(self):
+        assert BaseOptimizerConfig(lr=1e-4, scheduler='constant').scheduler == 'constant'
 
+    def test_unknown_scheduler_raises(self):
+        with pytest.raises(ValueError):
+            BaseOptimizerConfig(lr=1e-4, scheduler='bogus')  # type: ignore[arg-type]
 
-class TestResnetModelParams:
-    """Test the ResnetModelParams model."""
-
-    def test_defaults_applied(self) -> None:
-        cfg = ResnetModelParams()
-        assert cfg.backbone == 'resnet18'
-        assert cfg.num_latents is None
-        assert cfg.image_size == 224
-        assert cfg.num_channels == 3
-
-    def test_invalid_backbone_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            ResnetModelParams(backbone='resnet9')  # type: ignore[arg-type]
+    def test_base_optimizer_config_requires_lr(self):
+        with pytest.raises(ValueError):
+            BaseOptimizerConfig()  # type: ignore[call-arg]
 
 
-class TestVitModelParams:
-    """Test the VitModelParams model."""
+class TestBaseBeastConfig:
+    """Test the shared top-level config fields."""
 
-    def test_defaults_applied(self) -> None:
-        cfg = VitModelParams()
-        assert cfg.hidden_size == 768
-        assert cfg.mask_ratio == 0.75
-        assert cfg.use_infoNCE is False
-        assert cfg.use_perceptual_loss is False
+    def test_fields(self):
+        assert set(BaseBeastConfig.model_fields) == {'optimizer', 'data', 'inference'}
 
-
-class TestMspsVaeModelParams:
-    """Test the MspsVaeModelParams model."""
-
-    def test_defaults_applied(self) -> None:
-        cfg = MspsVaeModelParams(num_latents_unsupervised=8, num_latents_background=4)
-        assert cfg.backbone == 'resnet18'
-        assert cfg.triplet_margin == 1.0
-        assert cfg.triplet_weight == 1.0
-        assert cfg.positive_window == 1000
-        assert cfg.orthogonal_matrix_seed == 42
-
-    def test_missing_required_fields_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            MspsVaeModelParams()  # type: ignore[call-arg]
-
-
-class TestERayZerTrainingConfig:
-    """Test the ERayZerTrainingConfig model."""
-
-    def test_defaults_applied(self) -> None:
-        cfg = ERayZerTrainingConfig(
-            train_batch_size=4,
-            val_batch_size=2,
-            num_views=3,
-            num_input_views=2,
-            num_target_views=1,
-            max_fwdbwd_passes=50000,
+    def test_requires_optimizer_and_data(self):
+        with pytest.raises(ValueError):
+            BaseBeastConfig.model_validate({'optimizer': {'lr': 1e-4}})
+        cfg = BaseBeastConfig.model_validate(
+            {'optimizer': {'lr': 1e-4}, 'data': {'data_dir': '/x'}},
         )
-        assert cfg.num_epochs == 200
-        assert cfg.seed == 0
-        assert cfg.train_fraction == 0.9
-        assert cfg.l2_loss_weight == 1.0
-        assert cfg.random_split is False
-        assert cfg.ckpt_every_n_epochs is None
-
-    def test_missing_required_fields_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            ERayZerTrainingConfig(train_batch_size=4, val_batch_size=2)  # type: ignore[call-arg]
-
-
-class TestERayZerOptimizerConfig:
-    """Test the ERayZerOptimizerConfig model."""
-
-    def test_defaults_applied(self) -> None:
-        cfg = ERayZerOptimizerConfig(lr=4e-4)
-        assert cfg.beta1 == 0.9
-        assert cfg.beta2 == 0.95
-        assert cfg.wd == 0.05
-        assert cfg.warmup == 3000
-        assert cfg.div_factor == 1.0
-        assert cfg.accumulate_grad_batches == 1
-
-    def test_missing_lr_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            ERayZerOptimizerConfig()  # type: ignore[call-arg]
-
-
-class TestERayZerBeastConfig:
-    """Test the ERayZerBeastConfig model."""
-
-    def test_valid_config(self) -> None:
-        ERayZerBeastConfig.model_validate(_MINIMAL_ERAYZER)
-
-    def test_missing_required_training_field_raises(self) -> None:
-        raw = {**_MINIMAL_ERAYZER, 'training': {'train_batch_size': 4, 'val_batch_size': 2}}
-        with pytest.raises(ValidationError):
-            ERayZerBeastConfig.model_validate(raw)
-
-    def test_model_dump_contains_erayzer_fields(self) -> None:
-        config = ERayZerBeastConfig.model_validate(_MINIMAL_ERAYZER)
-        dumped = config.model_dump()
-        assert dumped['training']['num_views'] == 3
-        assert dumped['training']['max_fwdbwd_passes'] == 50000
-        assert 'beta1' in dumped['optimizer']
-
-
-class TestBeast3DModelConfig:
-    """Test the Beast3DModelConfig schema."""
-
-    def test_valid_config_defaults(self) -> None:
-        cfg = Beast3DModelConfig.model_validate(
-            {'model_class': 'beast3d', 'transformer': _MIN_TRANSFORMER},
-        )
-        assert cfg.model_class == 'beast3d'
-        assert cfg.use_dinov3 is True
-        assert cfg.freeze_dinov3 is True
-        assert cfg.frustum_constraint is True
-        assert cfg.random_background is True
-        assert cfg.mask_loss_weight == 0.1
-
-    def test_wrong_model_class_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            Beast3DModelConfig.model_validate(
-                {'model_class': 'erayzer', 'transformer': _MIN_TRANSFORMER},
-            )
-
-    def test_missing_transformer_raises(self) -> None:
-        with pytest.raises(ValidationError):
-            Beast3DModelConfig.model_validate({'model_class': 'beast3d'})
-
-    def test_inherits_erayzer_fields(self) -> None:
-        # hard_pixelalign and gaussians come from the ERayZer base config
-        cfg = Beast3DModelConfig.model_validate(
-            {'model_class': 'beast3d', 'transformer': _MIN_TRANSFORMER, 'hard_pixelalign': True},
-        )
-        assert cfg.hard_pixelalign is True
-        assert cfg.gaussians.sh_degree == 3
-
-
-class TestGetBeastConfigClass:
-    """Test the get_beast_config_class dispatcher."""
-
-    def test_erayzer_returns_erayzer_beast_config(self) -> None:
-        assert get_beast_config_class('erayzer') is ERayZerBeastConfig
-
-    def test_beast3d_returns_beast3d_beast_config(self) -> None:
-        assert get_beast_config_class('beast3d') is Beast3DBeastConfig
-
-    def test_resnet_falls_back_to_beast_config(self) -> None:
-        assert get_beast_config_class('resnet') is BeastConfig
-
-    def test_vit_falls_back_to_beast_config(self) -> None:
-        assert get_beast_config_class('vit') is BeastConfig
-
-    def test_msps_vae_falls_back_to_beast_config(self) -> None:
-        assert get_beast_config_class('msps_vae') is BeastConfig
-
-    def test_unknown_falls_back_to_beast_config(self) -> None:
-        assert get_beast_config_class('totally_unknown_model') is BeastConfig
-
-    def test_empty_string_falls_back_to_beast_config(self) -> None:
-        assert get_beast_config_class('') is BeastConfig
+        assert cfg.inference is False
 
 
 class TestConfigFiles:

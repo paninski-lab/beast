@@ -1,144 +1,94 @@
-"""Pydantic schemas for BEAST configuration validation and per-model dispatch.
+"""Shared pydantic schemas reused by every model's config.
 
-Top-level config classes
-------------------------
-BeastConfig
-    Used for models that share the standard training loop (resnet, vit).
-    Contains TrainingConfig, OptimizerConfig, and DataConfig.
+This module must not import any model package, so that model ``*_config.py`` files can subclass
+these schemas without circular imports. Top-level configs (``<Model>BeastConfig``) live in each
+model's ``*_config.py``, and ``beast.models.registry.get_config_class`` maps a ``model_class``
+string to the right one.
 
-ERayZerBeastConfig
-    Used for ERayZer and its subclasses (e.g. BEAST3D if they share ERayZer's
-    training schema).  Contains ERayZerTrainingConfig and ERayZerOptimizerConfig.
-
-Shared schemas (reusable for new models)
------------------------------------------
-TrainingConfig     — standard epoch-based training fields (batch sizes, epochs, imgaug, …)
-OptimizerConfig    — AdamW/Adam + cosine/step scheduler fields
-DataConfig         — data_dir only; extend or replace for richer data configs
-
-Per-model dispatch
-------------------
-get_beast_config_class(model_class) returns the correct top-level config class for a
-given model_class string.  Both beast.io.load_config and beast.api.model.Model.from_config
-use this function so that YAML files and raw dicts are validated against the right schema.
-
-To add a new model with a divergent training schema:
-  1. Define <Model>TrainingConfig and <Model>OptimizerConfig in the model's *_config.py
-  2. Define <Model>BeastConfig here (avoids circular imports since DataConfig lives here)
-  3. Add 'model_class': <Model>BeastConfig to _MODEL_CONFIG_CLASSES
+Load flow
+---------
+yaml -> beast.io.load_config -> model_validate -> model_dump() -> plain nested dict. Defaults
+are filled in by validation, so consumers (train.py, models) can index fields directly. Some
+schemas normalize their input in a ``mode='before'`` validator, e.g. ``VitModelParams`` expands
+``backbone: vit-l`` into explicit architecture fields; such normalization must be idempotent
+because dumped configs are re-validated when a saved model is reloaded.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field
-
-from beast.models.beast3d.beast3d_config import Beast3DModelConfig
-from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
-from beast.models.beast_vit.beast_vit_config import VitModelConfig
-from beast.models.erayzer.erayzer_config import (
-    ERayZerModelConfig,
-    ERayZerOptimizerConfig,
-    ERayZerTrainingConfig,
-)
-from beast.models.msps_vae.msps_vae_config import MspsVaeModelConfig
+from pydantic import BaseModel
 
 
-class BeastConfig(BaseModel):
-    model: ModelConfig
-    training: TrainingConfig
-    optimizer: OptimizerConfig
-    data: DataConfig
-    inference: bool = False
+class BaseTrainingConfig(BaseModel):
+    """Training fields common to every model.
 
+    Model families subclass this to add their own fields and to override defaults that differ
+    (e.g. ``num_epochs``, ``check_val_every_n_epoch``, ``viz_num_frames``).
+    """
 
-ModelConfig = Annotated[
-    ResnetModelConfig | VitModelConfig | MspsVaeModelConfig,
-    Field(discriminator='model_class'),
-]
-
-
-class TrainingConfig(BaseModel):
     train_batch_size: int
     val_batch_size: int
     test_batch_size: int = 128
     num_epochs: int = 800
     seed: int = 0
-    imgaug: Literal['none', 'default', 'top-down'] = 'default'
     num_workers: int = 8
     num_gpus: int = 1
     num_nodes: int = 1
     log_every_n_steps: int = 10
     check_val_every_n_epoch: int = 5
-    train_probability: float = 0.95
-    val_probability: float = 0.05
+    precision: str = '32-true'
+    # train on the first N frames (int) or fraction (0-1) of the train split; None uses all
+    train_frames: int | float | None = None
+    # also save a checkpoint every n epochs, in addition to the best-val checkpoint
     ckpt_every_n_epochs: int | None = None
+    # save validation visualizations every n epochs
+    viz_every_n_epochs: int | None = None
+    viz_num_frames: int = 108
+    # fraction of samples used for training; the remainder is held out for validation (and test
+    # for models trained with BaseDataModule)
+    train_probability: float = 0.95
+    # BaseDataModule models only: fraction used for validation; multi-view models ignore this
+    val_probability: float = 0.05
+    # BaseDataModule models only: augmentation pipeline; multi-view models ignore this
+    imgaug: Literal['none', 'default', 'top-down'] = 'default'
 
 
-class OptimizerConfig(BaseModel):
-    lr: float
+class BaseOptimizerConfig(BaseModel):
+    """Optimizer and learning rate schedule fields, shared by every model."""
+
     type: Literal['Adam', 'AdamW'] = 'AdamW'
+    lr: float
     wd: float = 0.05
-    scheduler: Literal['step', 'cosine'] = 'cosine'
+    # adam betas; 0.95 for beta2 follows the MAE recipe (more stable than 0.999 for transformers)
+    beta1: float = 0.9
+    beta2: float = 0.95
     accumulate_grad_batches: int = 1
+    scheduler: Literal['step', 'cosine', 'constant'] = 'cosine'
+    # for cosine: scale the peak lr by global batch size / 256 (including grad accumulation)
+    scale_lr_by_batch: bool = True
     # for cosine
     warmup_pct: float = 0.15
     div_factor: float = 10.0
-    final_div_factor: float = 1.0
+    final_div_factor: float = 100.0
     # for step
     gamma: float = 0.5
     steps: list[int] = []
 
 
 class DataConfig(BaseModel):
+    """Data section; extend or replace for richer data configs."""
+
     data_dir: str | Path
 
 
-class ERayZerBeastConfig(BaseModel):
-    """Complete top-level config for ERayZer training runs."""
+class BaseBeastConfig(BaseModel):
+    """Top-level config fields common to every model.
 
-    model: ERayZerModelConfig
-    training: ERayZerTrainingConfig
-    optimizer: ERayZerOptimizerConfig
-    data: DataConfig
-    inference: bool = False
-
-
-class Beast3DBeastConfig(BaseModel):
-    """Complete top-level config for BEAST3D training runs.
-
-    BEAST3D reuses ERayZer's training and optimizer schemas; only the model
-    section differs (see beast.models.beast3d.beast3d_config.Beast3DModelConfig).
+    Each model's ``*_config.py`` subclasses this and adds its own ``model`` and ``training``
+    sections (the optimizer section is shared unless the model needs extra fields).
     """
 
-    model: Beast3DModelConfig
-    training: ERayZerTrainingConfig
-    optimizer: ERayZerOptimizerConfig
+    optimizer: BaseOptimizerConfig
     data: DataConfig
     inference: bool = False
-
-
-_MODEL_CONFIG_CLASSES: dict[str, type[BaseModel]] = {
-    'erayzer': ERayZerBeastConfig,
-    'beast3d': Beast3DBeastConfig,
-}
-
-
-def get_beast_config_class(model_class: str) -> type[BaseModel]:
-    """Return the top-level Pydantic config class for the given model_class identifier.
-
-    Parameters
-    ----------
-    model_class: model type identifier string (e.g., 'resnet', 'vit', 'erayzer')
-
-    Returns
-    -------
-    Pydantic model class for the full top-level config
-
-    """
-    return _MODEL_CONFIG_CLASSES.get(model_class, BeastConfig)
-
-
-BeastConfig.model_rebuild()

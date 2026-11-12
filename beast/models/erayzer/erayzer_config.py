@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from beast.config import BaseBeastConfig, BaseTrainingConfig
+
 
 class ERayZerImageTokenizerConfig(BaseModel):
     """Patch tokenizer configuration."""
@@ -96,22 +98,14 @@ class ERayZerModelConfig(BaseModel):
     use_deferred_rendering: bool = False
 
 
-class ERayZerTrainingConfig(BaseModel):
+class ERayZerTrainingConfig(BaseTrainingConfig):
     """Training configuration for ERayZer."""
 
-    train_batch_size: int
-    val_batch_size: int
-    test_batch_size: int = 128
-    num_epochs: int = 200
-    seed: int = 0
-    num_workers: int = 8
-    num_gpus: int = 1
-    num_nodes: int = 1
-    log_every_n_steps: int = 10
+    # overrides of the shared defaults
     check_val_every_n_epoch: int = 1
-    ckpt_every_n_epochs: int | None = None
-    viz_every_n_epochs: int = 1
-    precision: str = '32-true'
+    viz_num_frames: int = 8
+    train_probability: float = 0.9
+
     num_views: int
     num_input_views: int
     num_target_views: int
@@ -120,9 +114,7 @@ class ERayZerTrainingConfig(BaseModel):
     max_input_views: int = 5
     target_view_range: list[int] | None = None
     freeze_focal_steps: int = 0
-    max_fwdbwd_passes: int
     grad_checkpoint_every: int = 1
-    train_fraction: float = 0.9
     random_split: bool = False
     random_inputs: bool = False
     render_interpolate: bool = False
@@ -132,22 +124,8 @@ class ERayZerTrainingConfig(BaseModel):
     pose_consistency_reg_weight: float = 0.0
 
 
-class ERayZerOptimizerConfig(BaseModel):
-    """Optimizer configuration for ERayZer (AdamW + LR schedule).
+class ERayZerBeastConfig(BaseBeastConfig):
+    """Complete top-level config for ERayZer training runs."""
 
-    ``schedule`` selects the LR schedule: ``onecycle`` (cosine warmup+decay) or
-    ``constant`` (fixed LR, matching the multi-view recipe). ``scale_lr_by_batch``
-    applies the linear rule ``lr * global_batch_size / 256`` so the effective LR
-    tracks the global batch across GPUs/nodes.
-    """
-
-    lr: float
-    beta1: float = 0.9
-    beta2: float = 0.95
-    wd: float = 0.05
-    warmup: int = 3000
-    div_factor: float = 1.0
-    final_div_factor: float = 1.0
-    accumulate_grad_batches: int = 1
-    schedule: Literal['onecycle', 'constant'] = 'onecycle'
-    scale_lr_by_batch: bool = False
+    model: ERayZerModelConfig
+    training: ERayZerTrainingConfig

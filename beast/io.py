@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 from aniposelib.cameras import CameraGroup as CameraGroupAnipose
 
-from beast.config import get_beast_config_class
+from beast.models.registry import get_config_class
 from beast.preprocess.config_3d import Beast3DConfig
 
 _logger = logging.getLogger(__name__)
@@ -22,7 +22,14 @@ def load_config(path: str | Path) -> dict:
 
     Returns
     -------
-    nested configuration dictionary
+    nested configuration dictionary with all schema defaults filled in
+
+    Notes
+    -----
+    The yaml is validated against the pydantic schema selected by ``model.model_class`` (see
+    ``beast.models.registry.get_config_class``) and then dumped back to a plain dict.
+    Downstream code can therefore index config fields directly instead of using ``.get``
+    with defaults.
 
     """
 
@@ -37,7 +44,7 @@ def load_config(path: str | Path) -> dict:
     # dispatch to the appropriate config class based on model_class, then validate;
     # raises ValidationError on missing required fields, wrong types, or invalid Literals
     model_class = (raw.get('model') or {}).get('model_class', '')
-    config_cls = get_beast_config_class(model_class)
+    config_cls = get_config_class(model_class)
     validated = config_cls.model_validate(raw)
 
     # convert back to a plain nested dict so callers don't depend on pydantic types;

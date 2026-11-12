@@ -4,12 +4,12 @@ Three dicts are populated by _register_all() at import time:
 
   MODEL_REGISTRY   model_class str → LightningModule subclass
   TRAIN_REGISTRY   model_class str → train(config, model, output_dir) callable
-  CONFIG_REGISTRY  model_class str → model-section Pydantic config class
+  CONFIG_REGISTRY  model_class str → top-level Pydantic config class (``<Model>BeastConfig``)
 
 To register a new model, add three lines inside _register_all():
   MODEL_REGISTRY['<name>']  = <ModelClass>
   TRAIN_REGISTRY['<name>']  = <train_fn>
-  CONFIG_REGISTRY['<name>'] = <ModelConfigClass>
+  CONFIG_REGISTRY['<name>'] = <Model>BeastConfig
 
 See docs/developer_guide.md for the full step-by-step checklist.
 """
@@ -26,16 +26,16 @@ CONFIG_REGISTRY: dict[str, type[BaseModel]] = {}
 
 def _register_all() -> None:
     """Import all model packages so they can populate the registries."""
-    from beast.models.beast3d.beast3d_config import Beast3DModelConfig
+    from beast.models.beast3d.beast3d_config import Beast3DBeastConfig
     from beast.models.beast3d.beast3d_model import Beast3D
     from beast.models.beast3d.beast3d_train import train as beast3d_train
-    from beast.models.beast_resnet.beast_resnet_config import ResnetModelConfig
+    from beast.models.beast_resnet.beast_resnet_config import ResnetBeastConfig
     from beast.models.beast_resnet.beast_resnet_model import ResnetAutoencoder
     from beast.models.beast_resnet.beast_resnet_train import train as resnet_train
-    from beast.models.beast_vit.beast_vit_config import VitModelConfig
+    from beast.models.beast_vit.beast_vit_config import VitBeastConfig
     from beast.models.beast_vit.beast_vit_model import VisionTransformer
     from beast.models.beast_vit.beast_vit_train import train as vit_train
-    from beast.models.erayzer.erayzer_config import ERayZerModelConfig
+    from beast.models.erayzer.erayzer_config import ERayZerBeastConfig
     from beast.models.erayzer.erayzer_model import ERayZer
     from beast.models.erayzer.erayzer_train import train as erayzer_train
     from beast.models.msps_vae.msps_vae_config import MspsVaeModelConfig
@@ -44,19 +44,19 @@ def _register_all() -> None:
 
     MODEL_REGISTRY['resnet'] = ResnetAutoencoder
     TRAIN_REGISTRY['resnet'] = resnet_train
-    CONFIG_REGISTRY['resnet'] = ResnetModelConfig
+    CONFIG_REGISTRY['resnet'] = ResnetBeastConfig
 
     MODEL_REGISTRY['vit'] = VisionTransformer
     TRAIN_REGISTRY['vit'] = vit_train
-    CONFIG_REGISTRY['vit'] = VitModelConfig
+    CONFIG_REGISTRY['vit'] = VitBeastConfig
 
     MODEL_REGISTRY['erayzer'] = ERayZer
     TRAIN_REGISTRY['erayzer'] = erayzer_train
-    CONFIG_REGISTRY['erayzer'] = ERayZerModelConfig
+    CONFIG_REGISTRY['erayzer'] = ERayZerBeastConfig
 
     MODEL_REGISTRY['beast3d'] = Beast3D
     TRAIN_REGISTRY['beast3d'] = beast3d_train
-    CONFIG_REGISTRY['beast3d'] = Beast3DModelConfig
+    CONFIG_REGISTRY['beast3d'] = Beast3DBeastConfig
 
     MODEL_REGISTRY['msps_vae'] = MspsVae
     TRAIN_REGISTRY['msps_vae'] = msps_vae_train
@@ -109,6 +109,33 @@ def get_train_fn(model_class: str) -> Callable[..., Any]:
             f'Registered: {sorted(TRAIN_REGISTRY)}'
         )
     return TRAIN_REGISTRY[model_class]
+
+
+def get_config_class(model_class: str) -> type[BaseModel]:
+    """Return the top-level Pydantic config class for the given model_class string.
+
+    Both ``beast.io.load_config`` and ``beast.api.model.Model.from_config`` use this, so yaml
+    files and raw dicts are validated against the right schema.
+
+    Parameters
+    ----------
+    model_class: model type identifier string (e.g., 'resnet', 'vit', 'erayzer')
+
+    Returns
+    -------
+    Pydantic model class for the full top-level config
+
+    Raises
+    ------
+    ValueError: if model_class is empty or not registered
+
+    """
+    if model_class not in CONFIG_REGISTRY:
+        raise ValueError(
+            f'Unknown or missing model.model_class {model_class!r}. '
+            f'Registered: {sorted(CONFIG_REGISTRY)}'
+        )
+    return CONFIG_REGISTRY[model_class]
 
 
 _register_all()

@@ -35,9 +35,9 @@ def run_erayzer_model_test(tmp_path, multiview_data_dir):
     Mirrors run_model_test from tests/conftest.py but uses MultiViewDataModule
     for both training and inference, since ERayZer requires multi-view input.
 
-    The fixture sets up a minimal step count so that at least one full training
-    epoch (and therefore one validation run + best-checkpoint save) completes
-    within the multiview test fixtures (20 frames, batch_size=2 → 9 steps/epoch).
+    The fixture trains for 2 epochs so that validation and best-checkpoint saving
+    run at least twice within the multiview test fixtures (20 frames, batch_size=2
+    → 9 steps/epoch).
     """
     def _run(config: dict) -> None:
         config = copy.deepcopy(config)
@@ -47,10 +47,8 @@ def run_erayzer_model_test(tmp_path, multiview_data_dir):
         config['training']['num_workers'] = 0
         config['training']['log_every_n_steps'] = 1
         config['training']['check_val_every_n_epoch'] = 1
-        # 20 steps covers 2 full epochs (9 steps each) so val + checkpoint run twice
-        config['training']['max_fwdbwd_passes'] = 20
-        # warmup must be strictly < max_fwdbwd_passes
-        config['optimizer']['warmup'] = 5
+        # 2 epochs so val + checkpoint run twice
+        config['training']['num_epochs'] = 2
 
         model = Model.from_config(config)
         try:

@@ -1,6 +1,7 @@
 """Tests for beast.models.erayzer.erayzer_model components."""
 
 import copy
+import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -715,6 +716,21 @@ class TestERayZerIntegration:
         config['training']['perceptual_loss_weight'] = 0.1
         run_erayzer_model_test(config=config)
 
+    def test_integration_validation_viz(
+        self, config_erayzer, run_erayzer_model_test, tmp_path,
+    ) -> None:
+        """Test that viz_every_n_epochs writes render sheets and camera plots."""
+        config = copy.deepcopy(config_erayzer)
+        config['training']['viz_every_n_epochs'] = 1
+        config['training']['viz_num_frames'] = 2
+        run_erayzer_model_test(config=config)
+        out_dir = next(tmp_path.rglob('val_images'))
+        assert list(out_dir.glob('epoch_*_renders_00.png'))
+        assert list(out_dir.glob('epoch_*_cameras.png'))
+        # the point cloud needs the optional trimesh dependency
+        if importlib.util.find_spec('trimesh') is not None:
+            assert list((out_dir / 'pointclouds').glob('epoch_*.glb'))
+
 
 # ---------------------------------------------------------------------------
 # TestFilterInitStateDict
@@ -844,108 +860,6 @@ class TestResolveViewIndices:
             assert set(in_idx[0].tolist()).isdisjoint(tgt_idx[0].tolist())
             input_sets.add(tuple(sorted(in_idx[0].tolist())))
         assert len(input_sets) >= 2  # the input/target assignment varies
-
-
-class TestValidationVisuals:
-    """Test ERayZer validation-visualization guards (no GPU/model build needed)."""
-
-    def test_no_logger_is_noop(self) -> None:
-        # logger=None -> no image-capable experiment -> returns without error
-        standin = SimpleNamespace(logger=None)
-        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
-
-    def test_logger_without_add_image_is_noop(self) -> None:
-        # an experiment lacking add_image is treated as not image-capable
-        standin = SimpleNamespace(logger=SimpleNamespace(experiment=object()))
-        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
-
-    def test_forward_failure_is_swallowed(self) -> None:
-        # a capable logger but a get_model_outputs that raises must not propagate
-        class _Exp:
-            def add_image(self, *a, **k) -> None:
-                pass
-
-        def _boom(_batch) -> dict:
-            raise RuntimeError('forward exploded')
-
-        standin = SimpleNamespace(
-            logger=SimpleNamespace(experiment=_Exp()),
-            get_model_outputs=_boom,
-        )
-        ERayZer._log_validation_visuals(cast(ERayZer, standin), {})
-
-
-class TestConfigureOptimizers:
-    """Test ERayZer.configure_optimizers LR scaling + schedule selection."""
-
-    def _standin(self, opt_cfg: dict, train_cfg: dict) -> ERayZer:
-        # a duck-typed stand-in exercises configure_optimizers without a full build;
-        # cast so the unbound-method calls type-check against the real signature
-        param = nn.Parameter(torch.zeros(2))
-        return cast(ERayZer, SimpleNamespace(
-            config={'optimizer': opt_cfg, 'training': train_cfg},
-            parameters=lambda: iter([param]),
-        ))
-
-    def _train_cfg(self, **kw) -> dict:
-        cfg = {'train_batch_size': 8, 'num_gpus': 1, 'num_nodes': 1, 'max_fwdbwd_passes': 1000}
-        cfg.update(kw)
-        return cfg
-
-    def test_constant_schedule_is_lambdalr(self) -> None:
-        from torch.optim.lr_scheduler import LambdaLR
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05, 'schedule': 'constant'},
-            self._train_cfg(),
-        )
-        out = ERayZer.configure_optimizers(m)
-        assert isinstance(out['lr_scheduler']['scheduler'], LambdaLR)
-
-    def test_onecycle_schedule(self) -> None:
-        from torch.optim.lr_scheduler import OneCycleLR
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'warmup': 100,
-             'schedule': 'onecycle', 'div_factor': 10.0, 'final_div_factor': 100.0},
-            self._train_cfg(),
-        )
-        out = ERayZer.configure_optimizers(m)
-        assert isinstance(out['lr_scheduler']['scheduler'], OneCycleLR)
-
-    def test_unknown_schedule_raises(self) -> None:
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'schedule': 'bogus'},
-            self._train_cfg(),
-        )
-        with pytest.raises(ValueError, match='unknown optimizer.schedule'):
-            ERayZer.configure_optimizers(m)
-
-    def test_no_scaling_by_default(self) -> None:
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.95, 'wd': 0.05, 'schedule': 'constant'},
-            self._train_cfg(train_batch_size=8),
-        )
-        out = ERayZer.configure_optimizers(m)
-        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4)
-
-    def test_lr_batch_scaling_at_256_is_identity(self) -> None:
-        # global_batch_size = 32 * 8 * 1 = 256 -> scaled lr == base lr
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05,
-             'schedule': 'constant', 'scale_lr_by_batch': True},
-            self._train_cfg(train_batch_size=32, num_gpus=8),
-        )
-        out = ERayZer.configure_optimizers(m)
-        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4)
-
-    def test_lr_batch_scaling_small_batch(self) -> None:
-        # global_batch_size = 8 -> lr scaled down by 8/256
-        m = self._standin(
-            {'lr': 4e-4, 'beta1': 0.9, 'beta2': 0.999, 'wd': 0.05,
-             'schedule': 'constant', 'scale_lr_by_batch': True},
-            self._train_cfg(train_batch_size=8),
-        )
-        out = ERayZer.configure_optimizers(m)
-        assert out['optimizer'].param_groups[0]['lr'] == pytest.approx(4e-4 * 8 / 256)
 
 
 class TestParseHfCheckpointUrl:

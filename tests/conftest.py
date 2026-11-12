@@ -186,8 +186,6 @@ def config_erayzer(config_erayzer_path) -> dict:
     config['training']['num_input_views'] = 2
     config['training']['num_target_views'] = 1
     config['training']['grad_checkpoint_every'] = 1
-    config['training']['max_fwdbwd_passes'] = 100
-    config['optimizer']['warmup'] = 10   # must be < max_fwdbwd_passes
     return copy.deepcopy(config)
 
 
@@ -218,9 +216,7 @@ def config_beast3d(config_beast3d_path) -> dict:
     config['training']['num_input_views'] = 2
     config['training']['num_target_views'] = 1
     config['training']['grad_checkpoint_every'] = 1
-    config['training']['max_fwdbwd_passes'] = 100
     config['training']['perceptual_loss_weight'] = 0.0   # VGG needs > 8px images
-    config['optimizer']['warmup'] = 10   # must be < max_fwdbwd_passes
     return copy.deepcopy(config)
 
 

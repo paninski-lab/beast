@@ -6,7 +6,7 @@ This file contains project-specific guidelines for Claude Code when working on t
 
 ### Comments
 - Use docstrings for all functions, classes, and modules
-- Follow Google-style docstrings
+- Follow NumPy-style docstrings (`Parameters` / `Returns` / `Raises` sections with dashed underlines)
 - Add inline comments for complex logic
 - Avoid obvious comments
 - Comments should start with lowercase letters
@@ -52,6 +52,26 @@ foo(
 - Use `pathlib.Path` instead of `os` for path handling
 - Use f-strings for all string interpolation, including `logger` calls and `print` statements — never `%s` formatting or `.format()`
 
+## Environment
+
+- Always use the `beast` conda env: `/home/mattw/miniconda3/envs/beast/bin/python -m pytest ...`
+  (and likewise for other tools); the base interpreter lacks the dependencies.
+- Run the full suite with `python -m pytest tests`; it takes ~2 minutes.
+
+## Configuration
+
+- Configs flow yaml -> `beast.io.load_config` -> pydantic validation (shared schemas in
+  `beast/config.py`, per-model sections and top-level `<Model>BeastConfig` classes in each
+  `beast/models/<model>/<model>_config.py`, dispatch via `get_config_class` and
+  `CONFIG_REGISTRY` in `beast/models/registry.py`) -> `model_dump()` -> plain nested dict.
+  Models and `train.py` read that dict, so every field with a default is already filled in: index required/defaulted fields directly
+  (`config['training']['seed']`) instead of `.get(key, default)`, which duplicates defaults.
+- Adding a config field means: add it to the pydantic schema (`BaseTrainingConfig` in
+  `beast/config.py` if it applies to every model), add it with a comment to every shipped yaml in
+  `configs/`, and add a test.
+- `ckpt_every_n_epochs`, `viz_every_n_epochs`, `train_frames`, etc. live under `training`;
+  `model_params.backbone` selects vit-t/s/b/l (see `beast/models/beast_vit/beast_vit_config.py`).
+
 ## Testing
 
 ### Unit Tests
@@ -88,18 +108,22 @@ class Test<function_name>:
 ```python
 def function_name(param1: Type1, param2: Type2) -> ReturnType:
     """Brief description of function.
-    
+
     Longer description if needed.
-    
-    Args:
-        param1: Description of param1
-        param2: Description of param2
-        
-    Returns:
-        Description of return value
-        
-    Raises:
-        ExceptionType: Description of when this exception is raised
+
+    Parameters
+    ----------
+    param1: description of param1
+    param2: description of param2
+
+    Returns
+    -------
+    description of return value
+
+    Raises
+    ------
+    ExceptionType: description of when this exception is raised
+
     """
 ```
 If there are too many params for a single line, put one param per line, indented four spaces:

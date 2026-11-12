@@ -8,7 +8,7 @@ from typing import Literal
 import lightning.pytorch as pl
 import torch
 from lightning.pytorch.utilities import rank_zero_only
-from torch.optim.lr_scheduler import MultiStepLR, OneCycleLR
+from torch.optim.lr_scheduler import LambdaLR, MultiStepLR, OneCycleLR
 
 _logger = logging.getLogger(__name__)
 
@@ -47,22 +47,26 @@ class BaseLightningModel(ABC, pl.LightningModule):
         configured learning rate scheduler
 
         """
-        scheduler = self.config['optimizer']['scheduler']
-        if scheduler == 'step':
+        name = self.config['optimizer']['scheduler']
+        scheduler: torch.optim.lr_scheduler.LRScheduler
+        if name == 'step':
             # define a scheduler that reduces the base learning rate at predefined steps
             scheduler = MultiStepLR(
                 optimizer=optimizer,
                 milestones=self.config['optimizer']['steps'],
                 gamma=self.config['optimizer']['gamma'],
             )
-        elif scheduler == 'cosine':
-            # compute max learning rate
-            global_batch_size = (
-                self.config['training']['train_batch_size']
-                * self.config['training']['num_gpus']
-                * self.config['training']['num_nodes']
-            )
-            max_lr = self.config['optimizer']['lr'] * global_batch_size / 256
+        elif name == 'cosine':
+            # base learning rate is per 256 images of effective batch (linear scaling rule)
+            max_lr = self.config['optimizer']['lr']
+            if self.config['optimizer']['scale_lr_by_batch']:
+                global_batch_size = (
+                    self.config['training']['train_batch_size']
+                    * self.config['training']['num_gpus']
+                    * self.config['training']['num_nodes']
+                    * self.config['optimizer']['accumulate_grad_batches']
+                )
+                max_lr = max_lr * global_batch_size / 256
             scheduler = OneCycleLR(
                 optimizer=optimizer,
                 max_lr=max_lr,
@@ -71,10 +75,13 @@ class BaseLightningModel(ABC, pl.LightningModule):
                 pct_start=self.config['optimizer']['warmup_pct'],
                 anneal_strategy='cos',
                 div_factor=self.config['optimizer']['div_factor'],
-                final_div_factor=self.config['optimizer'].get('final_div_factor', 1),
+                final_div_factor=self.config['optimizer']['final_div_factor'],
             )
+        elif name == 'constant':
+            # fixed learning rate for the whole run; never scaled by batch size
+            scheduler = LambdaLR(optimizer=optimizer, lr_lambda=lambda _epoch: 1.0)
         else:
-            raise NotImplementedError(f'{scheduler} scheduler is not yet implemented')
+            raise NotImplementedError(f'{name} scheduler is not yet implemented')
         return scheduler
 
     def get_parameters(self) -> Iterator:
@@ -91,12 +98,14 @@ class BaseLightningModel(ABC, pl.LightningModule):
         # init optimizer
         optimizer = self.config['optimizer']['type']
         learning_rate = self.config['optimizer']['lr']
+        betas = (self.config['optimizer']['beta1'], self.config['optimizer']['beta2'])
         if optimizer == 'Adam':
-            optimizer = torch.optim.Adam(params, lr=learning_rate)
+            optimizer = torch.optim.Adam(params, lr=learning_rate, betas=betas)
         elif optimizer == 'AdamW':
             optimizer = torch.optim.AdamW(
                 params,
                 lr=learning_rate,
+                betas=betas,
                 weight_decay=self.config['optimizer']['wd'],
             )
         else:
@@ -165,6 +174,30 @@ class BaseLightningModel(ABC, pl.LightningModule):
     def test_step(self, batch_dict: dict, batch_idx: int) -> None:
         """Base test step, a wrapper around the `evaluate_batch` method."""
         self.evaluate_batch(batch_dict, 'test')
+
+    def get_viz_panels(self, batch_dict: dict) -> list[torch.Tensor]:
+        """Return image panels for validation contact sheets; optional for subclasses.
+
+        Models that implement this can be used with ``ValidationVizCallback``. Each returned
+        tensor is one panel type (e.g. input, masked input, reconstruction) for the whole batch.
+
+        Parameters
+        ----------
+        batch_dict: dict containing model inputs
+
+        Returns
+        -------
+        list of float tensors of shape (batch, 3, height, width) with values in [0, 1];
+        element k holds panel k of every frame, in a fixed order
+
+        Raises
+        ------
+        NotImplementedError: if the model does not support contact-sheet visualization
+
+        """
+        raise NotImplementedError(
+            f'{type(self).__name__} does not implement get_viz_panels'
+        )
 
     # Required Lightning methods to be implemented by children
     @abstractmethod

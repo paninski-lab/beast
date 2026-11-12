@@ -4,10 +4,21 @@ from collections.abc import Callable
 
 import pytest
 
+from beast.models.beast3d.beast3d_config import Beast3DBeastConfig
+from beast.models.beast_resnet.beast_resnet_config import ResnetBeastConfig
 from beast.models.beast_resnet.beast_resnet_model import ResnetAutoencoder
+from beast.models.beast_vit.beast_vit_config import VitBeastConfig
 from beast.models.beast_vit.beast_vit_model import VisionTransformer
+from beast.models.erayzer.erayzer_config import ERayZerBeastConfig
 from beast.models.erayzer.erayzer_model import ERayZer
-from beast.models.registry import MODEL_REGISTRY, TRAIN_REGISTRY, get_model_class, get_train_fn
+from beast.models.registry import (
+    CONFIG_REGISTRY,
+    MODEL_REGISTRY,
+    TRAIN_REGISTRY,
+    get_config_class,
+    get_model_class,
+    get_train_fn,
+)
 
 
 class TestGetModelClass:
@@ -62,3 +73,44 @@ class TestGetTrainFn:
         for key in TRAIN_REGISTRY:
             fn = get_train_fn(key)
             assert isinstance(fn, Callable)
+
+
+class TestConfigRegistry:
+    """Test the CONFIG_REGISTRY of top-level config classes."""
+
+    def test_same_keys_as_model_registry(self) -> None:
+        assert set(CONFIG_REGISTRY) == set(MODEL_REGISTRY)
+
+    def test_entries_are_top_level_configs(self) -> None:
+        from beast.config import BaseBeastConfig
+        for key, cls in CONFIG_REGISTRY.items():
+            assert issubclass(cls, BaseBeastConfig), key
+            assert cls.__name__.endswith('BeastConfig'), key
+
+
+class TestGetConfigClass:
+    """Test the get_config_class dispatcher."""
+
+    @pytest.mark.parametrize(
+        ('model_class', 'expected'),
+        [
+            ('resnet', ResnetBeastConfig),
+            ('vit', VitBeastConfig),
+            ('erayzer', ERayZerBeastConfig),
+            ('beast3d', Beast3DBeastConfig),
+        ],
+    )
+    def test_registered_model_class(self, model_class: str, expected: type) -> None:
+        assert get_config_class(model_class) is expected
+
+    def test_unknown_raises(self) -> None:
+        with pytest.raises(ValueError, match='totally_unknown_model'):
+            get_config_class('totally_unknown_model')
+
+    def test_empty_string_raises(self) -> None:
+        with pytest.raises(ValueError, match='model_class'):
+            get_config_class('')
+
+    def test_error_message_lists_registered_classes(self) -> None:
+        with pytest.raises(ValueError, match='erayzer'):
+            get_config_class('nope')
