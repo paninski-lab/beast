@@ -22,7 +22,6 @@ from beast.data.augmentations import imgaug_pipeline
 from beast.data.datamodules import (
     BaseDataModule,
     MultiViewDataModule,
-    compute_num_train_frames,
 )
 from beast.data.datasets import BaseDataset
 from beast.logging import log_step
@@ -65,20 +64,18 @@ def pretty_print_config(config: dict) -> None:
 
 def _build_multiview_datamodule(
     config: dict,
-    model: BaseLightningModel,
     use_mask: bool = False,
-) -> tuple[pl.LightningDataModule, bool]:
+) -> pl.LightningDataModule:
     """Build the multi-view datamodule used by the erayzer / beast3d model classes.
 
     Parameters
     ----------
     config: full experiment configuration dict
-    model: model to be trained (unused; multi-view models do not need step counts)
     use_mask: whether to load ground-truth foreground masks (supervises the rendered alpha)
 
     Returns
     -------
-    tuple of (set-up datamodule, value for the trainer's ``use_distributed_sampler``)
+    set-up datamodule
 
     """
     if rank_zero_only.rank == 0:
@@ -97,28 +94,24 @@ def _build_multiview_datamodule(
     datamodule.setup()
     if rank_zero_only.rank == 0:
         log_step('MultiViewDataModule created', level='debug')
-    return datamodule, True
+    return datamodule
 
 
 def _build_singleview_datamodule(
     config: dict,
-    model: BaseLightningModel,
     sampler_kind: Literal['none', 'contrastive', 'triplet'] | None = None,
-) -> tuple[pl.LightningDataModule, bool]:
-    """Build the single-view image datamodule and record the LR scheduler step counts.
-
-    Side effect: writes ``steps_per_epoch`` and ``total_steps`` into ``model.config['optimizer']``.
+) -> pl.LightningDataModule:
+    """Build the single-view image datamodule.
 
     Parameters
     ----------
     config: full experiment configuration dict
-    model: model to be trained; receives the scheduler step counts
     sampler_kind: batch sampler to use; if None, 'contrastive' when
         ``model_params.use_infoNCE`` is set and 'none' otherwise
 
     Returns
     -------
-    tuple of (datamodule, value for the trainer's ``use_distributed_sampler``)
+    datamodule
 
     """
     # imgaug transform
@@ -164,31 +157,11 @@ def _build_singleview_datamodule(
     if rank_zero_only.rank == 0:
         log_step('BaseDataModule created', level='debug')
 
-    # update number of training steps (for learning rate scheduler)
-    if rank_zero_only.rank == 0:
-        log_step('Calculating training steps', level='debug')
-    num_epochs = config['training']['num_epochs']
-    train_size = int(np.floor(config['training']['train_probability'] * len(dataset)))
-    train_size = compute_num_train_frames(train_size, config['training']['train_frames'])
-    steps_per_epoch = int(np.ceil(
-        train_size
-        / config['training']['train_batch_size']
-        / config['training']['num_gpus']
-        / config['training']['num_nodes']
-    ))
-    model.config['optimizer']['steps_per_epoch'] = steps_per_epoch
-    model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
-    if rank_zero_only.rank == 0:
-        log_step(
-            f'Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs',
-            level='debug',
-        )
-
-    return datamodule, sampler_kind == 'none'
+    return datamodule
 
 
 # model_class -> datamodule builder; model classes not listed use the single-view builder
-_DATAMODULE_BUILDERS: dict[str, Callable[..., tuple[pl.LightningDataModule, bool]]] = {
+_DATAMODULE_BUILDERS: dict[str, Callable[..., pl.LightningDataModule]] = {
     'erayzer': _build_multiview_datamodule,
     'beast3d': partial(_build_multiview_datamodule, use_mask=True),
     'msps_vae': partial(_build_singleview_datamodule, sampler_kind='triplet'),
@@ -237,7 +210,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
 
     model_class = config['model'].get('model_class', '').lower()
     build_datamodule = _DATAMODULE_BUILDERS.get(model_class, _build_singleview_datamodule)
-    datamodule, use_distributed_sampler = build_datamodule(config, model)
+    datamodule = build_datamodule(config)
     num_epochs = config['training']['num_epochs']
     trainer_epoch_kwargs: dict = {'max_epochs': num_epochs, 'min_epochs': num_epochs}
 
@@ -298,7 +271,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         logger=logger,
         accumulate_grad_batches=config['optimizer']['accumulate_grad_batches'],
         sync_batchnorm=True,
-        use_distributed_sampler=use_distributed_sampler,
+        use_distributed_sampler=datamodule.use_distributed_sampler,  # type: ignore[attr-defined]
         **trainer_epoch_kwargs,
     )
     if rank_zero_only.rank == 0:

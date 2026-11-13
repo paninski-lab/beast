@@ -92,6 +92,14 @@ class BaseDataModule(pl.LightningDataModule):
         self.seed = seed
         self.sampler = None
 
+    @property
+    def use_distributed_sampler(self) -> bool:
+        """Whether Lightning should wrap the train loader in a ``DistributedSampler``.
+
+        False when a custom batch sampler is used, since it handles rank partitioning itself.
+        """
+        return self.sampler_kind == 'none'
+
     def setup(self, stage: str | None = None) -> None:
         """Split dataset into train, val, and test subsets.
 
@@ -508,6 +516,11 @@ class MultiViewDataModule(pl.LightningDataModule):
 
         self.train_dataset: MultiViewDataset | None = None
         self.val_dataset: MultiViewDataset | None = None
+
+    @property
+    def use_distributed_sampler(self) -> bool:
+        """Whether Lightning should wrap the train loader in a ``DistributedSampler``."""
+        return True
 
     def setup(self, stage: str | None = None) -> None:
         """Build train and val datasets by splitting unique frame IDs.
