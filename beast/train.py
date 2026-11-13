@@ -145,12 +145,21 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         # datamodule; breaks up dataset into train/val/test
         if rank_zero_only.rank == 0:
             log_step('Creating BaseDataModule', level='debug')
+        positive_window = 1000  # only used by the triplet sampler
+        if model_class == 'msps_vae':
+            sampler_kind = 'triplet'
+            positive_window = config['model']['model_params']['positive_window']
+        elif config['model']['model_params'].get('use_infoNCE', False):
+            sampler_kind = 'contrastive'
+        else:
+            sampler_kind = 'none'
         datamodule = BaseDataModule(
             dataset=dataset,
             train_batch_size=config['training']['train_batch_size'],
             val_batch_size=config['training']['val_batch_size'],
             test_batch_size=config['training']['test_batch_size'],
-            use_sampler=config['model']['model_params'].get('use_infoNCE', False),
+            sampler_kind=sampler_kind,
+            positive_window=positive_window,
             num_workers=config['training']['num_workers'],
             train_probability=config['training']['train_probability'],
             val_probability=config['training']['val_probability'],
@@ -183,7 +192,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
             )
 
         trainer_epoch_kwargs = {'max_epochs': num_epochs, 'min_epochs': num_epochs}
-        use_distributed_sampler = not config['model']['model_params'].get('use_infoNCE', False)
+        use_distributed_sampler = sampler_kind == 'none'
 
     # ----------------------------------------------------------------------------------
     # Save configuration in output directory

@@ -11,6 +11,7 @@ from beast.models.beast_vit.beast_vit_config import VitBeastConfig
 from beast.models.beast_vit.beast_vit_model import VisionTransformer
 from beast.models.erayzer.erayzer_config import ERayZerBeastConfig
 from beast.models.erayzer.erayzer_model import ERayZer
+from beast.models.msps_vae.msps_vae_config import MspsVaeBeastConfig
 from beast.models.registry import (
     CONFIG_REGISTRY,
     MODEL_REGISTRY,
@@ -98,6 +99,7 @@ class TestGetConfigClass:
             ('vit', VitBeastConfig),
             ('erayzer', ERayZerBeastConfig),
             ('beast3d', Beast3DBeastConfig),
+            ('msps_vae', MspsVaeBeastConfig),
         ],
     )
     def test_registered_model_class(self, model_class: str, expected: type) -> None:
