@@ -130,7 +130,30 @@ class MspsVae(BaseLightningModel):
         ----------
         config: full experiment configuration dict
 
+        Raises
+        ------
+        NotImplementedError: if ``training.train_frames`` is set to anything but null or 1
+
         """
+        # train_frames is unsupported because TripletBatchSampler.__len__ overestimates the
+        # number of batches it yields on small, sparse training subsets. __len__ applies a
+        # fixed 0.98 pool-depletion margin tuned on a full ~90k-frame split; on a random
+        # 10k-frame subset the pool depletes ~8% short of that (len=18 but only 16 batches
+        # yielded in one measured case). Lightning detects the last batch via len(dataloader),
+        # so it never fires: validation never runs, and ModelCheckpoint and
+        # ValidationVizCallback (which trigger on validation end) never run either. Fix options:
+        # make TripletBatchSampler.__iter__ always yield exactly num_batches (e.g. reuse frames
+        # when the pool runs dry), or compute num_batches more conservatively; then add a test
+        # asserting len(sampler) == number of batches yielded on a sparse subset.
+        train_frames = config['training']['train_frames']
+        if train_frames is not None and train_frames != 1:
+            raise NotImplementedError(
+                f'training.train_frames={train_frames} is not supported for msps_vae: '
+                f'TripletBatchSampler overestimates its epoch length on subsampled training '
+                f'sets, so validation, checkpointing and visualization never run. Set '
+                f'train_frames to null (see the comment in MspsVae.__init__)'
+            )
+
         super().__init__(config)
 
         params = config['model']['model_params']

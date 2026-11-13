@@ -1,11 +1,8 @@
 """Tests for the callback factory."""
 
-import pytest
 from lightning.pytorch import callbacks as pl_callbacks
 
 from beast.callbacks.factory import get_callbacks
-from beast.callbacks.val_viz import ValidationVizCallback
-from beast.callbacks.val_viz_multiview import MultiviewValidationVizCallback
 
 
 class TestGetCallbacks:
@@ -50,31 +47,3 @@ class TestGetCallbacks:
         assert len(periodic) == 1
         assert periodic[0].every_n_epochs == 3
         assert periodic[0].save_top_k == -1
-
-    def test_viz_callback_added_when_enabled(self, tmp_path) -> None:
-        callbacks = get_callbacks(viz_every_n_epochs=5, viz_num_frames=20, output_dir=tmp_path)
-        viz = [cb for cb in callbacks if isinstance(cb, ValidationVizCallback)]
-        assert len(viz) == 1
-        assert viz[0].every_n_epochs == 5
-        assert viz[0].num_frames == 20
-        assert viz[0].output_dir == tmp_path
-
-    def test_viz_callback_absent_by_default(self) -> None:
-        callbacks = get_callbacks()
-        assert not any(isinstance(cb, ValidationVizCallback) for cb in callbacks)
-
-    def test_viz_requires_output_dir(self) -> None:
-        with pytest.raises(ValueError, match='output_dir'):
-            get_callbacks(viz_every_n_epochs=5)
-
-    def test_multiview_flag_selects_multiview_callback(self, tmp_path) -> None:
-        callbacks = get_callbacks(viz_every_n_epochs=2, multiview=True, output_dir=tmp_path)
-        viz = [cb for cb in callbacks if isinstance(cb, ValidationVizCallback)]
-        assert len(viz) == 1
-        assert isinstance(viz[0], MultiviewValidationVizCallback)
-        assert viz[0].num_frames == 8  # multi-view default
-
-    def test_viz_num_frames_default_is_per_callback(self, tmp_path) -> None:
-        cb = get_callbacks(viz_every_n_epochs=2, output_dir=tmp_path)[-1]
-        assert isinstance(cb, ValidationVizCallback)
-        assert cb.num_frames == 108

@@ -208,6 +208,9 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         yaml.dump(config, file)
     if rank_zero_only.rank == 0:
         log_step('Config saved', level='debug')
+    # stashed after saving so it is not written to config.yaml; read by the models'
+    # configure_callbacks (e.g. to locate where validation visuals are saved)
+    model.config['training']['output_dir'] = str(output_dir)
 
     # ----------------------------------------------------------------------------------
     # Set up and run training
@@ -220,16 +223,13 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
     if rank_zero_only.rank == 0:
         log_step('TensorBoardLogger created', level='debug')
 
-    # early stopping, learning rate monitoring, model checkpointing, backbone unfreezing
+    # learning rate monitoring and model checkpointing; model-specific callbacks come from
+    # model.configure_callbacks
     if rank_zero_only.rank == 0:
         log_step('Setting up callbacks', level='debug')
     callbacks = get_callbacks(
         lr_monitor=True,
         ckpt_every_n_epochs=config['training']['ckpt_every_n_epochs'],
-        viz_every_n_epochs=config['training']['viz_every_n_epochs'],
-        viz_num_frames=config['training']['viz_num_frames'],
-        multiview=model_class in ('erayzer', 'beast3d'),
-        output_dir=output_dir,
     )
     if rank_zero_only.rank == 0:
         log_step(f'Callbacks created: {len(callbacks)} callbacks', level='debug')
