@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from beast.callbacks.val_viz import ValidationVizCallback
 from beast.models.base import BaseLightningModel
 
 
@@ -136,3 +137,50 @@ class TestGetScheduler:
     def test_get_scheduler_unknown_raises(self):
         with pytest.raises(NotImplementedError, match='bogus'):
             self._make_scheduler(accumulate=1, scheduler_name='bogus')
+
+
+class _StubModel(BaseLightningModel):
+    """Minimal concrete model for testing base-class hooks."""
+
+    def get_model_outputs(self, batch_dict):
+        pass
+
+    def compute_loss(self, stage, **kwargs):
+        pass
+
+    def predict_step(self, batch_dict, batch_idx):
+        pass
+
+
+def _stub_config(**training) -> dict:
+    """Build a minimal config with the training keys read by configure_callbacks."""
+    return {
+        'model': {'seed': 0},
+        'training': {
+            'viz_every_n_epochs': None, 'viz_num_frames': 108, 'output_dir': None, **training,
+        },
+    }
+
+
+class TestConfigureCallbacks:
+    """Test the method BaseLightningModel.configure_callbacks."""
+
+    def test_configure_callbacks_empty_when_viz_disabled(self) -> None:
+        model = _StubModel(_stub_config())
+        assert model.configure_callbacks() == []
+
+    def test_configure_callbacks_builds_viz_callback(self, tmp_path) -> None:
+        model = _StubModel(_stub_config(
+            viz_every_n_epochs=5, viz_num_frames=20, output_dir=str(tmp_path),
+        ))
+        callbacks = model.configure_callbacks()
+        assert len(callbacks) == 1
+        assert type(callbacks[0]) is ValidationVizCallback
+        assert callbacks[0].every_n_epochs == 5
+        assert callbacks[0].num_frames == 20
+        assert callbacks[0].output_dir == tmp_path
+
+    def test_configure_callbacks_requires_output_dir(self) -> None:
+        model = _StubModel(_stub_config(viz_every_n_epochs=5))
+        with pytest.raises(ValueError, match='output_dir'):
+            model.configure_callbacks()

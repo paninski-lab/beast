@@ -3,6 +3,7 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Literal
 
 import lightning.pytorch as pl
@@ -174,6 +175,60 @@ class BaseLightningModel(ABC, pl.LightningModule):
     def test_step(self, batch_dict: dict, batch_idx: int) -> None:
         """Base test step, a wrapper around the `evaluate_batch` method."""
         self.evaluate_batch(batch_dict, 'test')
+
+    def build_viz_callback(
+        self,
+        output_dir: str | Path,
+        every_n_epochs: int,
+        num_frames: int,
+    ) -> pl.Callback:
+        """Build the validation visualization callback; subclasses override to change the type.
+
+        Parameters
+        ----------
+        output_dir: run directory where visuals are saved
+        every_n_epochs: save every this many epochs
+        num_frames: number of validation frames (or scenes) to visualize
+
+        Returns
+        -------
+        configured visualization callback
+
+        """
+        # imported here: beast.callbacks.val_viz imports this module
+        from beast.callbacks.val_viz import ValidationVizCallback
+        return ValidationVizCallback(
+            output_dir=output_dir,
+            every_n_epochs=every_n_epochs,
+            num_frames=num_frames,
+        )
+
+    def configure_callbacks(self) -> list[pl.Callback]:
+        """Return model-specific callbacks; Lightning merges these with the trainer's.
+
+        Adds the validation visualization callback when ``training.viz_every_n_epochs`` is set.
+        Models needing other callbacks should extend this method. Do not return
+        ``ModelCheckpoint`` instances here: Lightning replaces trainer callbacks of the same type.
+
+        Returns
+        -------
+        list of callbacks
+
+        Raises
+        ------
+        ValueError: if visualization is enabled but ``training.output_dir`` is not set
+
+        """
+        cfg = self.config['training']
+        if not cfg['viz_every_n_epochs']:
+            return []
+        if not cfg.get('output_dir'):
+            raise ValueError('training.output_dir is required when viz_every_n_epochs is set')
+        return [self.build_viz_callback(
+            output_dir=cfg['output_dir'],
+            every_n_epochs=cfg['viz_every_n_epochs'],
+            num_frames=cfg['viz_num_frames'],
+        )]
 
     def get_viz_panels(self, batch_dict: dict) -> list[torch.Tensor]:
         """Return image panels for validation contact sheets; optional for subclasses.

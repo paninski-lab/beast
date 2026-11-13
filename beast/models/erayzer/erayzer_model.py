@@ -16,6 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
+import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -1066,6 +1067,34 @@ class ERayZer(BaseLightningModel):
     # ------------------------------------------------------------------
     # BaseLightningModel interface
     # ------------------------------------------------------------------
+
+    def build_viz_callback(
+        self,
+        output_dir: str | Path,
+        every_n_epochs: int,
+        num_frames: int,
+    ) -> pl.Callback:
+        """Build the multi-view visualization callback (render grids, cameras, point clouds).
+
+        Parameters
+        ----------
+        output_dir: run directory where visuals are saved
+        every_n_epochs: save every this many epochs
+        num_frames: number of validation scenes to visualize
+
+        Returns
+        -------
+        configured multi-view visualization callback
+
+        """
+        # imported here: the callback module imports beast.models.erayzer.visualize, whose
+        # package __init__ imports this module
+        from beast.callbacks.val_viz_multiview import MultiviewValidationVizCallback
+        return MultiviewValidationVizCallback(
+            output_dir=output_dir,
+            every_n_epochs=every_n_epochs,
+            num_frames=num_frames,
+        )
 
     def get_model_outputs(self, batch_dict: dict) -> dict:
         """Run ERayZer forward pass and return a plain dict.

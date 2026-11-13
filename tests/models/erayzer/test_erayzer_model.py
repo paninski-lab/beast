@@ -692,6 +692,21 @@ class TestERayZer:
 
 
 @requires_gsplat_cuda
+class TestBuildVizCallback:
+    """Test the method ERayZer.build_viz_callback."""
+
+    def test_build_viz_callback_is_multiview(self, tmp_path) -> None:
+        from beast.callbacks.val_viz_multiview import MultiviewValidationVizCallback
+        # self is unused, so no need to construct a full model
+        cb = ERayZer.build_viz_callback(
+            None, output_dir=tmp_path, every_n_epochs=2, num_frames=8,  # type: ignore[arg-type]
+        )
+        assert isinstance(cb, MultiviewValidationVizCallback)
+        assert cb.every_n_epochs == 2
+        assert cb.num_frames == 8
+        assert cb.output_dir == tmp_path
+
+
 class TestERayZerIntegration:
     """Integration tests that train and run inference on ERayZer.
 

@@ -1,45 +1,28 @@
 """Factory for the Lightning callbacks used during training."""
 
-from pathlib import Path
-
 from lightning.pytorch import Callback
 from lightning.pytorch import callbacks as pl_callbacks
-
-from beast.callbacks.val_viz import ValidationVizCallback
 
 
 def get_callbacks(
     checkpointing: bool = True,
     lr_monitor: bool = True,
     ckpt_every_n_epochs: int | None = None,
-    viz_every_n_epochs: int | None = None,
-    viz_num_frames: int | None = None,
-    multiview: bool = False,
-    output_dir: str | Path | None = None,
 ) -> list[Callback]:
-    """Build list of Lightning callbacks for training.
+    """Build list of Lightning callbacks shared by all models.
+
+    Model-specific callbacks (e.g. validation visualization) are provided by each model's
+    ``configure_callbacks`` method; Lightning merges them with this list.
 
     Parameters
     ----------
     checkpointing: whether to save the best checkpoint by validation loss
     lr_monitor: whether to log learning rate each epoch
     ckpt_every_n_epochs: if set, also save a checkpoint every n epochs
-    viz_every_n_epochs: if set, save contact sheets of validation images and model outputs
-        every n epochs; requires the model to implement ``get_viz_panels``
-    viz_num_frames: number of validation frames to visualize; defaults to 108 frames for
-        single-view models and 8 scenes for multi-view models
-    multiview: if True, use the multi-view visualization callback (render grids, camera plots,
-        point clouds) instead of the single-view contact sheets
-    output_dir: run directory where contact sheets are saved; required if
-        ``viz_every_n_epochs`` is set
 
     Returns
     -------
     list of configured Lightning callbacks
-
-    Raises
-    ------
-    ValueError: if ``viz_every_n_epochs`` is set without ``output_dir``
 
     """
     callbacks = []
@@ -65,23 +48,5 @@ def get_callbacks(
             save_top_k=-1,
         )
         callbacks.append(ckpt_callback)
-
-    if viz_every_n_epochs:
-        if output_dir is None:
-            raise ValueError('output_dir is required when viz_every_n_epochs is set')
-        viz_cls: type[ValidationVizCallback]
-        if multiview:
-            # imported here: the multi-view module imports beast.models.erayzer, which imports
-            # beast.train, which imports this module
-            from beast.callbacks.val_viz_multiview import MultiviewValidationVizCallback
-            viz_cls = MultiviewValidationVizCallback
-        else:
-            viz_cls = ValidationVizCallback
-        kwargs = {} if viz_num_frames is None else {'num_frames': viz_num_frames}
-        callbacks.append(viz_cls(
-            output_dir=output_dir,
-            every_n_epochs=viz_every_n_epochs,
-            **kwargs,
-        ))
 
     return callbacks
