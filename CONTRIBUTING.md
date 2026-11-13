@@ -46,10 +46,12 @@ Configuration lives in `[tool.ruff]` in `pyproject.toml`.
 We use [pyright](https://github.com/microsoft/pyright) for static type checking:
 
 ```bash
-pyright beast
+pyright
 ```
 
-Configuration lives in `[tool.pyright]` in `pyproject.toml`.
+Run it with no arguments, as CI does: it checks both `beast` and `tests` (see `include` under
+`[tool.pyright]` in `pyproject.toml`), and errors in tests, such as accessing an attribute that
+a function's return annotation hides, only show up this way.
 Pyright runs in CI on every pull request but is not in the pre-commit hook (it
 checks the whole project on every run, adding ~15s per commit).
 
@@ -57,5 +59,5 @@ checks the whole project on every run, adding ~15s per commit).
 
 - Keep PRs focused — one feature or fix per PR
 - Include tests for new functionality
-- Ensure `pytest`, `pyright` and `ruff check` both pass before opening the PR
+- Ensure `pytest`, `pyright` and `ruff check` all pass before opening the PR
 - Open against the `main` branch

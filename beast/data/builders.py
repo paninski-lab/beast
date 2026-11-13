@@ -6,7 +6,6 @@ Model packages call these from their ``build_datamodule`` function (see
 
 from typing import Literal
 
-import lightning.pytorch as pl
 from lightning.pytorch.utilities import rank_zero_only
 
 from beast.data.augmentations import expand_imgaug_str_to_dict, imgaug_pipeline
@@ -18,7 +17,7 @@ from beast.logging import log_step
 def build_multiview_datamodule(
     config: dict,
     use_mask: bool = False,
-) -> pl.LightningDataModule:
+) -> MultiViewDataModule:
     """Build the multi-view datamodule used by the erayzer / beast3d model classes.
 
     Parameters
@@ -53,7 +52,7 @@ def build_multiview_datamodule(
 def build_singleview_datamodule(
     config: dict,
     sampler_kind: Literal['none', 'contrastive', 'triplet'] | None = None,
-) -> pl.LightningDataModule:
+) -> BaseDataModule:
     """Build the single-view image datamodule.
 
     Parameters
