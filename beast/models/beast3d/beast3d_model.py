@@ -11,16 +11,14 @@ Only the methods that differ from ERayZer are overridden; the encoder, Gaussian
 decoder, renderer, and forward pass are inherited unchanged.
 """
 
-import logging
 
 import torch
 import torch.nn.functional as F
 from einops import rearrange
 
+from beast.logging import log_step
 from beast.models.erayzer.erayzer_model import ERayZer
 from beast.nn.dino import DinoV3
-
-_logger = logging.getLogger(__name__)
 
 # ImageNet statistics: DINOv3 expects [0, 1] images normalized by these.
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
@@ -63,7 +61,7 @@ class Beast3D(ERayZer):
                     'set model.transformer.d to match the DINOv3 backbone.'
                 )
             mode = 'frozen' if self.freeze_dinov3 else 'trainable'
-            _logger.info(f'BEAST3D: using DINOv3 ViT-base tokenizer ({mode})')
+            log_step(f'BEAST3D: using DINOv3 ViT-base tokenizer ({mode})')
 
     def train(self, mode: bool = True) -> 'Beast3D':
         """Pin a frozen DINOv3 to eval mode even while the rest of the model trains.

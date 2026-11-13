@@ -1,7 +1,6 @@
 """Dataset objects store images and augmentation pipeline."""
 
 import json
-import logging
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -21,8 +20,6 @@ from beast.geometry.camera import (
     w2c_to_c2w,
 )
 from beast.logging import log_step
-
-_logger = logging.getLogger(__name__)
 
 _IMAGENET_MEAN = [0.485, 0.456, 0.406]
 _IMAGENET_STD = [0.229, 0.224, 0.225]
@@ -254,7 +251,7 @@ class MultiViewDataset(torch.utils.data.Dataset):
             transforms.ToTensor(),
         ])
 
-        _logger.info(
+        log_step(
             f'MultiViewDataset: {len(self.unique_frame_ids)} frames × '
             f'{len(self.available_views)} views  (mode={mode}, use_mask={use_mask})'
         )

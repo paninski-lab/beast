@@ -1,6 +1,5 @@
 """Training loop and callback setup for BEAST models."""
 
-import logging
 import os
 import random
 import sys
@@ -17,8 +16,6 @@ import beast
 from beast.callbacks.factory import get_callbacks
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
-
-_logger = logging.getLogger(__name__)
 
 
 def reset_seeds(seed: int = 0) -> None:
@@ -40,17 +37,17 @@ def reset_seeds(seed: int = 0) -> None:
 @rank_zero_only
 def pretty_print_config(config: dict) -> None:
     """Log the config dict section by section."""
-    _logger.info('config file:')
+    log_step('config file:')
     for key, val in config.items():
-        _logger.info('--------------------')
-        _logger.info(f'{key} parameters')
-        _logger.info('--------------------')
+        log_step('--------------------')
+        log_step(f'{key} parameters')
+        log_step('--------------------')
         if isinstance(val, dict):
             for k, v in val.items():
-                _logger.info(f'{k}: {v}')
+                log_step(f'{k}: {v}')
         else:
-            _logger.info(f'{val}')
-    _logger.info('')
+            log_step(f'{val}')
+    log_step('')
 
 
 def train(
@@ -79,8 +76,8 @@ def train(
     # Only print from rank 0
     if rank_zero_only.rank == 0:
         log_step("Entering train() function", level='debug')
-        _logger.info(f'output directory: {output_dir}')
-        _logger.info(f'model type: {type(model)}')
+        log_step(f'output directory: {output_dir}')
+        log_step(f'model type: {type(model)}')
 
     # reset all seeds
     if rank_zero_only.rank == 0:

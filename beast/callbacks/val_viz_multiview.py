@@ -1,6 +1,5 @@
 """Callback that saves validation visuals for multi-view models (ERayZer, BEAST3D)."""
 
-import logging
 from typing import cast
 
 import lightning.pytorch as pl
@@ -10,6 +9,7 @@ from lightning.pytorch.utilities import rank_zero_only
 from PIL import Image
 
 from beast.callbacks.val_viz import ValidationVizCallback
+from beast.logging import log_step
 from beast.models.base import BaseLightningModel
 from beast.models.erayzer.visualize import (
     camera_intrinsic_stats,
@@ -18,8 +18,6 @@ from beast.models.erayzer.visualize import (
     make_render_grid,
     stack_rows,
 )
-
-_logger = logging.getLogger(__name__)
 
 
 def _to_uint8(img: torch.Tensor) -> 'Image.Image':
@@ -111,7 +109,7 @@ class MultiviewValidationVizCallback(ValidationVizCallback):
         n_sheets = self._save_render_sheets(scene_grids, out_dir, epoch)
         self._log_stats(stats, pl_module)
         if rank_zero_only.rank == 0:
-            _logger.info(f'saved {n_sheets} multi-view validation sheets to {out_dir}')
+            log_step(f'saved {n_sheets} multi-view validation sheets to {out_dir}')
 
     def _save_render_sheets(self, scene_grids: list[torch.Tensor], out_dir, epoch: int) -> int:
         """Stack scenes vertically into sheets and write them; returns the number of sheets."""
@@ -137,9 +135,9 @@ class MultiviewValidationVizCallback(ValidationVizCallback):
                 n_points = export_gaussian_glb(
                     gaussians[0], path, opacity_threshold=self.opacity_threshold,
                 )
-                _logger.info(f'saved validation point cloud ({n_points} pts): {path}')
+                log_step(f'saved validation point cloud ({n_points} pts): {path}')
             except Exception as exc:  # noqa: BLE001 - e.g. optional trimesh not installed
-                _logger.warning(f'could not export validation point cloud: {exc}')
+                log_step(f'could not export validation point cloud: {exc}', level='warning')
 
     @staticmethod
     def _batch_stats(out: dict, pl_module: pl.LightningModule) -> dict[str, float]:

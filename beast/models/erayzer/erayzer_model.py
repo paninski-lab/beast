@@ -11,7 +11,6 @@ ERayZer is the base class that includes a camera-prediction branch
 """
 
 import copy
-import logging
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -28,6 +27,7 @@ from torch.nn.modules.module import _IncompatibleKeys
 from beast.geometry.camera import cam_info_to_plucker, get_interpolated_poses_many
 from beast.geometry.positional_encoding import get_2d_sincos_pos_embed
 from beast.geometry.rotations import quat2mat, rot6d2mat
+from beast.logging import log_step
 from beast.losses import masked_mse_loss
 from beast.models.base import BaseLightningModel
 from beast.nn.perceptual import VGGPerceptual
@@ -41,8 +41,6 @@ from beast.rendering.gaussians_renderer import (
     deferred_gaussian_render,
     render_opencv_cam_gsplat,
 )
-
-_logger = logging.getLogger(__name__)
 
 _INIT_CKPT_CONTAINER_KEYS = ('state_dict', 'model', 'model_state_dict')
 _INIT_CKPT_DROP_PREFIXES = ('loss_computer.',)
@@ -909,7 +907,7 @@ class ERayZer(BaseLightningModel):
         raw = torch.load(str(path), map_location='cpu', weights_only=False)
         state_dict = _filter_init_state_dict(raw)
         result = self.load_state_dict(state_dict, strict=False)
-        _logger.info(
+        log_step(
             f'loaded init_checkpoint {path.name}: {len(state_dict)} tensors '
             f'({len(result.missing_keys)} missing, '
             f'{len(result.unexpected_keys)} unexpected)'
