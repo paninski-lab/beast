@@ -4,10 +4,7 @@ import logging
 import os
 import random
 import sys
-from collections.abc import Callable
-from functools import partial
 from pathlib import Path
-from typing import Literal
 
 import lightning.pytorch as pl
 import numpy as np
@@ -18,12 +15,6 @@ from lightning.pytorch.utilities import rank_zero_only
 
 import beast
 from beast.callbacks.factory import get_callbacks
-from beast.data.augmentations import imgaug_pipeline
-from beast.data.datamodules import (
-    BaseDataModule,
-    MultiViewDataModule,
-)
-from beast.data.datasets import BaseDataset
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
 
@@ -62,119 +53,20 @@ def pretty_print_config(config: dict) -> None:
     _logger.info('')
 
 
-def _build_multiview_datamodule(
+def train(
     config: dict,
-    use_mask: bool = False,
-) -> pl.LightningDataModule:
-    """Build the multi-view datamodule used by the erayzer / beast3d model classes.
-
-    Parameters
-    ----------
-    config: full experiment configuration dict
-    use_mask: whether to load ground-truth foreground masks (supervises the rendered alpha)
-
-    Returns
-    -------
-    set-up datamodule
-
-    """
-    if rank_zero_only.rank == 0:
-        log_step('Creating MultiViewDataModule', level='debug')
-    datamodule = MultiViewDataModule(
-        data_dir=config['data']['data_dir'],
-        image_size=config['model']['image_tokenizer']['image_size'],
-        train_batch_size=config['training']['train_batch_size'],
-        val_batch_size=config['training']['val_batch_size'],
-        train_fraction=config['training']['train_probability'],
-        train_frames=config['training']['train_frames'],
-        num_workers=config['training']['num_workers'],
-        seed=config['training']['seed'],
-        use_mask=use_mask,
-    )
-    datamodule.setup()
-    if rank_zero_only.rank == 0:
-        log_step('MultiViewDataModule created', level='debug')
-    return datamodule
-
-
-def _build_singleview_datamodule(
-    config: dict,
-    sampler_kind: Literal['none', 'contrastive', 'triplet'] | None = None,
-) -> pl.LightningDataModule:
-    """Build the single-view image datamodule.
-
-    Parameters
-    ----------
-    config: full experiment configuration dict
-    sampler_kind: batch sampler to use; if None, 'contrastive' when
-        ``model_params.use_infoNCE`` is set and 'none' otherwise
-
-    Returns
-    -------
-    datamodule
-
-    """
-    # imgaug transform
-    if rank_zero_only.rank == 0:
-        log_step('Setting up imgaug pipeline', level='debug')
-    pipe_params = config['training']['imgaug']
-    if isinstance(pipe_params, str):
-        from beast.data.augmentations import expand_imgaug_str_to_dict
-        pipe_params = expand_imgaug_str_to_dict(pipe_params)  # type: ignore[arg-type]
-    imgaug_pipeline_ = imgaug_pipeline(pipe_params)
-    if rank_zero_only.rank == 0:
-        log_step('Imgaug pipeline created', level='debug')
-
-    # dataset
-    dataset = BaseDataset(
-        data_dir=config['data']['data_dir'],
-        imgaug_pipeline=imgaug_pipeline_,
-        num_channels=config['model']['model_params']['num_channels'],
-    )
-
-    # datamodule; breaks up dataset into train/val/test
-    if rank_zero_only.rank == 0:
-        log_step('Creating BaseDataModule', level='debug')
-    if sampler_kind is None:
-        use_contrastive = config['model']['model_params'].get('use_infoNCE', False)
-        sampler_kind = 'contrastive' if use_contrastive else 'none'
-    positive_window = 1000  # only used by the triplet sampler
-    if sampler_kind == 'triplet':
-        positive_window = config['model']['model_params']['positive_window']
-    datamodule = BaseDataModule(
-        dataset=dataset,
-        train_batch_size=config['training']['train_batch_size'],
-        val_batch_size=config['training']['val_batch_size'],
-        test_batch_size=config['training']['test_batch_size'],
-        sampler_kind=sampler_kind,
-        positive_window=positive_window,
-        num_workers=config['training']['num_workers'],
-        train_probability=config['training']['train_probability'],
-        val_probability=config['training']['val_probability'],
-        train_frames=config['training']['train_frames'],
-        seed=config['training']['seed'],
-    )
-    if rank_zero_only.rank == 0:
-        log_step('BaseDataModule created', level='debug')
-
-    return datamodule
-
-
-# model_class -> datamodule builder; model classes not listed use the single-view builder
-_DATAMODULE_BUILDERS: dict[str, Callable[..., pl.LightningDataModule]] = {
-    'erayzer': _build_multiview_datamodule,
-    'beast3d': partial(_build_multiview_datamodule, use_mask=True),
-    'msps_vae': partial(_build_singleview_datamodule, sampler_kind='triplet'),
-}
-
-
-def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> BaseLightningModel:
-    """Set up data, trainer, and callbacks, then train the model.
+    model: BaseLightningModel,
+    datamodule: pl.LightningDataModule,
+    output_dir: str | Path,
+) -> BaseLightningModel:
+    """Set up the trainer and callbacks, then train the model.
 
     Parameters
     ----------
     config: full experiment configuration dict
     model: initialized Lightning model to train
+    datamodule: set-up datamodule providing the train and val data loaders; must expose a
+        ``use_distributed_sampler`` attribute
     output_dir: directory where config, checkpoints, and logs are saved
 
     Returns
@@ -203,16 +95,6 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
     if rank_zero_only.rank == 0:
         log_step("Printing config", level='debug')
     pretty_print_config(config)
-
-    # ----------------------------------------------------------------------------------
-    # Set up data objects
-    # ----------------------------------------------------------------------------------
-
-    model_class = config['model'].get('model_class', '').lower()
-    build_datamodule = _DATAMODULE_BUILDERS.get(model_class, _build_singleview_datamodule)
-    datamodule = build_datamodule(config)
-    num_epochs = config['training']['num_epochs']
-    trainer_epoch_kwargs: dict = {'max_epochs': num_epochs, 'min_epochs': num_epochs}
 
     # ----------------------------------------------------------------------------------
     # Save configuration in output directory
@@ -259,7 +141,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         log_step('  - accelerator: gpu', level='debug')
         log_step(f"  - devices: {config['training']['num_gpus']}", level='debug')
         log_step(f"  - num_nodes: {config['training']['num_nodes']}", level='debug')
-        log_step(f'  - trainer_epoch_kwargs: {trainer_epoch_kwargs}', level='debug')
+        log_step(f"  - num_epochs: {config['training']['num_epochs']}", level='debug')
     trainer = pl.Trainer(
         accelerator='gpu',
         devices=config['training']['num_gpus'],
@@ -272,7 +154,8 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         accumulate_grad_batches=config['optimizer']['accumulate_grad_batches'],
         sync_batchnorm=True,
         use_distributed_sampler=datamodule.use_distributed_sampler,  # type: ignore[attr-defined]
-        **trainer_epoch_kwargs,
+        max_epochs=config['training']['num_epochs'],
+        min_epochs=config['training']['num_epochs'],
     )
     if rank_zero_only.rank == 0:
         log_step("Trainer created", level='debug')

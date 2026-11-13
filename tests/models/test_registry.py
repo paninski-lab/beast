@@ -14,9 +14,11 @@ from beast.models.erayzer.erayzer_model import ERayZer
 from beast.models.msps_vae.msps_vae_config import MspsVaeBeastConfig
 from beast.models.registry import (
     CONFIG_REGISTRY,
+    DATAMODULE_REGISTRY,
     MODEL_REGISTRY,
     TRAIN_REGISTRY,
     get_config_class,
+    get_datamodule_fn,
     get_model_class,
     get_train_fn,
 )
@@ -45,6 +47,25 @@ class TestGetModelClass:
     def test_all_registered_keys_resolve(self) -> None:
         for key in MODEL_REGISTRY:
             assert get_model_class(key) is MODEL_REGISTRY[key]
+
+
+class TestGetDatamoduleFn:
+    """Test the get_datamodule_fn function."""
+
+    def test_registered_models_return_callable(self) -> None:
+        for key in ('resnet', 'vit', 'erayzer', 'beast3d', 'msps_vae'):
+            assert callable(get_datamodule_fn(key))
+
+    def test_unknown_raises_key_error(self) -> None:
+        with pytest.raises(KeyError, match='erayzer'):
+            get_datamodule_fn('nonexistent_model')
+
+    def test_all_registered_keys_resolve(self) -> None:
+        for key in DATAMODULE_REGISTRY:
+            assert get_datamodule_fn(key) is DATAMODULE_REGISTRY[key]
+
+    def test_registries_have_same_keys(self) -> None:
+        assert set(DATAMODULE_REGISTRY) == set(MODEL_REGISTRY) == set(TRAIN_REGISTRY)
 
 
 class TestGetTrainFn:

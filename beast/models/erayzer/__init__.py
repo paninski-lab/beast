@@ -21,7 +21,7 @@ from beast.models.erayzer.erayzer_model import (
     get_point_range_func,
     sanitize,
 )
-from beast.models.erayzer.erayzer_train import train
+from beast.models.erayzer.erayzer_train import build_datamodule, train
 
 __all__ = [
     'ERayZer',
@@ -41,5 +41,6 @@ __all__ = [
     'get_cam_se3',
     'get_point_range_func',
     'sanitize',
+    'build_datamodule',
     'train',
 ]

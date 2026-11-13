@@ -203,13 +203,16 @@ class TestModelTrain:
             model_dir=model_dir,
         )
 
+    def _train(self, m: Model, output: Path, mock_train: MagicMock, mock_build: MagicMock) -> None:
+        with patch.dict('beast.models.registry.TRAIN_REGISTRY', {'vit': mock_train}), \
+                patch.dict('beast.models.registry.DATAMODULE_REGISTRY', {'vit': mock_build}):
+            m.train(output_dir=output)
+
     def test_sets_model_dir(self, tmp_path: Path) -> None:
         m = self._make_model()
         output = tmp_path / 'run1'
         output.mkdir()
-        mock_train = MagicMock(return_value=MagicMock())
-        with patch.dict('beast.models.registry.TRAIN_REGISTRY', {'vit': mock_train}):
-            m.train(output_dir=output)
+        self._train(m, output, MagicMock(return_value=MagicMock()), MagicMock())
         assert m.model_dir == output
 
     def test_calls_train_with_correct_args(self, tmp_path: Path) -> None:
@@ -218,18 +221,19 @@ class TestModelTrain:
         output = tmp_path / 'run1'
         output.mkdir()
         mock_train = MagicMock(return_value=MagicMock())
-        with patch.dict('beast.models.registry.TRAIN_REGISTRY', {'vit': mock_train}):
-            m.train(output_dir=output)
-        mock_train.assert_called_once_with(m.config, original_model, output_dir=output)
+        mock_build = MagicMock()
+        self._train(m, output, mock_train, mock_build)
+        mock_build.assert_called_once_with(m.config)
+        mock_train.assert_called_once_with(
+            m.config, original_model, mock_build.return_value, output_dir=output,
+        )
 
     def test_updates_model_after_train(self, tmp_path: Path) -> None:
         m = self._make_model()
         output = tmp_path / 'run1'
         output.mkdir()
         trained_model = MagicMock()
-        mock_train = MagicMock(return_value=trained_model)
-        with patch.dict('beast.models.registry.TRAIN_REGISTRY', {'vit': mock_train}):
-            m.train(output_dir=output)
+        self._train(m, output, MagicMock(return_value=trained_model), MagicMock())
         assert m.model is trained_model
 
 

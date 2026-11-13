@@ -70,13 +70,13 @@ beast.api.model.Model.from_config(config)
      │  → MODEL_REGISTRY[model_class](config)  →  LightningModule instance
      ▼
 Model.train(output_dir)
-     │  → TRAIN_REGISTRY[model_class](config, model, output_dir)
-     │      (currently all three models delegate to beast.train.train)
+     │  → DATAMODULE_REGISTRY[model_class](config)  →  set-up datamodule
+     │      (each model's build_datamodule calls a shared builder in beast.data.builders,
+     │       passing any model-specific options such as the sampler kind or mask loading)
+     │  → TRAIN_REGISTRY[model_class](config, model, datamodule, output_dir)
+     │      (currently all models delegate to beast.train.train)
      ▼
-beast.train.train(config, model, output_dir)
-     │  branches on model_class to select DataModule:
-     │    'erayzer' / beast3d → MultiViewDataModule
-     │    'resnet' / 'vit'    → BaseDataModule (with BaseDataset + imgaug)
+beast.train.train(config, model, datamodule, output_dir)
      │  saves config.yaml to output_dir
      │  → pl.Trainer.fit(model, datamodule)
      ▼
@@ -131,8 +131,8 @@ beast/models/<name>/
   __init__.py          # re-exports model class, all config classes, train
   <name>_config.py     # Pydantic schemas for model (+ training/optimizer if divergent)
   <name>_model.py      # LightningModule subclass
-  <name>_train.py      # training entry point; either delegates to beast.train.train or
-                       #   provides a custom loop
+  <name>_train.py      # build_datamodule(config) plus the training entry point; the latter
+                       #   either delegates to beast.train.train or provides a custom loop
 ```
 
 The model's `model_class` string identifier (e.g. `'resnet'`, `'vit'`, `'erayzer'`) is a
@@ -144,16 +144,17 @@ names).
 
 ## Registry
 
-`beast/models/registry.py` holds three dicts populated by `_register_all()`:
+`beast/models/registry.py` holds four dicts populated by `_register_all()`:
 
 ```python
-MODEL_REGISTRY: dict[str, type]           # model_class → LightningModule subclass
-TRAIN_REGISTRY: dict[str, Callable]       # model_class → train function
+MODEL_REGISTRY: dict[str, type]             # model_class → LightningModule subclass
+DATAMODULE_REGISTRY: dict[str, Callable]    # model_class → build_datamodule(config) function
+TRAIN_REGISTRY: dict[str, Callable]         # model_class → train function
 CONFIG_REGISTRY: dict[str, type[BaseModel]] # model_class → top-level <Model>BeastConfig
 ```
 
 `_register_all()` runs at import time (bottom of `registry.py`). To add a new model, add
-three lines to `_register_all()` — see step 6 of the checklist below.
+four lines to `_register_all()` — see step 6 of the checklist below.
 
 ---
 
@@ -272,16 +273,31 @@ predicting them).
 
 ### 4. Write `beast3d_train.py`
 
-If the model uses the shared training loop unchanged:
+Define `build_datamodule(config)`, which returns a set-up datamodule, and re-export the shared
+`train`. Pick the shared builder from `beast.data.builders` and pass any model-specific options
+(here, loading foreground masks):
 
 ```python
+import lightning.pytorch as pl
+
+from beast.data.builders import build_multiview_datamodule
 from beast.train import train
 
-__all__ = ['train']
+
+def build_datamodule(config: dict) -> pl.LightningDataModule:
+    """Build the datamodule for BEAST3D."""
+    return build_multiview_datamodule(config, use_mask=True)
+
+
+__all__ = ['build_datamodule', 'train']
 ```
 
-If it needs a custom loop, implement `train(config, model, output_dir)` here and make sure it
-has the same signature.
+The datamodule must expose a `use_distributed_sampler` attribute, which `train()` passes to the
+Lightning `Trainer`. Model-specific callbacks (e.g. validation visualization) are not set up
+here: override `configure_callbacks` on the model instead.
+
+If the model needs a custom loop, implement `train(config, model, datamodule, output_dir)`
+here and make sure it has the same signature.
 
 ### 5. Write `__init__.py`
 
@@ -290,21 +306,25 @@ Re-export the public API of the package:
 ```python
 from beast.models.beast3d.beast3d_config import Beast3DBeastConfig, Beast3DModelConfig
 from beast.models.beast3d.beast3d_model import Beast3D
-from beast.models.beast3d.beast3d_train import train
+from beast.models.beast3d.beast3d_train import build_datamodule, train
 
-__all__ = ['Beast3D', 'Beast3DBeastConfig', 'Beast3DModelConfig', 'train']
+__all__ = ['Beast3D', 'Beast3DBeastConfig', 'Beast3DModelConfig', 'build_datamodule', 'train']
 ```
 
 ### 6. Register the model in `beast/models/registry.py`
 
-Add three imports and three dict assignments inside `_register_all()`:
+Add the imports and four dict assignments inside `_register_all()`:
 
 ```python
 from beast.models.beast3d.beast3d_config import Beast3DBeastConfig
 from beast.models.beast3d.beast3d_model import Beast3D
-from beast.models.beast3d.beast3d_train import train as beast3d_train
+from beast.models.beast3d.beast3d_train import (
+    build_datamodule as beast3d_build_datamodule,
+    train as beast3d_train,
+)
 
 MODEL_REGISTRY['beast3d'] = Beast3D
+DATAMODULE_REGISTRY['beast3d'] = beast3d_build_datamodule
 TRAIN_REGISTRY['beast3d'] = beast3d_train
 CONFIG_REGISTRY['beast3d'] = Beast3DBeastConfig
 ```

@@ -14,7 +14,12 @@ from beast.inference import predict_images, predict_video
 from beast.io import load_config
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
-from beast.models.registry import MODEL_REGISTRY, TRAIN_REGISTRY, get_config_class
+from beast.models.registry import (
+    DATAMODULE_REGISTRY,
+    MODEL_REGISTRY,
+    TRAIN_REGISTRY,
+    get_config_class,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -141,9 +146,13 @@ class Model:
         """
         self.model_dir = Path(output_dir)
         model_type = self.config['model'].get('model_class', '').lower()
+        build_datamodule = DATAMODULE_REGISTRY[model_type]
         train_fn = TRAIN_REGISTRY[model_type]
         with chdir(self.model_dir):
-            self.model = train_fn(self.config, self.model, output_dir=self.model_dir)
+            datamodule = build_datamodule(self.config)
+            self.model = train_fn(
+                self.config, self.model, datamodule, output_dir=self.model_dir,
+            )
 
     def predict_images(
         self,
