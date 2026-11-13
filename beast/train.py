@@ -4,7 +4,10 @@ import logging
 import os
 import random
 import sys
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
+from typing import Literal
 
 import lightning.pytorch as pl
 import numpy as np
@@ -60,6 +63,138 @@ def pretty_print_config(config: dict) -> None:
     _logger.info('')
 
 
+def _build_multiview_datamodule(
+    config: dict,
+    model: BaseLightningModel,
+    use_mask: bool = False,
+) -> tuple[pl.LightningDataModule, bool]:
+    """Build the multi-view datamodule used by the erayzer / beast3d model classes.
+
+    Parameters
+    ----------
+    config: full experiment configuration dict
+    model: model to be trained (unused; multi-view models do not need step counts)
+    use_mask: whether to load ground-truth foreground masks (supervises the rendered alpha)
+
+    Returns
+    -------
+    tuple of (set-up datamodule, value for the trainer's ``use_distributed_sampler``)
+
+    """
+    if rank_zero_only.rank == 0:
+        log_step('Creating MultiViewDataModule', level='debug')
+    datamodule = MultiViewDataModule(
+        data_dir=config['data']['data_dir'],
+        image_size=config['model']['image_tokenizer']['image_size'],
+        train_batch_size=config['training']['train_batch_size'],
+        val_batch_size=config['training']['val_batch_size'],
+        train_fraction=config['training']['train_probability'],
+        train_frames=config['training']['train_frames'],
+        num_workers=config['training']['num_workers'],
+        seed=config['training']['seed'],
+        use_mask=use_mask,
+    )
+    datamodule.setup()
+    if rank_zero_only.rank == 0:
+        log_step('MultiViewDataModule created', level='debug')
+    return datamodule, True
+
+
+def _build_singleview_datamodule(
+    config: dict,
+    model: BaseLightningModel,
+    sampler_kind: Literal['none', 'contrastive', 'triplet'] | None = None,
+) -> tuple[pl.LightningDataModule, bool]:
+    """Build the single-view image datamodule and record the LR scheduler step counts.
+
+    Side effect: writes ``steps_per_epoch`` and ``total_steps`` into ``model.config['optimizer']``.
+
+    Parameters
+    ----------
+    config: full experiment configuration dict
+    model: model to be trained; receives the scheduler step counts
+    sampler_kind: batch sampler to use; if None, 'contrastive' when
+        ``model_params.use_infoNCE`` is set and 'none' otherwise
+
+    Returns
+    -------
+    tuple of (datamodule, value for the trainer's ``use_distributed_sampler``)
+
+    """
+    # imgaug transform
+    if rank_zero_only.rank == 0:
+        log_step('Setting up imgaug pipeline', level='debug')
+    pipe_params = config['training']['imgaug']
+    if isinstance(pipe_params, str):
+        from beast.data.augmentations import expand_imgaug_str_to_dict
+        pipe_params = expand_imgaug_str_to_dict(pipe_params)  # type: ignore[arg-type]
+    imgaug_pipeline_ = imgaug_pipeline(pipe_params)
+    if rank_zero_only.rank == 0:
+        log_step('Imgaug pipeline created', level='debug')
+
+    # dataset
+    dataset = BaseDataset(
+        data_dir=config['data']['data_dir'],
+        imgaug_pipeline=imgaug_pipeline_,
+        num_channels=config['model']['model_params']['num_channels'],
+    )
+
+    # datamodule; breaks up dataset into train/val/test
+    if rank_zero_only.rank == 0:
+        log_step('Creating BaseDataModule', level='debug')
+    if sampler_kind is None:
+        use_contrastive = config['model']['model_params'].get('use_infoNCE', False)
+        sampler_kind = 'contrastive' if use_contrastive else 'none'
+    positive_window = 1000  # only used by the triplet sampler
+    if sampler_kind == 'triplet':
+        positive_window = config['model']['model_params']['positive_window']
+    datamodule = BaseDataModule(
+        dataset=dataset,
+        train_batch_size=config['training']['train_batch_size'],
+        val_batch_size=config['training']['val_batch_size'],
+        test_batch_size=config['training']['test_batch_size'],
+        sampler_kind=sampler_kind,
+        positive_window=positive_window,
+        num_workers=config['training']['num_workers'],
+        train_probability=config['training']['train_probability'],
+        val_probability=config['training']['val_probability'],
+        train_frames=config['training']['train_frames'],
+        seed=config['training']['seed'],
+    )
+    if rank_zero_only.rank == 0:
+        log_step('BaseDataModule created', level='debug')
+
+    # update number of training steps (for learning rate scheduler)
+    if rank_zero_only.rank == 0:
+        log_step('Calculating training steps', level='debug')
+    num_epochs = config['training']['num_epochs']
+    train_size = int(np.floor(config['training']['train_probability'] * len(dataset)))
+    train_size = compute_num_train_frames(train_size, config['training']['train_frames'])
+    steps_per_epoch = int(np.ceil(
+        train_size
+        / config['training']['train_batch_size']
+        / config['training']['num_gpus']
+        / config['training']['num_nodes']
+    ))
+    model.config['optimizer']['steps_per_epoch'] = steps_per_epoch
+    model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
+    if rank_zero_only.rank == 0:
+        log_step(
+            f'Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs',
+            level='debug',
+        )
+
+    return datamodule, sampler_kind == 'none'
+
+
+# model_class -> datamodule builder; model classes not listed use the single-view builder
+_DATAMODULE_BUILDERS: dict[str, Callable[..., tuple[pl.LightningDataModule, bool]]] = {
+    'erayzer': _build_multiview_datamodule,
+    'beast3d': partial(_build_multiview_datamodule, use_mask=True),
+    'msps_vae': partial(_build_singleview_datamodule, sampler_kind='triplet'),
+}
+
+
 def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> BaseLightningModel:
     """Set up data, trainer, and callbacks, then train the model.
 
@@ -101,98 +236,10 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
     # ----------------------------------------------------------------------------------
 
     model_class = config['model'].get('model_class', '').lower()
-
-    if model_class in ('erayzer', 'beast3d'):
-        if rank_zero_only.rank == 0:
-            log_step('Creating MultiViewDataModule', level='debug')
-        # BEAST3D supervises the rendered alpha against GT foreground masks
-        datamodule = MultiViewDataModule(
-            data_dir=config['data']['data_dir'],
-            image_size=config['model']['image_tokenizer']['image_size'],
-            train_batch_size=config['training']['train_batch_size'],
-            val_batch_size=config['training']['val_batch_size'],
-            train_fraction=config['training']['train_probability'],
-            train_frames=config['training']['train_frames'],
-            num_workers=config['training']['num_workers'],
-            seed=config['training']['seed'],
-            use_mask=(model_class == 'beast3d'),
-        )
-        datamodule.setup()
-        if rank_zero_only.rank == 0:
-            log_step('MultiViewDataModule created', level='debug')
-        num_epochs = config['training']['num_epochs']
-        trainer_epoch_kwargs: dict = {'max_epochs': num_epochs, 'min_epochs': num_epochs}
-        use_distributed_sampler = True
-    else:
-        # imgaug transform
-        if rank_zero_only.rank == 0:
-            log_step('Setting up imgaug pipeline', level='debug')
-        pipe_params = config['training']['imgaug']
-        if isinstance(pipe_params, str):
-            from beast.data.augmentations import expand_imgaug_str_to_dict
-            pipe_params = expand_imgaug_str_to_dict(pipe_params)  # type: ignore[arg-type]
-        imgaug_pipeline_ = imgaug_pipeline(pipe_params)
-        if rank_zero_only.rank == 0:
-            log_step('Imgaug pipeline created', level='debug')
-
-        # dataset
-        dataset = BaseDataset(
-            data_dir=config['data']['data_dir'],
-            imgaug_pipeline=imgaug_pipeline_,
-            num_channels=config['model']['model_params']['num_channels'],
-        )
-
-        # datamodule; breaks up dataset into train/val/test
-        if rank_zero_only.rank == 0:
-            log_step('Creating BaseDataModule', level='debug')
-        positive_window = 1000  # only used by the triplet sampler
-        if model_class == 'msps_vae':
-            sampler_kind = 'triplet'
-            positive_window = config['model']['model_params']['positive_window']
-        elif config['model']['model_params'].get('use_infoNCE', False):
-            sampler_kind = 'contrastive'
-        else:
-            sampler_kind = 'none'
-        datamodule = BaseDataModule(
-            dataset=dataset,
-            train_batch_size=config['training']['train_batch_size'],
-            val_batch_size=config['training']['val_batch_size'],
-            test_batch_size=config['training']['test_batch_size'],
-            sampler_kind=sampler_kind,
-            positive_window=positive_window,
-            num_workers=config['training']['num_workers'],
-            train_probability=config['training']['train_probability'],
-            val_probability=config['training']['val_probability'],
-            train_frames=config['training']['train_frames'],
-            seed=config['training']['seed'],
-        )
-        if rank_zero_only.rank == 0:
-            log_step('BaseDataModule created', level='debug')
-
-        # update number of training steps (for learning rate scheduler)
-        if rank_zero_only.rank == 0:
-            log_step('Calculating training steps', level='debug')
-        num_epochs = config['training']['num_epochs']
-        train_size = int(
-            np.floor(config['training']['train_probability'] * len(dataset))
-        )
-        train_size = compute_num_train_frames(train_size, config['training']['train_frames'])
-        steps_per_epoch = int(np.ceil(
-            train_size
-            / config['training']['train_batch_size']
-            / config['training']['num_gpus']
-            / config['training']['num_nodes']
-        ))
-        model.config['optimizer']['steps_per_epoch'] = steps_per_epoch
-        model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
-        if rank_zero_only.rank == 0:
-            log_step(
-                f'Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs',
-                level='debug',
-            )
-
-        trainer_epoch_kwargs = {'max_epochs': num_epochs, 'min_epochs': num_epochs}
-        use_distributed_sampler = sampler_kind == 'none'
+    build_datamodule = _DATAMODULE_BUILDERS.get(model_class, _build_singleview_datamodule)
+    datamodule, use_distributed_sampler = build_datamodule(config, model)
+    num_epochs = config['training']['num_epochs']
+    trainer_epoch_kwargs: dict = {'max_epochs': num_epochs, 'min_epochs': num_epochs}
 
     # ----------------------------------------------------------------------------------
     # Save configuration in output directory
