@@ -89,6 +89,19 @@ class TestOrthogonalSplit:
 class TestMspsVae:
     """Test the MspsVae model."""
 
+    @pytest.mark.parametrize('train_frames', [None, 1])
+    def test_init_allows_full_train_set(self, config_msps_vae, train_frames) -> None:
+        config = copy.deepcopy(config_msps_vae)
+        config['training']['train_frames'] = train_frames
+        MspsVae(config)
+
+    @pytest.mark.parametrize('train_frames', [0.5, 100])
+    def test_init_rejects_train_frames(self, config_msps_vae, train_frames) -> None:
+        config = copy.deepcopy(config_msps_vae)
+        config['training']['train_frames'] = train_frames
+        with pytest.raises(NotImplementedError, match='train_frames'):
+            MspsVae(config)
+
     def test_forward_shapes(self, config_msps_vae) -> None:
         config = copy.deepcopy(config_msps_vae)
         model = MspsVae(config)
