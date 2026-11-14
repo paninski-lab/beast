@@ -1,6 +1,5 @@
 """Training loop and callback setup for BEAST models."""
 
-import logging
 import os
 import random
 import sys
@@ -15,17 +14,8 @@ from lightning.pytorch.utilities import rank_zero_only
 
 import beast
 from beast.callbacks.factory import get_callbacks
-from beast.data.augmentations import imgaug_pipeline
-from beast.data.datamodules import (
-    BaseDataModule,
-    MultiViewDataModule,
-    compute_num_train_frames,
-)
-from beast.data.datasets import BaseDataset
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
-
-_logger = logging.getLogger(__name__)
 
 
 def reset_seeds(seed: int = 0) -> None:
@@ -47,26 +37,33 @@ def reset_seeds(seed: int = 0) -> None:
 @rank_zero_only
 def pretty_print_config(config: dict) -> None:
     """Log the config dict section by section."""
-    _logger.info('config file:')
+    log_step('config file:')
     for key, val in config.items():
-        _logger.info('--------------------')
-        _logger.info(f'{key} parameters')
-        _logger.info('--------------------')
+        log_step('--------------------')
+        log_step(f'{key} parameters')
+        log_step('--------------------')
         if isinstance(val, dict):
             for k, v in val.items():
-                _logger.info(f'{k}: {v}')
+                log_step(f'{k}: {v}')
         else:
-            _logger.info(f'{val}')
-    _logger.info('')
+            log_step(f'{val}')
+    log_step('')
 
 
-def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> BaseLightningModel:
-    """Set up data, trainer, and callbacks, then train the model.
+def train(
+    config: dict,
+    model: BaseLightningModel,
+    datamodule: pl.LightningDataModule,
+    output_dir: str | Path,
+) -> BaseLightningModel:
+    """Set up the trainer and callbacks, then train the model.
 
     Parameters
     ----------
     config: full experiment configuration dict
     model: initialized Lightning model to train
+    datamodule: set-up datamodule providing the train and val data loaders; must expose a
+        ``use_distributed_sampler`` attribute
     output_dir: directory where config, checkpoints, and logs are saved
 
     Returns
@@ -79,8 +76,8 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
     # Only print from rank 0
     if rank_zero_only.rank == 0:
         log_step("Entering train() function", level='debug')
-        _logger.info(f'output directory: {output_dir}')
-        _logger.info(f'model type: {type(model)}')
+        log_step(f'output directory: {output_dir}')
+        log_step(f'model type: {type(model)}')
 
     # reset all seeds
     if rank_zero_only.rank == 0:
@@ -95,104 +92,6 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
     if rank_zero_only.rank == 0:
         log_step("Printing config", level='debug')
     pretty_print_config(config)
-
-    # ----------------------------------------------------------------------------------
-    # Set up data objects
-    # ----------------------------------------------------------------------------------
-
-    model_class = config['model'].get('model_class', '').lower()
-
-    if model_class in ('erayzer', 'beast3d'):
-        if rank_zero_only.rank == 0:
-            log_step('Creating MultiViewDataModule', level='debug')
-        # BEAST3D supervises the rendered alpha against GT foreground masks
-        datamodule = MultiViewDataModule(
-            data_dir=config['data']['data_dir'],
-            image_size=config['model']['image_tokenizer']['image_size'],
-            train_batch_size=config['training']['train_batch_size'],
-            val_batch_size=config['training']['val_batch_size'],
-            train_fraction=config['training']['train_probability'],
-            train_frames=config['training']['train_frames'],
-            num_workers=config['training']['num_workers'],
-            seed=config['training']['seed'],
-            use_mask=(model_class == 'beast3d'),
-        )
-        datamodule.setup()
-        if rank_zero_only.rank == 0:
-            log_step('MultiViewDataModule created', level='debug')
-        num_epochs = config['training']['num_epochs']
-        trainer_epoch_kwargs: dict = {'max_epochs': num_epochs, 'min_epochs': num_epochs}
-        use_distributed_sampler = True
-    else:
-        # imgaug transform
-        if rank_zero_only.rank == 0:
-            log_step('Setting up imgaug pipeline', level='debug')
-        pipe_params = config['training']['imgaug']
-        if isinstance(pipe_params, str):
-            from beast.data.augmentations import expand_imgaug_str_to_dict
-            pipe_params = expand_imgaug_str_to_dict(pipe_params)  # type: ignore[arg-type]
-        imgaug_pipeline_ = imgaug_pipeline(pipe_params)
-        if rank_zero_only.rank == 0:
-            log_step('Imgaug pipeline created', level='debug')
-
-        # dataset
-        dataset = BaseDataset(
-            data_dir=config['data']['data_dir'],
-            imgaug_pipeline=imgaug_pipeline_,
-            num_channels=config['model']['model_params']['num_channels'],
-        )
-
-        # datamodule; breaks up dataset into train/val/test
-        if rank_zero_only.rank == 0:
-            log_step('Creating BaseDataModule', level='debug')
-        positive_window = 1000  # only used by the triplet sampler
-        if model_class == 'msps_vae':
-            sampler_kind = 'triplet'
-            positive_window = config['model']['model_params']['positive_window']
-        elif config['model']['model_params'].get('use_infoNCE', False):
-            sampler_kind = 'contrastive'
-        else:
-            sampler_kind = 'none'
-        datamodule = BaseDataModule(
-            dataset=dataset,
-            train_batch_size=config['training']['train_batch_size'],
-            val_batch_size=config['training']['val_batch_size'],
-            test_batch_size=config['training']['test_batch_size'],
-            sampler_kind=sampler_kind,
-            positive_window=positive_window,
-            num_workers=config['training']['num_workers'],
-            train_probability=config['training']['train_probability'],
-            val_probability=config['training']['val_probability'],
-            train_frames=config['training']['train_frames'],
-            seed=config['training']['seed'],
-        )
-        if rank_zero_only.rank == 0:
-            log_step('BaseDataModule created', level='debug')
-
-        # update number of training steps (for learning rate scheduler)
-        if rank_zero_only.rank == 0:
-            log_step('Calculating training steps', level='debug')
-        num_epochs = config['training']['num_epochs']
-        train_size = int(
-            np.floor(config['training']['train_probability'] * len(dataset))
-        )
-        train_size = compute_num_train_frames(train_size, config['training']['train_frames'])
-        steps_per_epoch = int(np.ceil(
-            train_size
-            / config['training']['train_batch_size']
-            / config['training']['num_gpus']
-            / config['training']['num_nodes']
-        ))
-        model.config['optimizer']['steps_per_epoch'] = steps_per_epoch
-        model.config['optimizer']['total_steps'] = steps_per_epoch * num_epochs
-        if rank_zero_only.rank == 0:
-            log_step(
-                f'Training steps calculated: {steps_per_epoch} steps/epoch, {num_epochs} epochs',
-                level='debug',
-            )
-
-        trainer_epoch_kwargs = {'max_epochs': num_epochs, 'min_epochs': num_epochs}
-        use_distributed_sampler = sampler_kind == 'none'
 
     # ----------------------------------------------------------------------------------
     # Save configuration in output directory
@@ -239,7 +138,7 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         log_step('  - accelerator: gpu', level='debug')
         log_step(f"  - devices: {config['training']['num_gpus']}", level='debug')
         log_step(f"  - num_nodes: {config['training']['num_nodes']}", level='debug')
-        log_step(f'  - trainer_epoch_kwargs: {trainer_epoch_kwargs}', level='debug')
+        log_step(f"  - num_epochs: {config['training']['num_epochs']}", level='debug')
     trainer = pl.Trainer(
         accelerator='gpu',
         devices=config['training']['num_gpus'],
@@ -251,8 +150,9 @@ def train(config: dict, model: BaseLightningModel, output_dir: str | Path) -> Ba
         logger=logger,
         accumulate_grad_batches=config['optimizer']['accumulate_grad_batches'],
         sync_batchnorm=True,
-        use_distributed_sampler=use_distributed_sampler,
-        **trainer_epoch_kwargs,
+        use_distributed_sampler=datamodule.use_distributed_sampler,  # type: ignore[attr-defined]
+        max_epochs=config['training']['num_epochs'],
+        min_epochs=config['training']['num_epochs'],
     )
     if rank_zero_only.rank == 0:
         log_step("Trainer created", level='debug')

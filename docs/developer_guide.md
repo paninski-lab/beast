@@ -17,10 +17,15 @@ beast/
     main.py            # Entry point; dispatches to COMMANDS registry
   config.py            # Shared Pydantic schemas (BaseTrainingConfig, BaseOptimizerConfig,
                        #   DataConfig, BaseBeastConfig)
+  callbacks/
+    factory.py         # get_callbacks(): shared callbacks (LR monitor, checkpoints)
+    val_viz.py         # ValidationVizCallback: single-view contact sheets
+    val_viz_multiview.py  # MultiviewValidationVizCallback: renders, cameras, point clouds
   data/
+    builders.py        # build_singleview_datamodule, build_multiview_datamodule
     datasets.py        # BaseDataset, MultiViewDataset
     datamodules.py     # BaseDataModule, MultiViewDataModule
-    samplers.py        # ContrastBatchSampler (contrastive learning)
+    samplers.py        # ContrastBatchSampler, TripletBatchSampler
     augmentations.py   # imgaug pipeline builders
     types.py           # ExampleDict, MultiViewExampleDict (TypedDicts)
     video.py           # Video frame extraction utilities
@@ -33,17 +38,20 @@ beast/
   logging.py           # log_step() helper
   models/
     base.py            # BaseLightningModel (abstract; all models inherit from this)
-    registry.py        # MODEL/TRAIN/CONFIG_REGISTRY, get_*() lookups + _register_all()
+    registry.py        # MODEL/DATAMODULE/TRAIN/CONFIG_REGISTRY, get_*() lookups +
+                       #   _register_all()
     beast_resnet/      # Per-model package — see "Model package layout" below
     beast_vit/
     erayzer/
   preprocess/          # extract pipeline (extraction.py, extraction_3d.py) + SAM segmenter
+  losses.py            # masked_mse_loss
+  nn/
+    transformer.py     # shared transformer building blocks (used by ERayZer)
+    perceptual.py      # AlexPerceptual, VGGPerceptual
+    dino.py            # DinoV3 feature extractor
   rendering/
     gaussians_renderer.py  # gsplat-based Gaussian splatting renderer
-    transformer.py         # shared transformer building blocks (used by ERayZer)
-    losses.py              # rendering losses (L2, perceptual)
-    dino.py                # DINOv2 perceptual feature extractor
-  train.py             # Shared training loop (data setup, Lightning Trainer, callbacks)
+  train.py             # Shared training loop (config saving, Lightning Trainer, callbacks)
 configs/
   resnet_ae.yaml
   vit.yaml
@@ -70,13 +78,13 @@ beast.api.model.Model.from_config(config)
      │  → MODEL_REGISTRY[model_class](config)  →  LightningModule instance
      ▼
 Model.train(output_dir)
-     │  → TRAIN_REGISTRY[model_class](config, model, output_dir)
-     │      (currently all three models delegate to beast.train.train)
+     │  → DATAMODULE_REGISTRY[model_class](config)  →  set-up datamodule
+     │      (each model's build_datamodule calls a shared builder in beast.data.builders,
+     │       passing any model-specific options such as the sampler kind or mask loading)
+     │  → TRAIN_REGISTRY[model_class](config, model, datamodule, output_dir)
+     │      (currently all models delegate to beast.train.train)
      ▼
-beast.train.train(config, model, output_dir)
-     │  branches on model_class to select DataModule:
-     │    'erayzer' / beast3d → MultiViewDataModule
-     │    'resnet' / 'vit'    → BaseDataModule (with BaseDataset + imgaug)
+beast.train.train(config, model, datamodule, output_dir)
      │  saves config.yaml to output_dir
      │  → pl.Trainer.fit(model, datamodule)
      ▼
@@ -131,8 +139,8 @@ beast/models/<name>/
   __init__.py          # re-exports model class, all config classes, train
   <name>_config.py     # Pydantic schemas for model (+ training/optimizer if divergent)
   <name>_model.py      # LightningModule subclass
-  <name>_train.py      # training entry point; either delegates to beast.train.train or
-                       #   provides a custom loop
+  <name>_train.py      # build_datamodule(config) plus the training entry point; the latter
+                       #   either delegates to beast.train.train or provides a custom loop
 ```
 
 The model's `model_class` string identifier (e.g. `'resnet'`, `'vit'`, `'erayzer'`) is a
@@ -144,16 +152,17 @@ names).
 
 ## Registry
 
-`beast/models/registry.py` holds three dicts populated by `_register_all()`:
+`beast/models/registry.py` holds four dicts populated by `_register_all()`:
 
 ```python
-MODEL_REGISTRY: dict[str, type]           # model_class → LightningModule subclass
-TRAIN_REGISTRY: dict[str, Callable]       # model_class → train function
+MODEL_REGISTRY: dict[str, type]             # model_class → LightningModule subclass
+DATAMODULE_REGISTRY: dict[str, Callable]    # model_class → build_datamodule(config) function
+TRAIN_REGISTRY: dict[str, Callable]         # model_class → train function
 CONFIG_REGISTRY: dict[str, type[BaseModel]] # model_class → top-level <Model>BeastConfig
 ```
 
 `_register_all()` runs at import time (bottom of `registry.py`). To add a new model, add
-three lines to `_register_all()` — see step 6 of the checklist below.
+four lines to `_register_all()` — see step 6 of the checklist below.
 
 ---
 
@@ -167,6 +176,11 @@ three lines to `_register_all()` — see step 6 of the checklist below.
 | `MultiViewDataset` | Multi-view scenes from `beast extract_3d` output; loads images + optional cameras (c2w, fxfycxcy) + optional masks |
 | `BaseDataModule` | Wraps `BaseDataset`; random train/val/test split by probability |
 | `MultiViewDataModule` | Wraps `MultiViewDataset`; random split by `train_fraction`; used by ERayZer and BEAST3D |
+| `build_singleview_datamodule` / `build_multiview_datamodule` | Build a datamodule from the full config dict (`beast.data.builders`); each model's `build_datamodule` calls one with its model-specific options |
+
+Every datamodule must expose a `use_distributed_sampler` property; `train()` passes it to the
+Lightning `Trainer`. It is `False` when a custom batch sampler (contrastive or triplet) handles
+distributed partitioning itself.
 
 `MultiViewExampleDict` (from `beast.data.types`) is the typed batch dict returned by
 `MultiViewDataset.__getitem__`. Keys: `image`, `view_names`, `video_id`, `frame_id`, and
@@ -196,13 +210,32 @@ def predict_step(self, batch_dict: dict, batch_idx: int) -> dict: ...
 overrides `configure_optimizers` entirely). If your model uses a non-standard optimizer,
 override `configure_optimizers` in the subclass.
 
+### Callbacks
+
+Callbacks come from two places, and Lightning merges them:
+
+- **Shared** (`beast.callbacks.factory.get_callbacks`, called by `train()`): the LR monitor, the
+  best-by-`val_loss` checkpoint, and the optional every-n-epochs checkpoint.
+- **Model-specific** (`LightningModule.configure_callbacks`): `BaseLightningModel` adds the
+  validation visualization callback when `training.viz_every_n_epochs` is set. To change the
+  callback type, override `build_viz_callback` (ERayZer and BEAST3D return
+  `MultiviewValidationVizCallback`); to add other callbacks, extend `configure_callbacks`.
+
+Do not return `ModelCheckpoint` from `configure_callbacks`: Lightning drops trainer callbacks
+whose type matches a model callback, so it would replace both shared checkpoint callbacks.
+
+`train()` stores the run directory in `model.config['training']['output_dir']` after saving
+`config.yaml` (so it is not written to the yaml). `configure_callbacks` reads it to locate where
+visuals are saved, so a model built outside `train()` with viz enabled raises a `ValueError`.
+
 ### Rendering and geometry
 
 | Module | Contents |
 |---|---|
 | `beast.rendering.gaussians_renderer` | Gaussian splatting renderer (wraps gsplat) |
-| `beast.rendering.transformer` | Transformer building blocks used by ERayZer |
-| `beast.rendering.losses` | L2, perceptual (DINO), GS regularisation losses |
+| `beast.nn.transformer` | Transformer building blocks used by ERayZer |
+| `beast.nn.perceptual`, `beast.nn.dino` | Perceptual (VGG/Alex) and DINOv3 feature extractors |
+| `beast.losses` | `masked_mse_loss` |
 | `beast.geometry.camera` | `intrinsics_to_fxfycxcy`, `normalize_camera_sequence`, `scale_intrinsics`, `w2c_to_c2w`, SE(3) helpers |
 | `beast.geometry.rotations` | `rotation_6d_to_matrix`, `matrix_to_rotation_6d`, quaternion ↔ matrix |
 | `beast.geometry.positional_encoding` | 2-D sinusoidal PE |
@@ -272,16 +305,31 @@ predicting them).
 
 ### 4. Write `beast3d_train.py`
 
-If the model uses the shared training loop unchanged:
+Define `build_datamodule(config)`, which returns a set-up datamodule, and re-export the shared
+`train`. Pick the shared builder from `beast.data.builders` and pass any model-specific options
+(here, loading foreground masks):
 
 ```python
+import lightning.pytorch as pl
+
+from beast.data.builders import build_multiview_datamodule
 from beast.train import train
 
-__all__ = ['train']
+
+def build_datamodule(config: dict) -> pl.LightningDataModule:
+    """Build the datamodule for BEAST3D."""
+    return build_multiview_datamodule(config, use_mask=True)
+
+
+__all__ = ['build_datamodule', 'train']
 ```
 
-If it needs a custom loop, implement `train(config, model, output_dir)` here and make sure it
-has the same signature.
+The datamodule must expose a `use_distributed_sampler` attribute, which `train()` passes to the
+Lightning `Trainer`. Model-specific callbacks (e.g. validation visualization) are not set up
+here: override `configure_callbacks` on the model instead.
+
+If the model needs a custom loop, implement `train(config, model, datamodule, output_dir)`
+here and make sure it has the same signature.
 
 ### 5. Write `__init__.py`
 
@@ -290,21 +338,25 @@ Re-export the public API of the package:
 ```python
 from beast.models.beast3d.beast3d_config import Beast3DBeastConfig, Beast3DModelConfig
 from beast.models.beast3d.beast3d_model import Beast3D
-from beast.models.beast3d.beast3d_train import train
+from beast.models.beast3d.beast3d_train import build_datamodule, train
 
-__all__ = ['Beast3D', 'Beast3DBeastConfig', 'Beast3DModelConfig', 'train']
+__all__ = ['Beast3D', 'Beast3DBeastConfig', 'Beast3DModelConfig', 'build_datamodule', 'train']
 ```
 
 ### 6. Register the model in `beast/models/registry.py`
 
-Add three imports and three dict assignments inside `_register_all()`:
+Add the imports and four dict assignments inside `_register_all()`:
 
 ```python
 from beast.models.beast3d.beast3d_config import Beast3DBeastConfig
 from beast.models.beast3d.beast3d_model import Beast3D
-from beast.models.beast3d.beast3d_train import train as beast3d_train
+from beast.models.beast3d.beast3d_train import (
+    build_datamodule as beast3d_build_datamodule,
+    train as beast3d_train,
+)
 
 MODEL_REGISTRY['beast3d'] = Beast3D
+DATAMODULE_REGISTRY['beast3d'] = beast3d_build_datamodule
 TRAIN_REGISTRY['beast3d'] = beast3d_train
 CONFIG_REGISTRY['beast3d'] = Beast3DBeastConfig
 ```

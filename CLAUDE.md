@@ -198,7 +198,8 @@ def function_name(
 - Write clear, descriptive commit messages
 - Make atomic commits
 - Include tests with feature commits
-- Run tests before committing
+- Run tests, `ruff check beast tests`, and `pyright` (no arguments, so it covers `tests` too, as
+  CI does) before committing
 
 ### Branches
 - Use feature branches for development

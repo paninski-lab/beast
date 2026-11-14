@@ -1,7 +1,6 @@
 """Data modules split a dataset into train, val, and test modules."""
 
 import copy
-import logging
 import multiprocessing
 import os
 from pathlib import Path
@@ -20,8 +19,7 @@ from beast.data.samplers import (
     contrastive_collate_fn,
     triplet_collate_fn,
 )
-
-_logger = logging.getLogger(__name__)
+from beast.logging import log_step
 
 
 class BaseDataModule(pl.LightningDataModule):
@@ -92,6 +90,14 @@ class BaseDataModule(pl.LightningDataModule):
         self.seed = seed
         self.sampler = None
 
+    @property
+    def use_distributed_sampler(self) -> bool:
+        """Whether Lightning should wrap the train loader in a ``DistributedSampler``.
+
+        False when a custom batch sampler is used, since it handles rank partitioning itself.
+        """
+        return self.sampler_kind == 'none'
+
     def setup(self, stage: str | None = None) -> None:
         """Split dataset into train, val, and test subsets.
 
@@ -159,7 +165,7 @@ class BaseDataModule(pl.LightningDataModule):
             self.train_dataset.indices = list(self.train_dataset.indices[:n_frames])
 
         if rank_zero_only.rank == 0:
-            _logger.info(
+            log_step(
                 f'Number of images in the full dataset (train+val+test): {datalen}\n'
                 f'Dataset splits -- '
                 f'train: {len(self.train_dataset)}, '
@@ -364,9 +370,10 @@ def compute_num_train_frames(
         return len_train_dataset
     if train_frames > 1:
         if train_frames >= len_train_dataset:
-            _logger.warning(
+            log_step(
                 f'requested {train_frames} training frames but only {len_train_dataset} '
-                f'available; using all'
+                f'available; using all',
+                level='warning',
             )
             return len_train_dataset
         return int(train_frames)
@@ -509,6 +516,11 @@ class MultiViewDataModule(pl.LightningDataModule):
         self.train_dataset: MultiViewDataset | None = None
         self.val_dataset: MultiViewDataset | None = None
 
+    @property
+    def use_distributed_sampler(self) -> bool:
+        """Whether Lightning should wrap the train loader in a ``DistributedSampler``."""
+        return True
+
     def setup(self, stage: str | None = None) -> None:
         """Build train and val datasets by splitting unique frame IDs.
 
@@ -551,7 +563,7 @@ class MultiViewDataModule(pl.LightningDataModule):
         )
 
         if rank_zero_only.rank == 0:
-            _logger.info(
+            log_step(
                 f'MultiViewDataModule: {len(train_ids)} train frames, '
                 f'{len(val_ids)} val frames'
             )

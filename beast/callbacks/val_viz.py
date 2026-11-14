@@ -1,6 +1,5 @@
 """Callback that saves contact sheets of validation images and model outputs during training."""
 
-import logging
 from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
@@ -13,9 +12,8 @@ from lightning.pytorch.utilities import rank_zero_only
 from PIL import Image
 from torch.utils.data import default_collate
 
+from beast.logging import log_step
 from beast.models.base import BaseLightningModel
-
-_logger = logging.getLogger(__name__)
 
 # target side length of a contact sheet, in panels
 _SHEET_SIDE_PANELS = 9
@@ -155,9 +153,10 @@ class ValidationVizCallback(pl.Callback):
         self._check_model(pl_module)
         check_val = trainer.check_val_every_n_epoch or 1
         if self.every_n_epochs % check_val != 0:
-            _logger.warning(
+            log_step(
                 f'viz_every_n_epochs={self.every_n_epochs} is not a multiple of '
-                f'check_val_every_n_epoch={check_val}; some scheduled sheets will be skipped'
+                f'check_val_every_n_epoch={check_val}; some scheduled sheets will be skipped',
+                level='warning',
             )
 
     def _check_model(self, pl_module: pl.LightningModule) -> None:
@@ -189,7 +188,7 @@ class ValidationVizCallback(pl.Callback):
         try:
             self._save_sheets(trainer, pl_module)
         except Exception as exc:  # noqa: BLE001 - visualization must never break training
-            _logger.warning(f'validation visualization failed: {exc}')
+            log_step(f'validation visualization failed: {exc}', level='warning')
 
     def _iter_batches(
         self,
@@ -231,4 +230,4 @@ class ValidationVizCallback(pl.Callback):
             path = out_dir / f'epoch_{trainer.current_epoch:04d}_sheet_{idx_sheet:02d}.png'
             Image.fromarray(sheet).save(path)
         if rank_zero_only.rank == 0:
-            _logger.info(f'saved {len(sheets)} validation contact sheets to {out_dir}')
+            log_step(f'saved {len(sheets)} validation contact sheets to {out_dir}')

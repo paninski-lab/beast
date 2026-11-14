@@ -32,9 +32,15 @@ class TestLogStep:
         assert 'error message' in caplog.text
         assert caplog.records[-1].levelno == logging.ERROR
 
+    def test_warning_level_logs_at_warning(self, caplog) -> None:
+        with caplog.at_level(logging.WARNING, logger='beast'):
+            log_step('warning message', level='warning')
+        assert 'warning message' in caplog.text
+        assert caplog.records[-1].levelno == logging.WARNING
+
     def test_unknown_level_falls_through_to_info(self, caplog) -> None:
         with caplog.at_level(logging.INFO, logger='beast'):
-            log_step('plain', level='warning')
+            log_step('plain', level='bogus')
         assert 'plain' in caplog.text
         assert caplog.records[-1].levelno == logging.INFO
 
@@ -59,6 +65,12 @@ class TestLogStep:
         mock_logger = MagicMock()
         log_step('msg', level='error', logger=mock_logger)
         mock_logger.error.assert_called_once_with('msg')
+        mock_logger.info.assert_not_called()
+
+    def test_warning_with_logger_delegates_to_logger_warning(self) -> None:
+        mock_logger = MagicMock()
+        log_step('msg', level='warning', logger=mock_logger)
+        mock_logger.warning.assert_called_once_with('msg')
         mock_logger.info.assert_not_called()
 
     def test_with_logger_does_not_use_default_logger(self, caplog) -> None:

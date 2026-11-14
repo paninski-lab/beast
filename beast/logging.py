@@ -15,7 +15,7 @@ def log_step(
     Parameters
     ----------
     msg: message to log
-    level: 'info', 'debug', or 'error'; defaults to 'info'
+    level: 'info', 'debug', 'warning', or 'error'; defaults to 'info'
     flush: unused; retained for backward compatibility
     logger: if provided, use this logger instead of the default beast logger
 
@@ -23,6 +23,8 @@ def log_step(
     _logger = logger if logger is not None else logging.getLogger('beast')
     if level == 'debug':
         _logger.debug(msg)
+    elif level == 'warning':
+        _logger.warning(msg)
     elif level == 'error':
         _logger.error(msg)
     else:

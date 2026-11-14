@@ -1,7 +1,6 @@
 """High-level Model API for training and running inference with BEAST models."""
 
 import contextlib
-import logging
 import os
 import time
 from collections.abc import Generator
@@ -14,9 +13,12 @@ from beast.inference import predict_images, predict_video
 from beast.io import load_config
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
-from beast.models.registry import MODEL_REGISTRY, TRAIN_REGISTRY, get_config_class
-
-_logger = logging.getLogger(__name__)
+from beast.models.registry import (
+    DATAMODULE_REGISTRY,
+    MODEL_REGISTRY,
+    TRAIN_REGISTRY,
+    get_config_class,
+)
 
 
 # TODO: Replace with contextlib.chdir in python 3.11.
@@ -81,13 +83,13 @@ class Model:
         model_class = MODEL_REGISTRY[model_type]
         model = model_class(config)
 
-        _logger.info(f'Loaded a {model_class} model')
+        log_step(f'Loaded a {model_class} model')
 
         # Load best weights
         checkpoint_path = list(model_dir.rglob('*best.ckpt'))[0]
         state_dict = torch.load(checkpoint_path, map_location='cpu')
         model.load_state_dict(state_dict['state_dict'])
-        _logger.info(f'Loaded model weights from {checkpoint_path}')
+        log_step(f'Loaded model weights from {checkpoint_path}')
 
         return cls(model, config, model_dir)
 
@@ -127,7 +129,7 @@ class Model:
         init_duration = time.time() - init_start
         log_step(f"Model initialization completed in {init_duration:.2f} seconds", level='debug')
 
-        _logger.info(f'Initialized a {model_class} model')
+        log_step(f'Initialized a {model_class} model')
 
         return cls(model, config, model_dir=None)
 
@@ -141,9 +143,13 @@ class Model:
         """
         self.model_dir = Path(output_dir)
         model_type = self.config['model'].get('model_class', '').lower()
+        build_datamodule = DATAMODULE_REGISTRY[model_type]
         train_fn = TRAIN_REGISTRY[model_type]
         with chdir(self.model_dir):
-            self.model = train_fn(self.config, self.model, output_dir=self.model_dir)
+            datamodule = build_datamodule(self.config)
+            self.model = train_fn(
+                self.config, self.model, datamodule, output_dir=self.model_dir,
+            )
 
     def predict_images(
         self,

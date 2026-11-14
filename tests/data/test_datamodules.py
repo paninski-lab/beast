@@ -18,6 +18,9 @@ from beast.data.samplers import ContrastBatchSampler, TripletBatchSampler
 class TestBaseDataModule:
     """Test the BaseDataModule class."""
 
+    def test_use_distributed_sampler_true_without_custom_sampler(self, base_datamodule) -> None:
+        assert base_datamodule.use_distributed_sampler is True
+
     def test_train_val_test_dataloaders(self, base_datamodule) -> None:
         train_size = base_datamodule.train_batch_size
         val_size = base_datamodule.val_batch_size
@@ -123,6 +126,7 @@ class TestBaseDataModuleContrastive:
 
     def test_contrastive_datamodule_properties(self, base_datamodule_contrastive) -> None:
         assert base_datamodule_contrastive.sampler_kind == 'contrastive'
+        assert base_datamodule_contrastive.use_distributed_sampler is False
         assert base_datamodule_contrastive.train_batch_size % 2 == 0
 
         np.random.seed(0)
@@ -166,6 +170,7 @@ class TestBaseDataModuleTriplet:
 
     def test_triplet_datamodule_properties(self, base_datamodule_triplet) -> None:
         assert base_datamodule_triplet.sampler_kind == 'triplet'
+        assert base_datamodule_triplet.use_distributed_sampler is False
         assert base_datamodule_triplet.train_batch_size % 2 == 0
 
         np.random.seed(0)
@@ -352,6 +357,9 @@ class TestMultiViewDataModule:
             len(multiview_datamodule.train_dataset) + len(multiview_datamodule.val_dataset)
             == _N_TOTAL_FRAMES
         )
+
+    def test_use_distributed_sampler_is_true(self, multiview_datamodule) -> None:
+        assert multiview_datamodule.use_distributed_sampler is True
 
     def test_split_sizes(self, multiview_datamodule) -> None:
         assert len(multiview_datamodule.train_dataset) == 16
