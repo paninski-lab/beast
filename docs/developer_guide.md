@@ -50,6 +50,7 @@ beast/
   nn/
     transformer.py     # shared transformer building blocks (used by ERayZer)
     perceptual.py      # AlexPerceptual, VGGPerceptual
+    resnet.py          # ResNet encoder/decoder and latent bottleneck (used by ResNet, MSPS-VAE)
     dino.py            # DinoV3 feature extractor
   rendering/
     gaussians_renderer.py  # gsplat-based Gaussian splatting renderer

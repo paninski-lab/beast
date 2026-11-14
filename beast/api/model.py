@@ -14,10 +14,10 @@ from beast.io import load_config
 from beast.logging import log_step
 from beast.models.base import BaseLightningModel
 from beast.models.registry import (
-    DATAMODULE_REGISTRY,
-    MODEL_REGISTRY,
-    TRAIN_REGISTRY,
     get_config_class,
+    get_datamodule_fn,
+    get_model_class,
+    get_train_fn,
 )
 
 
@@ -37,6 +37,52 @@ def chdir(dir: str | Path) -> Generator[None, None, None]:
         yield
     finally:
         os.chdir(pwd)
+
+
+def _get_model_type(config: dict[str, Any]) -> str:
+    """Return the lower-cased ``model.model_class`` string from a full config dict.
+
+    Parameters
+    ----------
+    config: full experiment configuration dict
+
+    Returns
+    -------
+    model class identifier, or an empty string if the config does not set one
+
+    """
+    return config['model'].get('model_class', '').lower()
+
+
+def _build_model(config: dict[str, Any]) -> BaseLightningModel:
+    """Instantiate the registered LightningModule for a config.
+
+    Parameters
+    ----------
+    config: full experiment configuration dict
+
+    Returns
+    -------
+    freshly initialized model
+
+    Raises
+    ------
+    KeyError: if ``model.model_class`` is not registered
+
+    """
+    model_type = _get_model_type(config)
+    model_class = get_model_class(model_type)
+    log_step(f'Creating {model_type} model instance', level='debug')
+    log_step(
+        f'About to call {model_class.__name__}.__init__() - this may take several'
+        ' minutes if downloading pretrained weights',
+        level='debug',
+    )
+    init_start = time.time()
+    model = model_class(config)
+    init_duration = time.time() - init_start
+    log_step(f'Model initialization completed in {init_duration:.2f} seconds', level='debug')
+    return model
 
 
 class Model:
@@ -75,15 +121,8 @@ class Model:
         config_path = model_dir / 'config.yaml'
         config = load_config(config_path)
 
-        model_type = config['model'].get('model_class', '').lower()
-        if model_type not in MODEL_REGISTRY:
-            raise ValueError(f'Unknown model type: {model_type}')
-
-        # Initialize the LightningModule
-        model_class = MODEL_REGISTRY[model_type]
-        model = model_class(config)
-
-        log_step(f'Loaded a {model_class} model')
+        model = _build_model(config)
+        log_step(f'Loaded a {type(model)} model')
 
         # Load best weights
         checkpoint_path = list(model_dir.rglob('*best.ckpt'))[0]
@@ -112,24 +151,8 @@ class Model:
             model_class = (config_path.get('model') or {}).get('model_class', '')
             config = get_config_class(model_class).model_validate(config_path).model_dump()
 
-        model_type = config['model'].get('model_class', '').lower()
-        if model_type not in MODEL_REGISTRY:
-            raise ValueError(f'Unknown model type: {model_type}')
-
-        # Initialize the LightningModule
-        model_class = MODEL_REGISTRY[model_type]
-        log_step(f"Creating {model_type} model instance", level='debug')
-        log_step(
-            f"About to call {model_class.__name__}.__init__() - this may take several"
-            ' minutes if downloading pretrained weights',
-            level='debug',
-        )
-        init_start = time.time()
-        model = model_class(config)
-        init_duration = time.time() - init_start
-        log_step(f"Model initialization completed in {init_duration:.2f} seconds", level='debug')
-
-        log_step(f'Initialized a {model_class} model')
+        model = _build_model(config)
+        log_step(f'Initialized a {type(model)} model')
 
         return cls(model, config, model_dir=None)
 
@@ -142,9 +165,9 @@ class Model:
 
         """
         self.model_dir = Path(output_dir)
-        model_type = self.config['model'].get('model_class', '').lower()
-        build_datamodule = DATAMODULE_REGISTRY[model_type]
-        train_fn = TRAIN_REGISTRY[model_type]
+        model_type = _get_model_type(self.config)
+        build_datamodule = get_datamodule_fn(model_type)
+        train_fn = get_train_fn(model_type)
         with chdir(self.model_dir):
             datamodule = build_datamodule(self.config)
             self.model = train_fn(

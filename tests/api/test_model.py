@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from beast.api.model import Model, chdir
+from beast.api.model import Model, _build_model, _get_model_type, chdir
 
 
 def _make_valid_config(model_class: str) -> dict:
@@ -191,6 +191,33 @@ class TestModelFromDir:
         ):
             m = Model.from_dir(str(tmp_path))
         assert m.model_dir == tmp_path
+
+
+class TestGetModelType:
+    """Test the function _get_model_type."""
+
+    def test_get_model_type_lowercases(self) -> None:
+        assert _get_model_type({'model': {'model_class': 'ViT'}}) == 'vit'
+
+    def test_get_model_type_missing_returns_empty(self) -> None:
+        assert _get_model_type({'model': {}}) == ''
+
+
+class TestBuildModel:
+    """Test the function _build_model."""
+
+    def test_build_model_instantiates_registered_class(self) -> None:
+        config = {'model': {'model_class': 'vit'}}
+        mock_class = MagicMock()
+        mock_class.__name__ = 'MockModel'
+        with patch.dict('beast.models.registry.MODEL_REGISTRY', {'vit': mock_class}):
+            model = _build_model(config)
+        mock_class.assert_called_once_with(config)
+        assert model is mock_class.return_value
+
+    def test_build_model_unknown_class_raises(self) -> None:
+        with pytest.raises(KeyError, match='unknown_arch'):
+            _build_model({'model': {'model_class': 'unknown_arch'}})
 
 
 class TestModelTrain:

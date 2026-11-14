@@ -15,12 +15,7 @@ from jaxtyping import Float
 
 from beast.data.utils import denormalize_images
 from beast.models.base import BaseLightningModel
-from beast.models.beast_resnet.beast_resnet_model import (
-    LatentMapping,
-    ResNetDecoder,
-    ResNetEncoder,
-    get_configs,
-)
+from beast.nn.resnet import LatentMapping, ResNetDecoder, ResNetEncoder, get_configs
 
 
 def build_raised_cosine_weight_map(side: int, r0: float) -> torch.Tensor:
