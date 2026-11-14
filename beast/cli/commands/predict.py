@@ -1,4 +1,4 @@
-"""Command to run model inference on videos."""
+"""Command to run model inference on videos or images."""
 
 import argparse
 import logging
@@ -14,7 +14,7 @@ def register_parser(subparsers: Any) -> None:
     parser = subparsers.add_parser(
         'predict',
         description='Run inference using a trained model on image or video data.',
-        usage='beast predict --model <model_dir> --input <video_path> [options]',
+        usage='beast predict --model <model_dir> --input <video_or_dir> [options]',
     )
 
     # Required arguments
@@ -37,7 +37,10 @@ def register_parser(subparsers: Any) -> None:
     optional.add_argument(
         '--output', '-o',
         type=Path,
-        help='Directory to save prediction results (default: <model_dir>/predictions)',
+        help=(
+            'Directory to save prediction results (default: <model_dir>/video_predictions '
+            'for videos, <model_dir>/image_predictions/<input_dir_name> for images)'
+        ),
     )
     optional.add_argument(
         '--batch-size', '-b',
@@ -62,7 +65,8 @@ def handle(args: argparse.Namespace) -> None:
 
     _logger.info(f'Running inference with model from: {args.model}')
     _logger.info(f'Input: {args.input}')
-    _logger.info(f'Output directory: {args.output or args.model}')
+    output_dir = args.output or 'default (inside the model directory)'
+    _logger.info(f'Output directory: {output_dir}')
     if not args.save_latents and not args.save_reconstructions:
         _logger.warning(
             'did not detect --save_latents or --save_reconstructions; no outputs will be saved'

@@ -71,7 +71,7 @@ backbones for downstream tasks such as pose estimation, action segmentation, and
 | Paper               | [ICLR 2026](https://openreview.net/forum?id=AeqPIRKUni)      | [NeurIPS 2026 (Oral)](https://arxiv.org/abs/2606.02937) · [project page](https://ppwangyc.github.io/projects/beast3d) |
 | Input video         | single view (cameras are processed independently)            | synchronized multi-view, with camera calibration (anipose `.toml`)          |
 | Pretraining         | masked autoencoding (+ optional temporal contrastive loss)   | render held-out views from predicted 3D Gaussian splats + foreground segmentation |
-| Backbone            | ViT-B/16 (`vit`) or ResNet autoencoder (`resnet`)            | frozen DINOv3 ViT-B/16 + multi-view transformer (`beast3d`)                 |
+| Backbone            | ViT-T/S/B/L (`vit`) or ResNet autoencoder (`resnet`)         | frozen DINOv3 ViT-B/16 + multi-view transformer (`beast3d`)                 |
 | Tasks in the paper  | pose estimation, action segmentation, neural encoding        | novel view synthesis, multi-view pose estimation, neural encoding          |
 | Example config      | [`configs/vit.yaml`](configs/vit.yaml)                        | [`configs/multiview/beast3d.yaml`](configs/multiview/beast3d.yaml)          |
 

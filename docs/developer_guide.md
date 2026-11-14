@@ -31,7 +31,7 @@ beast/
     video.py           # Video frame extraction utilities
   geometry/
     camera.py          # c2w/w2c conversions, intrinsic normalisation, SE(3) helpers
-    rotations.py       # 6D rotation ↔ matrix, quaternion utilities
+    rotations.py       # rot6d2mat (6D rotation → matrix), quat2mat (quaternion → matrix)
     positional_encoding.py  # 2-D sinusoidal PE used by ERayZer
   inference.py         # predict_images(), predict_video() — used by Model.predict_*
   io.py                # load_config(), apply_config_overrides(), calibration loaders
@@ -40,9 +40,11 @@ beast/
     base.py            # BaseLightningModel (abstract; all models inherit from this)
     registry.py        # MODEL/DATAMODULE/TRAIN/CONFIG_REGISTRY, get_*() lookups +
                        #   _register_all()
-    beast_resnet/      # Per-model package — see "Model package layout" below
+    beast3d/           # Per-model package — see "Model package layout" below
+    beast_resnet/
     beast_vit/
     erayzer/
+    msps_vae/
   preprocess/          # extract pipeline (extraction.py, extraction_3d.py) + SAM segmenter
   losses.py            # masked_mse_loss
   nn/
@@ -55,8 +57,11 @@ beast/
 configs/
   resnet_ae.yaml
   vit.yaml
+  msps_vae.yaml
   multiview/
-    erayzer.yaml        # Reference config for ERayZer / BEAST3D
+    erayzer.yaml        # ERayZer
+    beast3d.yaml        # BEAST3D
+    extraction_pipeline.yaml  # `beast extract_3d` dataset pipeline (not a model config)
 tests/                 # Mirror of beast/ package tree; see Testing section
 ```
 
@@ -105,14 +110,15 @@ Each model owns its complete Pydantic schemas in its `<model>_config.py` file:
 | `VitModelConfig` / `VitBeastConfig` | `beast_vit/beast_vit_config.py` | model section / top-level config |
 | `ERayZerModelConfig` / `ERayZerBeastConfig` | `erayzer/erayzer_config.py` | model section / top-level config |
 | `ERayZerTrainingConfig` | `erayzer/erayzer_config.py` | training section |
-| `Beast3DModelConfig` / `Beast3DBeastConfig` | `beast3d/beast3d_config.py` | model section / top-level config |
+| `Beast3DModelConfig` / `Beast3DBeastConfig` | `beast3d/beast3d_config.py` | model section / top-level config (training section reuses `ERayZerTrainingConfig`) |
+| `MspsVaeModelConfig` / `MspsVaeBeastConfig` | `msps_vae/msps_vae_config.py` | model section / top-level config |
 
 Shared schemas live in `beast/config.py`: `BaseTrainingConfig`, `BaseOptimizerConfig`,
 `DataConfig`, and `BaseBeastConfig` (the optimizer, data and inference fields every top-level
 config has). It imports no model package, so model `*_config.py` files can subclass them.
 Each `<Model>BeastConfig` subclasses `BaseBeastConfig` and adds its `model` and `training`
 sections. Most models use `BaseTrainingConfig` and `BaseOptimizerConfig` unchanged; models with
-extra training fields (ERayZer, BEAST3D) subclass `BaseTrainingConfig`.
+extra training fields (ERayZer; BEAST3D reuses its schema) subclass `BaseTrainingConfig`.
 
 `imgaug` and `val_probability` in `BaseTrainingConfig` only apply to models trained with
 `BaseDataModule`; the multi-view models (ERayZer, BEAST3D) ignore them and use `train_probability`
@@ -132,16 +138,18 @@ it looks up `CONFIG_REGISTRY` and raises `ValueError` if
 
 ## Model package layout
 
-Every model lives in `beast/models/<name>/` and contains exactly:
+Every model lives in `beast/models/<name>/` and contains at least:
 
 ```
 beast/models/<name>/
-  __init__.py          # re-exports model class, all config classes, train
+  __init__.py          # re-exports model class, all config classes, build_datamodule, train
   <name>_config.py     # Pydantic schemas for model (+ training/optimizer if divergent)
   <name>_model.py      # LightningModule subclass
   <name>_train.py      # build_datamodule(config) plus the training entry point; the latter
                        #   either delegates to beast.train.train or provides a custom loop
 ```
+
+Larger models may add helper modules alongside these (e.g. `erayzer/visualize.py`).
 
 The model's `model_class` string identifier (e.g. `'resnet'`, `'vit'`, `'erayzer'`) is a
 stable logical name set in `Literal['<name>']` inside the config class. It does **not** have
@@ -174,8 +182,8 @@ four lines to `_register_all()` — see step 6 of the checklist below.
 |---|---|
 | `BaseDataset` | Single-view image folder; handles JPEG/PNG, imgaug transforms, grayscale→RGB |
 | `MultiViewDataset` | Multi-view scenes from `beast extract_3d` output; loads images + optional cameras (c2w, fxfycxcy) + optional masks |
-| `BaseDataModule` | Wraps `BaseDataset`; random train/val/test split by probability |
-| `MultiViewDataModule` | Wraps `MultiViewDataset`; random split by `train_fraction`; used by ERayZer and BEAST3D |
+| `BaseDataModule` | Wraps `BaseDataset`; random train/val/test split by probability (sequential when the contrastive sampler is used) |
+| `MultiViewDataModule` | Wraps `MultiViewDataset`; sequential (unshuffled) split of frame IDs by `train_fraction`, so later frames land in val; used by ERayZer and BEAST3D |
 | `build_singleview_datamodule` / `build_multiview_datamodule` | Build a datamodule from the full config dict (`beast.data.builders`); each model's `build_datamodule` calls one with its model-specific options |
 
 Every datamodule must expose a `use_distributed_sampler` property; `train()` passes it to the
@@ -189,7 +197,9 @@ optionally `c2w`, `fxfycxcy`, `input_mask`.
 Camera tensors use the following conventions throughout:
 - **c2w**: camera-to-world transform, shape `(views, 4, 4)`
 - **fxfycxcy**: intrinsics in absolute pixels `(fx, fy, cx, cy)`, shape `(views, 4)`
-- `normalized_intrinsics=False` must be set on the model when passing absolute-pixel intrinsics
+- `ERayZer._resolve_cameras` returns a `normalized` flag; `True` means `fxfycxcy` is divided by the
+  image dimensions. The multi-view datamodules provide absolute-pixel intrinsics, and BEAST3D
+  returns `normalized=False`
 
 ### Model base class
 
@@ -206,9 +216,9 @@ def compute_loss(self, stage: str | None, **kwargs) -> tuple[torch.Tensor, list[
 def predict_step(self, batch_dict: dict, batch_idx: int) -> dict: ...
 ```
 
-`BaseLightningModel` does **not** implement an optimizer for ERayZer-style models (ERayZer
-overrides `configure_optimizers` entirely). If your model uses a non-standard optimizer,
-override `configure_optimizers` in the subclass.
+`BaseLightningModel.configure_optimizers` serves every shipped model, including ERayZer and
+BEAST3D. If your model needs a non-standard optimizer, override `configure_optimizers` in the
+subclass.
 
 ### Callbacks
 
@@ -237,7 +247,7 @@ visuals are saved, so a model built outside `train()` with viz enabled raises a 
 | `beast.nn.perceptual`, `beast.nn.dino` | Perceptual (VGG/Alex) and DINOv3 feature extractors |
 | `beast.losses` | `masked_mse_loss` |
 | `beast.geometry.camera` | `intrinsics_to_fxfycxcy`, `normalize_camera_sequence`, `scale_intrinsics`, `w2c_to_c2w`, SE(3) helpers |
-| `beast.geometry.rotations` | `rotation_6d_to_matrix`, `matrix_to_rotation_6d`, quaternion ↔ matrix |
+| `beast.geometry.rotations` | `rot6d2mat` (6D rotation → matrix), `quat2mat` (quaternion → matrix) |
 | `beast.geometry.positional_encoding` | 2-D sinusoidal PE |
 
 ---

@@ -44,10 +44,10 @@ jobs:
           echo "Linting failed!"
           echo ""
           echo "To auto-fix issues locally, run:"
-          echo "  ruff check --fix lightning_pose tests"
+          echo "  ruff check --fix beast tests"
           echo ""
           echo "To see all violations without fixing, run:"
-          echo "  ruff check lightning_pose tests"
+          echo "  ruff check beast tests"
           echo ""
 
       - name: Type check with pyright

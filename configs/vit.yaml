@@ -22,7 +22,7 @@ model:
 # training configuration
 training:
   seed: 0
-  imgaug: default  # default | top-down
+  imgaug: default  # none | default | top-down
   train_batch_size: 256    # per GPU (256 @ bf16-mixed is about 20GB per GPU)
   val_batch_size: 512
   test_batch_size: 512
