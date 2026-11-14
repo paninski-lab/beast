@@ -197,10 +197,12 @@ def compute_video_motion_energy(
     video_file: absolute path to mp4
     resize_dims: number of pixels (in both dimensions) to downsample video before computing motion
         energy
+    return_frames: if True, also return the downsampled frames used to compute motion energy
 
     Returns
     -------
-    motion energy array of shape (n_frames,)
+    motion energy array of shape (n_frames,); if ``return_frames`` is True, a tuple of (motion
+    energy, flattened downsampled frames of shape (n_frames, n_pixels))
 
     """
 

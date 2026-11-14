@@ -2,7 +2,7 @@
 
 Modules
 -------
-perceptual   — AlexNet-based perceptual loss network
+perceptual   — AlexNet- and VGG-based perceptual loss networks
 transformer  — attention layers, MLP, and transformer blocks (used by ERayZer)
 dino         — DINOv3 feature extractor wrapper
 """

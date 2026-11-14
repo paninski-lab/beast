@@ -1,4 +1,4 @@
-"""Custom batch samplers for contrastive learning with temporally adjacent frame pairs."""
+"""Custom batch samplers for contrastive and triplet-loss training on temporally close frames."""
 
 import bisect
 import re
@@ -18,14 +18,17 @@ def extract_anchor_indices(
 ) -> tuple[list[int], dict[int, list[int]]]:
     """Extract anchor indices from image paths that have valid neighboring frames.
 
-    Args:
-        image_list: list of image paths
-        idx_offset: frame number offset used to define a valid neighbor
+    Parameters
+    ----------
+    image_list: list of image paths
+    idx_offset: frame number offset used to define a valid neighbor
 
-    Returns:
-        tuple of (anchor_indices, pos_indices) where anchor_indices is the list of dataset
-        indices that have at least one valid neighbor, and pos_indices maps each anchor index
-        to its list of valid neighbor indices
+    Returns
+    -------
+    tuple of (anchor_indices, pos_indices) where anchor_indices is the list of dataset
+    indices that have at least one valid neighbor, and pos_indices maps each anchor index
+    to its list of valid neighbor indices
+
     """
     anchor_indices = []
     pos_indices = {}
@@ -249,11 +252,14 @@ def contrastive_collate_fn(batch_of_dicts: list[dict]) -> dict[str, torch.Tensor
 
     Assumes even-indexed items are reference frames and odd-indexed items are positives.
 
-    Args:
-        batch_of_dicts: list of dicts returned by BaseDataset.__getitem__
+    Parameters
+    ----------
+    batch_of_dicts: list of dicts returned by BaseDataset.__getitem__
 
-    Returns:
-        dict with keys 'image' (all frames stacked: refs then positives) and 'idx' (frame indices)
+    Returns
+    -------
+    dict with keys 'image' (all frames stacked: refs then positives) and 'idx' (frame indices)
+
     """
     refs = []
     pos = []
@@ -286,14 +292,17 @@ def extract_windowed_positive_pool(
     symmetric or contiguous. Used to build temporally-local (rather than
     frame-adjacent) positive pairs for triplet-loss sampling.
 
-    Args:
-        image_list: list of image paths
-        window: maximum frame-number distance (same video) for a valid positive
+    Parameters
+    ----------
+    image_list: list of image paths
+    window: maximum frame-number distance (same video) for a valid positive
 
-    Returns:
-        tuple of (anchor_indices, pos_indices) where anchor_indices is the list of dataset
-        indices that have at least one same-video frame within the window, and pos_indices
-        maps each anchor index to the list of such candidate indices
+    Returns
+    -------
+    tuple of (anchor_indices, pos_indices) where anchor_indices is the list of dataset
+    indices that have at least one same-video frame within the window, and pos_indices
+    maps each anchor index to the list of such candidate indices
+
     """
     frame_info = []
     for idx, img_path in enumerate(image_list):
@@ -488,12 +497,15 @@ def triplet_collate_fn(batch_of_dicts: list[dict]) -> dict[str, torch.Tensor | l
     `contrastive_collate_fn`) so downstream triplet-loss computation can pick
     different-video negatives from within the batch.
 
-    Args:
-        batch_of_dicts: list of dicts returned by BaseDataset.__getitem__
+    Parameters
+    ----------
+    batch_of_dicts: list of dicts returned by BaseDataset.__getitem__
 
-    Returns:
-        dict with keys 'image', 'idx' (stacked tensors) and 'video' (list of str),
-        all ordered as [ref_0, ..., ref_{B-1}, pos_0, ..., pos_{B-1}]
+    Returns
+    -------
+    dict with keys 'image', 'idx' (stacked tensors) and 'video' (list of str),
+    all ordered as [ref_0, ..., ref_{B-1}, pos_0, ..., pos_{B-1}]
+
     """
     refs, pos = [], []
     ref_idx, pos_idx = [], []

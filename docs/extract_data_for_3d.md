@@ -108,7 +108,7 @@ inside the calibration file. Use `calibration.cam_name_mapping` to bridge the ga
 output_dir/
 ├── video_stats.csv              # per-video stats (fps, resolution, frame count)
 ├── video_stats.json             # aggregate summary stats
-├── videos_trim/                 # (cut.enabled) trimmed videos
+├── videos_trim/                 # (trim.enabled) trimmed videos
 ├── videos/                      # (downsample.enabled) downsampled videos
 ├── segmentation_masks/
 │   ├── session01_cam0/
@@ -253,10 +253,8 @@ Controls how camera calibration files are located and parsed.
 
 ### `assemble`
 
-Controls the final frame export step.
-
-| Field | Default | Description |
-|-------|---------|-------------|
+The assemble step (k-means frame selection and export) has no options of its own; frame
+selection and export are configured under [`frame`](#frame).
 
 ### `resize`
 
