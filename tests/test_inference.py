@@ -13,6 +13,7 @@ from PIL import Image
 from beast.inference import (
     ImagePredictionHandler,
     VideoPredictionHandler,
+    _build_predict_trainer,
     predict_images,
     predict_video,
 )
@@ -520,6 +521,29 @@ class TestVideoPredictionHandlerInitVideoWriter:
             # Act / Assert
             with pytest.raises(ValueError, match='Failed to open video writer'):
                 handler._init_video_writer()
+
+
+class TestBuildPredictTrainer:
+    """Test the function _build_predict_trainer."""
+
+    def test_build_predict_trainer_passes_precision(self) -> None:
+        # Arrange / Act
+        with (
+            patch('beast.inference.pl.Trainer') as MockTrainer,
+            patch('beast.inference.torch.cuda.is_bf16_supported', return_value=True),
+        ):
+            _build_predict_trainer('bf16-mixed')
+        # Assert
+        assert MockTrainer.call_args.kwargs['precision'] == 'bf16-mixed'
+
+    def test_build_predict_trainer_invalid_precision_raises(self) -> None:
+        with pytest.raises(ValueError, match='precision must be one of'):
+            _build_predict_trainer('16-mixed')  # type: ignore[arg-type]
+
+    def test_build_predict_trainer_bf16_unsupported_raises(self) -> None:
+        with patch('beast.inference.torch.cuda.is_bf16_supported', return_value=False):
+            with pytest.raises(ValueError, match='bfloat16'):
+                _build_predict_trainer('bf16-mixed')
 
 
 class TestPredictImages:

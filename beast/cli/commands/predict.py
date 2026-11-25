@@ -58,6 +58,12 @@ def register_parser(subparsers: Any) -> None:
         action='store_true',
         help='Extract and save reconstructions',
     )
+    optional.add_argument(
+        '--precision',
+        choices=['32-true', 'bf16-mixed'],
+        default='bf16-mixed',
+        help='Numerical precision for inference (default: bf16-mixed)',
+    )
 
 
 def handle(args: argparse.Namespace) -> None:
@@ -85,6 +91,7 @@ def handle(args: argparse.Namespace) -> None:
             batch_size=args.batch_size,
             save_latents=args.save_latents,
             save_reconstructions=args.save_reconstructions,
+            precision=args.precision,
         )
 
     elif args.input.is_dir():
@@ -110,6 +117,7 @@ def handle(args: argparse.Namespace) -> None:
                     batch_size=args.batch_size,
                     save_latents=args.save_latents,
                     save_reconstructions=args.save_reconstructions,
+                    precision=args.precision,
                 )
         else:
             model.predict_images(
@@ -118,4 +126,5 @@ def handle(args: argparse.Namespace) -> None:
                 batch_size=args.batch_size,
                 save_latents=args.save_latents,
                 save_reconstructions=args.save_reconstructions,
+                precision=args.precision,
             )

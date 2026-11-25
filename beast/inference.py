@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import cv2
 import lightning.pytorch as pl
@@ -11,11 +11,37 @@ import torch
 import yaml
 from PIL import Image
 
+from beast.config import Precision
 from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD, BaseDataset
 from beast.data.video import VideoFrameIterator
 from beast.models.base import BaseLightningModel
 
 _logger = logging.getLogger(__name__)
+
+_PRECISIONS = get_args(Precision)
+
+
+def _build_predict_trainer(precision: Precision) -> pl.Trainer:
+    """Build a single-GPU trainer for inference at the requested precision.
+
+    Parameters
+    ----------
+    precision: numerical precision, either '32-true' or 'bf16-mixed'
+
+    Returns
+    -------
+    Lightning trainer configured for prediction
+
+    Raises
+    ------
+    ValueError: if precision is not supported, or bf16 is requested on a GPU without support
+
+    """
+    if precision not in _PRECISIONS:
+        raise ValueError(f'precision must be one of {list(_PRECISIONS)}; got {precision!r}')
+    if precision == 'bf16-mixed' and not torch.cuda.is_bf16_supported():
+        raise ValueError('precision=bf16-mixed requires a GPU with bfloat16 support')
+    return pl.Trainer(accelerator='gpu', devices=1, logger=False, precision=precision)
 
 
 class ImagePredictionHandler:
@@ -455,6 +481,7 @@ def predict_images(
     save_latents: bool = True,
     save_reconstructions: bool = True,
     num_channels: int = 3,
+    precision: Precision = 'bf16-mixed',
 ) -> dict[str, Any]:
     """Run inference on images using a trained model and save results.
 
@@ -473,6 +500,7 @@ def predict_images(
     save_reconstructions: whether to save reconstructed images as PNG files
     num_channels: number of image channels; 1 loads as grayscale then converts to RGB, 3 loads
         as RGB
+    precision: numerical precision for inference, '32-true' or 'bf16-mixed'
 
     Returns
     -------
@@ -512,7 +540,7 @@ def predict_images(
     model.return_reconstructions = save_reconstructions
 
     # run inference
-    trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
+    trainer = _build_predict_trainer(precision)
     predictions = trainer.predict(model, dataloaders=dataloader, return_predictions=True)
     if predictions is None:
         raise RuntimeError('trainer.predict() returned None')
@@ -534,6 +562,7 @@ def predict_video(
     batch_size: int = 32,
     save_latents: bool = True,
     save_reconstructions: bool = True,
+    precision: Precision = 'bf16-mixed',
 ) -> dict[str, Any]:
     """Run inference on video using a trained model and save results.
 
@@ -545,6 +574,7 @@ def predict_video(
     batch_size: number of images to process in each batch
     save_latents: whether to save latent representations as .npy files in a 'latents/' subdirectory
     save_reconstructions: whether to save reconstructed images as PNG files
+    precision: numerical precision for inference, '32-true' or 'bf16-mixed'
 
     Returns
     -------
@@ -574,7 +604,7 @@ def predict_video(
     model.return_reconstructions = save_reconstructions
 
     # run inference
-    trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
+    trainer = _build_predict_trainer(precision)
     predictions = trainer.predict(model, dataloaders=dataloader, return_predictions=True)
     if predictions is None:
         raise RuntimeError('trainer.predict() returned None')

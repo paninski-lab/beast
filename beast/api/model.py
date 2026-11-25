@@ -9,6 +9,7 @@ from typing import Any
 
 import torch
 
+from beast.config import Precision
 from beast.inference import predict_images, predict_video
 from beast.io import load_config
 from beast.logging import log_step
@@ -181,6 +182,7 @@ class Model:
         batch_size: int = 32,
         save_latents: bool = True,
         save_reconstructions: bool = True,
+        precision: Precision = 'bf16-mixed',
     ) -> dict[str, Any]:
         """Run inference on a possibly nested directory of images.
 
@@ -191,6 +193,7 @@ class Model:
         batch_size: batch size for inference
         save_latents: save latents for each image as a numpy file
         save_reconstructions: save reconstructed images
+        precision: numerical precision for inference, '32-true' or 'bf16-mixed'
 
         Returns
         -------
@@ -207,6 +210,7 @@ class Model:
             batch_size=batch_size,
             save_latents=save_latents,
             save_reconstructions=save_reconstructions,
+            precision=precision,
         )
         return outputs
 
@@ -217,6 +221,7 @@ class Model:
         batch_size: int = 32,
         save_latents: bool = True,
         save_reconstructions: bool = True,
+        precision: Precision = 'bf16-mixed',
     ) -> dict[str, Any]:
         """Run inference on a single video.
 
@@ -227,6 +232,7 @@ class Model:
         batch_size: batch size for inference
         save_latents: save latents for each image as a numpy file
         save_reconstructions: save reconstructed images
+        precision: numerical precision for inference, '32-true' or 'bf16-mixed'
 
         Returns
         -------
@@ -243,4 +249,5 @@ class Model:
             batch_size=batch_size,
             save_latents=save_latents,
             save_reconstructions=save_reconstructions,
+            precision=precision,
         )

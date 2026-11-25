@@ -40,8 +40,18 @@ class TestBaseTrainingConfig:
         )
         assert (std.num_epochs, std.check_val_every_n_epoch, std.viz_num_frames) == (800, 5, 108)
         assert (ray.num_epochs, ray.check_val_every_n_epoch, ray.viz_num_frames) == (800, 1, 8)
-        assert ray.train_frames is None and ray.precision == '32-true'
+        assert ray.train_frames is None and ray.precision == 'bf16-mixed'
         assert (std.train_probability, ray.train_probability) == (0.95, 0.9)
+
+    def test_base_training_config_precision_restricted(self):
+        cfg = BaseTrainingConfig(train_batch_size=4, val_batch_size=4, precision='bf16-mixed')
+        assert cfg.precision == 'bf16-mixed'
+        with pytest.raises(ValueError):
+            BaseTrainingConfig(
+                train_batch_size=4,
+                val_batch_size=4,
+                precision='16-mixed',  # type: ignore[arg-type]
+            )
 
     def test_base_training_config_split_and_augmentation_defaults(self):
         cfg = BaseTrainingConfig(train_batch_size=4, val_batch_size=4)
