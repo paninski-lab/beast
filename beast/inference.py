@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args
 
 import cv2
 import lightning.pytorch as pl
@@ -11,25 +11,106 @@ import torch
 import yaml
 from PIL import Image
 
+from beast.config import Precision
 from beast.data.datasets import _IMAGENET_MEAN, _IMAGENET_STD, BaseDataset
 from beast.data.video import VideoFrameIterator
 from beast.models.base import BaseLightningModel
 
 _logger = logging.getLogger(__name__)
 
+LatentsDtype = Literal['float32', 'float16']
+
+_PRECISIONS = get_args(Precision)
+_LATENTS_DTYPES = get_args(LatentsDtype)
+
+
+def _validate_latents_dtype(latents_dtype: str) -> None:
+    """Check that the latents dtype is supported.
+
+    Parameters
+    ----------
+    latents_dtype: dtype used when saving latents, either 'float32' or 'float16'
+
+    Raises
+    ------
+    ValueError: if latents_dtype is not supported
+
+    """
+    if latents_dtype not in _LATENTS_DTYPES:
+        raise ValueError(
+            f'latents_dtype must be one of {list(_LATENTS_DTYPES)}; got {latents_dtype!r}'
+        )
+
+
+def _latents_to_numpy(
+    latents: torch.Tensor,
+    latents_dtype: LatentsDtype,
+) -> tuple[np.ndarray, bool]:
+    """Convert latents to a numpy array of the requested dtype.
+
+    Parameters
+    ----------
+    latents: latent tensor of any floating dtype
+    latents_dtype: dtype of the returned array
+
+    Returns
+    -------
+    array of latents, and whether casting to a narrower dtype overflowed finite values to inf
+
+    """
+    array_full = latents.detach().cpu().float().numpy()
+    array = array_full.astype(latents_dtype)
+    overflow = bool(np.isinf(array).any() and not np.isinf(array_full).any())
+    return array, overflow
+
+
+def _build_predict_trainer(precision: Precision) -> pl.Trainer:
+    """Build a single-GPU trainer for inference at the requested precision.
+
+    Parameters
+    ----------
+    precision: numerical precision, either '32-true' or 'bf16-mixed'
+
+    Returns
+    -------
+    Lightning trainer configured for prediction
+
+    Raises
+    ------
+    ValueError: if precision is not supported, or bf16 is requested on a GPU without support
+
+    """
+    if precision not in _PRECISIONS:
+        raise ValueError(f'precision must be one of {list(_PRECISIONS)}; got {precision!r}')
+    if precision == 'bf16-mixed' and not torch.cuda.is_bf16_supported():
+        raise ValueError('precision=bf16-mixed requires a GPU with bfloat16 support')
+    return pl.Trainer(accelerator='gpu', devices=1, logger=False, precision=precision)
+
 
 class ImagePredictionHandler:
     """Handles saving predictions while preserving directory structure."""
 
-    def __init__(self, output_dir: str | Path, source_dir: str | Path) -> None:
+    def __init__(
+        self,
+        output_dir: str | Path,
+        source_dir: str | Path,
+        latents_dtype: LatentsDtype = 'float16',
+    ) -> None:
         """Initialize handler with output and source directories.
 
         Parameters
         ----------
         output_dir: directory where predictions will be saved
         source_dir: root directory of source images, used to preserve directory structure
+        latents_dtype: dtype used when saving latents, 'float32' or 'float16'
+
+        Raises
+        ------
+        ValueError: if latents_dtype is not supported
 
         """
+        _validate_latents_dtype(latents_dtype)
+        self.latents_dtype: LatentsDtype = latents_dtype
         self.output_dir = Path(output_dir)
         self.source_dir = Path(source_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -59,7 +140,7 @@ class ImagePredictionHandler:
         tensor = tensor * 255.0
 
         # Convert to uint8 numpy array
-        np_array = tensor.detach().cpu().numpy().astype(np.uint8)
+        np_array = tensor.detach().cpu().float().numpy().astype(np.uint8)
 
         # Handle grayscale vs RGB
         # if np_array.shape[2] == 1:
@@ -107,7 +188,12 @@ class ImagePredictionHandler:
         latents_path = latents_dir / f'{original_stem}.npy'
 
         # Convert to numpy and save
-        latents_np = latents.detach().cpu().numpy()
+        latents_np, overflow = _latents_to_numpy(latents, self.latents_dtype)
+        if overflow:
+            _logger.warning(
+                f'latents for {original_path} overflowed {self.latents_dtype} and were saved '
+                f'as inf; use latents_dtype=float32'
+            )
         np.save(latents_path, latents_np)
 
         return latents_path
@@ -245,15 +331,28 @@ class ImagePredictionHandler:
 class VideoPredictionHandler:
     """Handles saving predictions for video processing."""
 
-    def __init__(self, output_dir: str | Path, video_file: str | Path) -> None:
+    def __init__(
+        self,
+        output_dir: str | Path,
+        video_file: str | Path,
+        latents_dtype: LatentsDtype = 'float16',
+    ) -> None:
         """Initialize the video prediction handler.
 
         Parameters
         ----------
         output_dir: directory where results will be saved
         video_file: absolute path to the source video file
+        latents_dtype: dtype used when saving latents, 'float32' or 'float16'
+
+        Raises
+        ------
+        ValueError: if latents_dtype is not supported
 
         """
+        _validate_latents_dtype(latents_dtype)
+        self.latents_dtype: LatentsDtype = latents_dtype
+        self.latents_overflow = False
         self.output_dir = Path(output_dir)
         self.video_file = Path(video_file)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -303,7 +402,7 @@ class VideoPredictionHandler:
         tensor = tensor * 255.0
 
         # convert to uint8 numpy array
-        np_array = tensor.detach().cpu().numpy().astype(np.uint8)
+        np_array = tensor.detach().cpu().float().numpy().astype(np.uint8)
 
         # convert RGB to BGR for OpenCV
         # if np_array.shape[2] == 3:
@@ -351,7 +450,9 @@ class VideoPredictionHandler:
             # save latents - accumulate all latents
             if save_latents:
                 # convert to numpy and store
-                latent_np = latents[i].detach().cpu().numpy()
+                # cast per frame so the accumulated array also uses the smaller dtype
+                latent_np, overflow = _latents_to_numpy(latents[i], self.latents_dtype)
+                self.latents_overflow |= overflow
                 self.all_latents.append(latent_np)
 
             # save reconstruction frame to video
@@ -416,6 +517,11 @@ class VideoPredictionHandler:
         # save concatenated latents
         if save_latents and self.all_latents:
             latents_array = np.stack(self.all_latents, axis=0)
+            if self.latents_overflow:
+                _logger.warning(
+                    f'some latents overflowed {self.latents_dtype} and were saved as inf; '
+                    f'use latents_dtype=float32'
+                )
             latents_path = self.output_dir / f'{self.video_file.stem}.npy'
             np.save(latents_path, latents_array)
 
@@ -455,6 +561,8 @@ def predict_images(
     save_latents: bool = True,
     save_reconstructions: bool = True,
     num_channels: int = 3,
+    precision: Precision = 'bf16-mixed',
+    latents_dtype: LatentsDtype = 'float16',
 ) -> dict[str, Any]:
     """Run inference on images using a trained model and save results.
 
@@ -473,6 +581,9 @@ def predict_images(
     save_reconstructions: whether to save reconstructed images as PNG files
     num_channels: number of image channels; 1 loads as grayscale then converts to RGB, 3 loads
         as RGB
+    precision: numerical precision for inference, '32-true' or 'bf16-mixed'
+    latents_dtype: dtype used when saving latents, 'float32' or 'float16'; float16 halves the
+        file size at ~3 significant digits and overflows to inf above 65504
 
     Returns
     -------
@@ -491,7 +602,7 @@ def predict_images(
     source_dir = Path(source_dir)
 
     # initialize prediction handler
-    handler = ImagePredictionHandler(output_dir, source_dir)
+    handler = ImagePredictionHandler(output_dir, source_dir, latents_dtype=latents_dtype)
 
     # dataset
     dataset = BaseDataset(
@@ -512,7 +623,7 @@ def predict_images(
     model.return_reconstructions = save_reconstructions
 
     # run inference
-    trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
+    trainer = _build_predict_trainer(precision)
     predictions = trainer.predict(model, dataloaders=dataloader, return_predictions=True)
     if predictions is None:
         raise RuntimeError('trainer.predict() returned None')
@@ -534,6 +645,8 @@ def predict_video(
     batch_size: int = 32,
     save_latents: bool = True,
     save_reconstructions: bool = True,
+    precision: Precision = 'bf16-mixed',
+    latents_dtype: LatentsDtype = 'float16',
 ) -> dict[str, Any]:
     """Run inference on video using a trained model and save results.
 
@@ -545,6 +658,9 @@ def predict_video(
     batch_size: number of images to process in each batch
     save_latents: whether to save latent representations as .npy files in a 'latents/' subdirectory
     save_reconstructions: whether to save reconstructed images as PNG files
+    precision: numerical precision for inference, '32-true' or 'bf16-mixed'
+    latents_dtype: dtype used when saving latents, 'float32' or 'float16'; float16 halves the
+        file size at ~3 significant digits and overflows to inf above 65504
 
     Returns
     -------
@@ -562,7 +678,7 @@ def predict_video(
     video_file = Path(video_file)
 
     # initialize prediction handler
-    handler = VideoPredictionHandler(output_dir, video_file)
+    handler = VideoPredictionHandler(output_dir, video_file, latents_dtype=latents_dtype)
 
     # dataloader
     dataloader = VideoFrameIterator(
@@ -574,7 +690,7 @@ def predict_video(
     model.return_reconstructions = save_reconstructions
 
     # run inference
-    trainer = pl.Trainer(accelerator='gpu', devices=1, logger=False)
+    trainer = _build_predict_trainer(precision)
     predictions = trainer.predict(model, dataloaders=dataloader, return_predictions=True)
     if predictions is None:
         raise RuntimeError('trainer.predict() returned None')

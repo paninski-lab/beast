@@ -296,6 +296,8 @@ class TestModelPredictImages:
             batch_size=16,
             save_latents=False,
             save_reconstructions=True,
+            precision='bf16-mixed',
+            latents_dtype='float16',
         )
 
     def test_default_output_dir_uses_model_dir(self, tmp_path: Path) -> None:
@@ -351,6 +353,8 @@ class TestModelPredictVideo:
             batch_size=8,
             save_latents=True,
             save_reconstructions=False,
+            precision='bf16-mixed',
+            latents_dtype='float16',
         )
 
     def test_default_output_dir_uses_model_dir(self, tmp_path: Path) -> None:

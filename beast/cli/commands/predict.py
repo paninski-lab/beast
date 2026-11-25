@@ -58,6 +58,18 @@ def register_parser(subparsers: Any) -> None:
         action='store_true',
         help='Extract and save reconstructions',
     )
+    optional.add_argument(
+        '--precision',
+        choices=['32-true', 'bf16-mixed'],
+        default='bf16-mixed',
+        help='Numerical precision for inference (default: bf16-mixed)',
+    )
+    optional.add_argument(
+        '--latents-dtype',
+        choices=['float32', 'float16'],
+        default='float16',
+        help='Data type for saved latents; float16 halves file size (default: float16)',
+    )
 
 
 def handle(args: argparse.Namespace) -> None:
@@ -85,6 +97,8 @@ def handle(args: argparse.Namespace) -> None:
             batch_size=args.batch_size,
             save_latents=args.save_latents,
             save_reconstructions=args.save_reconstructions,
+            precision=args.precision,
+            latents_dtype=args.latents_dtype,
         )
 
     elif args.input.is_dir():
@@ -110,6 +124,8 @@ def handle(args: argparse.Namespace) -> None:
                     batch_size=args.batch_size,
                     save_latents=args.save_latents,
                     save_reconstructions=args.save_reconstructions,
+                    precision=args.precision,
+                    latents_dtype=args.latents_dtype,
                 )
         else:
             model.predict_images(
@@ -118,4 +134,6 @@ def handle(args: argparse.Namespace) -> None:
                 batch_size=args.batch_size,
                 save_latents=args.save_latents,
                 save_reconstructions=args.save_reconstructions,
+                precision=args.precision,
+                latents_dtype=args.latents_dtype,
             )

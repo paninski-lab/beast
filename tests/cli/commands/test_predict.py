@@ -24,6 +24,8 @@ class TestRegisterParser:
         assert args.save_latents is False
         assert args.save_reconstructions is False
         assert args.output is None
+        assert args.precision == 'bf16-mixed'
+        assert args.latents_dtype == 'float16'
 
     def test_missing_model_exits(self) -> None:
         # Arrange
@@ -51,6 +53,44 @@ class TestRegisterParser:
         assert args.save_latents is True
         assert args.save_reconstructions is True
 
+    def test_precision_bf16(self) -> None:
+        # Arrange
+        parser = build_parser()
+        # Act
+        args = parser.parse_args([
+            'predict', '--model', '/m', '--input', '/i', '--precision', 'bf16-mixed',
+        ])
+        # Assert
+        assert args.precision == 'bf16-mixed'
+
+    def test_precision_invalid_exits(self) -> None:
+        # Arrange
+        parser = build_parser()
+        # Act / Assert
+        with pytest.raises(SystemExit):
+            parser.parse_args([
+                'predict', '--model', '/m', '--input', '/i', '--precision', '16-mixed',
+            ])
+
+    def test_latents_dtype_float32(self) -> None:
+        # Arrange
+        parser = build_parser()
+        # Act
+        args = parser.parse_args([
+            'predict', '--model', '/m', '--input', '/i', '--latents-dtype', 'float32',
+        ])
+        # Assert
+        assert args.latents_dtype == 'float32'
+
+    def test_latents_dtype_invalid_exits(self) -> None:
+        # Arrange
+        parser = build_parser()
+        # Act / Assert
+        with pytest.raises(SystemExit):
+            parser.parse_args([
+                'predict', '--model', '/m', '--input', '/i', '--latents-dtype', 'bfloat16',
+            ])
+
     def test_custom_batch_size(self) -> None:
         # Arrange
         parser = build_parser()
@@ -76,6 +116,8 @@ class TestHandle:
             batch_size=32,
             save_latents=True,
             save_reconstructions=False,
+            precision='bf16-mixed',
+            latents_dtype='float16',
         )
         mock_model = MagicMock()
         # Act
@@ -89,6 +131,8 @@ class TestHandle:
             batch_size=32,
             save_latents=True,
             save_reconstructions=False,
+            precision='bf16-mixed',
+            latents_dtype='float16',
         )
 
     def test_directory_of_videos_calls_predict_video_per_file(self, tmp_path: Path) -> None:
@@ -104,6 +148,8 @@ class TestHandle:
             batch_size=32,
             save_latents=True,
             save_reconstructions=False,
+            precision='bf16-mixed',
+            latents_dtype='float16',
         )
         mock_model = MagicMock()
         # Act
@@ -126,6 +172,8 @@ class TestHandle:
             batch_size=32,
             save_latents=True,
             save_reconstructions=False,
+            precision='bf16-mixed',
+            latents_dtype='float16',
         )
         mock_model = MagicMock()
         # Act
@@ -139,6 +187,8 @@ class TestHandle:
             batch_size=32,
             save_latents=True,
             save_reconstructions=False,
+            precision='bf16-mixed',
+            latents_dtype='float16',
         )
 
     def test_mixed_input_neither_predict_method_called(self, tmp_path: Path) -> None:
@@ -154,6 +204,8 @@ class TestHandle:
             batch_size=32,
             save_latents=True,
             save_reconstructions=False,
+            precision='bf16-mixed',
+            latents_dtype='float16',
         )
         mock_model = MagicMock()
         # Act
@@ -175,6 +227,8 @@ class TestHandle:
             batch_size=32,
             save_latents=False,
             save_reconstructions=False,
+            precision='bf16-mixed',
+            latents_dtype='float16',
         )
         mock_model = MagicMock()
         # Act

@@ -33,7 +33,7 @@ training:
   # overestimates its epoch length on small training sets, so validation never runs (see the
   # comment in MspsVae.__init__)
   train_frames: null
-  precision: 32-true  # trainer precision, e.g. 32-true | bf16-mixed
+  precision: bf16-mixed  # trainer precision, e.g. 32-true | bf16-mixed
   # also save a checkpoint every this many epochs, in addition to the best-val checkpoint;
   # null saves only the best-val checkpoint
   ckpt_every_n_epochs: null

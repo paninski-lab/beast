@@ -19,6 +19,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+Precision = Literal['32-true', 'bf16-mixed']
+
 
 class BaseTrainingConfig(BaseModel):
     """Training fields common to every model.
@@ -37,7 +39,7 @@ class BaseTrainingConfig(BaseModel):
     num_nodes: int = 1
     log_every_n_steps: int = 10
     check_val_every_n_epoch: int = 5
-    precision: str = '32-true'
+    precision: Precision = 'bf16-mixed'
     # train on the first N frames (int) or fraction (0-1) of the train split; None uses all
     train_frames: int | float | None = None
     # also save a checkpoint every n epochs, in addition to the best-val checkpoint
