@@ -134,9 +134,10 @@ class TestImagePredictionHandler:
         assert saved_path.is_file()
         assert (output_dir / 'video1').exists()
 
-    def test_save_latents_bf16(self, handler, temp_dirs):
-        """Test that bf16 latents (from bf16-mixed inference) are saved as float32."""
-        source_dir, _ = temp_dirs
+    def test_save_latents_bf16(self, temp_dirs):
+        """Test that bf16 latents (from bf16-mixed inference) are saved without error."""
+        source_dir, output_dir = temp_dirs
+        handler = ImagePredictionHandler(output_dir, source_dir, latents_dtype='float32')
         original_path = source_dir / 'video1' / 'frame001.png'
         latents = torch.rand(128).to(torch.bfloat16)
 
@@ -145,6 +146,37 @@ class TestImagePredictionHandler:
         loaded = np.load(saved_path)
         assert loaded.dtype == np.float32
         np.testing.assert_allclose(loaded, latents.float().numpy())
+
+    def test_save_latents_default_dtype_float16(self, handler, temp_dirs):
+        """Test that latents are saved as float16 by default, within float16 precision."""
+        source_dir, _ = temp_dirs
+        original_path = source_dir / 'video1' / 'frame001.png'
+        latents = torch.rand(128)
+
+        saved_path = handler.save_latents(latents, 'video1', 0, original_path)
+
+        loaded = np.load(saved_path)
+        assert loaded.dtype == np.float16
+        np.testing.assert_allclose(loaded.astype(np.float32), latents.numpy(), rtol=5e-4)
+
+    def test_save_latents_float16_overflow_warns(self, handler, temp_dirs, caplog):
+        """Test that finite values beyond the float16 range log a warning."""
+        source_dir, _ = temp_dirs
+        original_path = source_dir / 'video1' / 'frame001.png'
+        latents = torch.tensor([1.0, 1e6])
+
+        with caplog.at_level('WARNING', logger='beast.inference'):
+            saved_path = handler.save_latents(latents, 'video1', 0, original_path)
+
+        assert np.isinf(np.load(saved_path)[1])
+        assert 'overflowed float16' in caplog.text
+
+    def test_invalid_latents_dtype_raises(self, temp_dirs):
+        source_dir, output_dir = temp_dirs
+        with pytest.raises(ValueError, match='latents_dtype must be one of'):
+            ImagePredictionHandler(
+                output_dir, source_dir, latents_dtype='bfloat16',  # type: ignore[arg-type]
+            )
 
     def test_tensor_to_image_bf16(self, handler):
         """Test that a bf16 reconstruction converts to a PIL image."""
@@ -170,7 +202,9 @@ class TestImagePredictionHandler:
 
         # Check that saved data matches
         loaded_latents = np.load(saved_path)
-        np.testing.assert_array_almost_equal(loaded_latents, latents.detach().cpu().numpy())
+        np.testing.assert_allclose(
+            loaded_latents.astype(np.float32), latents.detach().cpu().numpy(), rtol=5e-4,
+        )
 
     def test_process_batch_predictions_reconstructions_only(
         self, handler, sample_batch_tensor, sample_latents, sample_metadata,
@@ -527,6 +561,32 @@ class TestVideoPredictionHandler:
             assert result['latents_shape'] == (4, 128)
         else:
             assert result['latents_file'] is None
+
+
+class TestVideoPredictionHandlerLatentsDtype:
+    """Test the latents dtype handling of VideoPredictionHandler."""
+
+    @pytest.mark.parametrize('latents_dtype', ['float16', 'float32'])
+    def test_saved_latents_dtype(self, video_file, tmp_path, latents_dtype) -> None:
+        # Arrange
+        handler = VideoPredictionHandler(tmp_path, video_file, latents_dtype=latents_dtype)
+        predictions = [{'latents': torch.rand(2, 128).to(torch.bfloat16)}]
+        # Act
+        result = handler.process_predictions(
+            predictions, save_reconstructions=False, save_latents=True,
+        )
+        # Assert
+        assert np.load(result['latents_file']).dtype == np.dtype(latents_dtype)
+
+    def test_default_is_float16(self, video_file, tmp_path) -> None:
+        handler = VideoPredictionHandler(tmp_path, video_file)
+        assert handler.latents_dtype == 'float16'
+
+    def test_invalid_latents_dtype_raises(self, video_file, tmp_path) -> None:
+        with pytest.raises(ValueError, match='latents_dtype must be one of'):
+            VideoPredictionHandler(
+                tmp_path, video_file, latents_dtype='bfloat16',  # type: ignore[arg-type]
+            )
 
 
 class TestVideoPredictionHandlerInitVideoWriter:
