@@ -134,6 +134,26 @@ class TestImagePredictionHandler:
         assert saved_path.is_file()
         assert (output_dir / 'video1').exists()
 
+    def test_save_latents_bf16(self, handler, temp_dirs):
+        """Test that bf16 latents (from bf16-mixed inference) are saved as float32."""
+        source_dir, _ = temp_dirs
+        original_path = source_dir / 'video1' / 'frame001.png'
+        latents = torch.rand(128).to(torch.bfloat16)
+
+        saved_path = handler.save_latents(latents, 'video1', 0, original_path)
+
+        loaded = np.load(saved_path)
+        assert loaded.dtype == np.float32
+        np.testing.assert_allclose(loaded, latents.float().numpy())
+
+    def test_tensor_to_image_bf16(self, handler):
+        """Test that a bf16 reconstruction converts to a PIL image."""
+        tensor = torch.rand(3, 16, 16).to(torch.bfloat16)
+
+        image = handler.tensor_to_image(tensor)
+
+        assert image.size == (16, 16)
+
     def test_save_latents(self, handler, temp_dirs):
         """Test saving latent representations."""
         source_dir, output_dir = temp_dirs

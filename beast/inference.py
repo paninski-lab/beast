@@ -85,7 +85,7 @@ class ImagePredictionHandler:
         tensor = tensor * 255.0
 
         # Convert to uint8 numpy array
-        np_array = tensor.detach().cpu().numpy().astype(np.uint8)
+        np_array = tensor.detach().cpu().float().numpy().astype(np.uint8)
 
         # Handle grayscale vs RGB
         # if np_array.shape[2] == 1:
@@ -133,7 +133,7 @@ class ImagePredictionHandler:
         latents_path = latents_dir / f'{original_stem}.npy'
 
         # Convert to numpy and save
-        latents_np = latents.detach().cpu().numpy()
+        latents_np = latents.detach().cpu().float().numpy()
         np.save(latents_path, latents_np)
 
         return latents_path
@@ -329,7 +329,7 @@ class VideoPredictionHandler:
         tensor = tensor * 255.0
 
         # convert to uint8 numpy array
-        np_array = tensor.detach().cpu().numpy().astype(np.uint8)
+        np_array = tensor.detach().cpu().float().numpy().astype(np.uint8)
 
         # convert RGB to BGR for OpenCV
         # if np_array.shape[2] == 3:
@@ -377,7 +377,7 @@ class VideoPredictionHandler:
             # save latents - accumulate all latents
             if save_latents:
                 # convert to numpy and store
-                latent_np = latents[i].detach().cpu().numpy()
+                latent_np = latents[i].detach().cpu().float().numpy()
                 self.all_latents.append(latent_np)
 
             # save reconstruction frame to video
